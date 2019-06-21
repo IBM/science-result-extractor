@@ -1,0 +1,1209 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:41+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Stochastic Answer Networks for Machine Reading Comprehension</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodong</forename><surname>Liu</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Microsoft Research</orgName>
+								<address>
+									<settlement>Redmond</settlement>
+									<region>WA</region>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yelong</forename><surname>Shen</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Microsoft Research</orgName>
+								<address>
+									<settlement>Redmond</settlement>
+									<region>WA</region>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Duh</surname></persName>
+							<affiliation key="aff1">
+								<orgName type="institution">Johns Hopkins University</orgName>
+								<address>
+									<settlement>Baltimore</settlement>
+									<region>MD</region>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+							<email>jfgao@microsoft.com‡kevinduh@cs.jhu.edu</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Microsoft Research</orgName>
+								<address>
+									<settlement>Redmond</settlement>
+									<region>WA</region>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Stochastic Answer Networks for Machine Reading Comprehension</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We propose a simple yet robust stochastic answer network (SAN) that simulates multi-step reasoning in machine reading comprehension. Compared to previous work such as ReasoNet which used reinforcement learning to determine the number of steps, the unique feature is the use of a kind of stochastic prediction dropout on the answer module (final layer) of the neu-ral network during the training. We show that this simple trick improves robustness and achieves results competitive to the state-of-the-art on the Stanford Question Answering Dataset (SQuAD), the Adver-sarial SQuAD, and the Microsoft MAchine Reading COmprehension Dataset (MS MARCO).</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Machine reading comprehension (MRC) is a challenging task: the goal is to have machines read a text passage and then answer any question about the passage. This task is an useful benchmark to demonstrate natural language understanding, and also has important applications in e.g. conversational agents and customer service support. It has been hypothesized that difficult MRC problems require some form of multi-step synthesis and reasoning. For instance, the following example from the MRC dataset SQuAD ( <ref type="bibr" target="#b23">Rajpurkar et al., 2016)</ref> illustrates the need for synthesis of information across sentences and multiple steps of reasoning: To infer the answer (the underlined portion of the passage P ), the model needs to first perform coreference resolution so that it knows "They" refers "V&amp;A Theator", then extract the subspan in the direct object corresponding to the answer.</p><p>This kind of iterative process can be viewed as a form of multi-step reasoning. Several recent MRC models have embraced this kind of multistep strategy, where predictions are generated after making multiple passes through the same text and integrating intermediate information in the process. The first models employed a predetermined fixed number of steps ( <ref type="bibr" target="#b5">Hill et al., 2016;</ref><ref type="bibr" target="#b3">Dhingra et al., 2016;</ref><ref type="bibr" target="#b29">Sordoni et al., 2016;</ref><ref type="bibr" target="#b11">Kumar et al., 2015</ref>). Later, <ref type="bibr" target="#b27">Shen et al. (2016)</ref> proposed using reinforcement learning to dynamically determine the number of steps based on the complexity of the question. Further,  empirically showed that dynamic multi-step reasoning outperforms fixed multi-step reasoning, which in turn outperforms single-step reasoning on two distinct MRC datasets (SQuAD and MS MARCO).</p><p>In this work, we derive an alternative multi-step reasoning neural network for MRC. During training, we fix the number of reasoning steps, but perform stochastic dropout on the answer module (final layer predictions). During decoding, we generate answers based on the average of predictions in all steps, rather than the final step. We call this a stochastic answer network (SAN) because the stochastic dropout is applied to the answer module; albeit simple, this technique significantly improves the robustness and overall accuracy of the model. Intuitively this works because while the model successively refines its prediction over multiple steps, each step is still trained to generate the same answer; we are performing a kind of stochastic ensemble over the model's successive predic- x <ref type="figure">Figure 1</ref>: Illustration of "stochastic prediction dropout" in the answer module during training. At each reasoning step t, the model combines memory (bottom row) with hidden states s t−1 to generate a prediction (multinomial distribution). Here, there are three steps and three predictions, but one prediction is dropped and the final result is an average of the remaining distributions.</p><p>tion refinements. Stochastic prediction dropout is illustrated in <ref type="figure">Figure 1</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Proposed model: SAN</head><p>The machine reading comprehension (MRC) task as defined here involves a question Q = {q 0 , q 1 , ..., q m−1 } and a passage P = {p 0 , p 1 , ..., p n−1 } and aims to find an answer span A = {a start , a end } in P . We assume that the answer exists in the passage P as a contiguous text string. Here, m and n denote the number of tokens in Q and P , respectively. The learning algorithm for reading comprehension is to learn a function f (Q, P ) → A. The training data is a set of the query, passage and answer tuples &lt; Q, P, A &gt;.</p><p>We now describe our model from the ground up. The main contribution of this work is the answer module, but in order to understand what goes into this module, we will start by describing how Q and P are processed by the lower layers. Note the lower layers also have some novel variations that are not used in previous work. As shown in <ref type="figure">Fig- ure</ref> 2, our model contains four different layers to capture different concept of representations. The detailed description of our model is provided as follows.</p><p>Lexicon Encoding Layer. The purpose of the first layer is to extract information from Q and P at the word level and normalize for lexical variants. A typical technique to obtain lexicon embedding is concatenation of its word embedding with other linguistic embedding such as those derived from Part-Of-Speech (POS) tags. For word embeddings, we use the pre-trained 300-dimensional GloVe vectors ( <ref type="bibr" target="#b21">Pennington et al., 2014</ref>) for the both Q and P . Following , we use three additional types of linguistic features for each token p i in the passage P :</p><p>• 9-dimensional POS tagging embedding for total 56 different types of the POS tags.</p><p>• 8-dimensional named-entity recognizer (NER) embedding for total 18 different types of the NER tags. We utilized small embedding sizes for POS and NER to reduce model size. They mainly serve the role of coarse-grained word clusters.</p><p>• A 3-dimensional binary exact match feature defined as f exact match (p i ) = I(p i ∈ Q). This checks whether a passage token p i matches the original, lowercase or lemma form of any question token.</p><p>• Question enhanced passages word embeddings:</p><formula xml:id="formula_0">f align (p i ) = j γ i,j g(GloV e(q j )), where g(·) is a 280-dimensional single layer neural network ReLU (W 0 x) and γ i,j = exp(g(GloV e(p j ))·g(GloV e(q i )))</formula><p>j exp(g(GloV e(p i ))·g(GloV e(q j ))) measures the similarity in word embedding space between a token p i in the passage and a token q j in the question. Compared to the exact matching features, these embeddings encode soft alignments between similar but notidentical words.</p><p>In summary, each token p i in the passage is represented as a 600-dimensional vector and each token q j is represented as a 300-dimensional vector.</p><p>Due to different dimensions for the passages and questions, in the next layer two different bidirectional LSTM (BiLSTM) <ref type="bibr" target="#b6">(Hochreiter and Schmidhuber, 1997</ref>) may be required to encode the contextual information. This, however, introduces a large number of parameters. To prevent this, we employ an idea inspired by <ref type="bibr" target="#b31">(Vaswani et al., 2017</ref> Figure 2: Architecture of the SAN for Reading Comprehension: The first layer is a lexicon encoding layer that maps words to their embeddings independently for the question (left) and the passage (right): this is a concatenation of word embeddings, POS embeddings, etc. followed by a position-wise FFN. The next layer is a context encoding layer, where a BiLSTM is used on the top of the lexicon embedding layer to obtain the context representation for both question and passage. In order to reduce the parameters, a maxout layer is applied on the output of BiLSTM. The third layer is the working memory: First we compute an alignment matrix between the question and passage using an attention mechanism, and use this to derive a question-aware passage representation. Then we concatenate this with the context representation of passage and the word embedding, and employ a self attention layer to re-arrange the information gathered. Finally, we use another LSTM to generate a working memory for the passage. At last, the fourth layer is the answer module, which is a GRU that outputs predictions at each state s t .</p><p>parameters compared to a BiLSTM. Thus, we obtain the final lexicon embeddings for the tokens in Q as a matrix E q ∈ R d×m and tokens in P as</p><formula xml:id="formula_1">E p ∈ R d×n .</formula><p>Contextual Encoding Layer. Both passage and question use a shared two-layers BiLSTM as the contextual encoding layer, which projects the lexicon embeddings to contextual embeddings. We concatenate a pre-trained 600-dimensional CoVe vectors 1 ( <ref type="bibr" target="#b18">McCann et al., 2017</ref>) trained on German-English machine translation dataset, with 1 https://github.com/salesforce/cove the aforementioned lexicon embeddings as the final input of the contextual encoding layer, and also with the output of the first contextual encoding layer as the input of its second encoding layer. To reduce the parameter size, we use a maxout layer ( <ref type="bibr" target="#b4">Goodfellow et al., 2013</ref>) at each BiLSTM layer to shrink its dimension. By a concatenation of the outputs of two BiLSTM layers, we obtain H q ∈ R 2d×m as representation of Q and H p ∈ R 2d×n as representation of P , where d is the hidden size of the BiLSTM.</p><p>Memory Generation Layer. In the memory generation layer, We construct the working memory, a summary of information from both Q and P . First, a dot-product attention is adopted like in ( <ref type="bibr" target="#b31">Vaswani et al., 2017)</ref> to measure the similarity between the tokens in Q and P . Instead of using a scalar to normalize the scores as in ( <ref type="bibr" target="#b31">Vaswani et al., 2017)</ref>, we use one layer network to transform the contextual information of both Q and P :</p><formula xml:id="formula_2">C = dropout(f attention ( ˆ H q , ˆ H p )) ∈ R m×n (1)</formula><p>C is an attention matrix. Note thatˆHthatˆ thatˆH q andˆHandˆ andˆH p is transformed from H q and H p by one layer neural network ReLU (W 3 x), respectively. Next, we gather all the information on passages by a simple concatenation of its contextual information H p and its question-aware representation H q · C:</p><formula xml:id="formula_3">U p = concat(H p , H q C) ∈ R 4d×n (2)</formula><p>Typically, a passage may contain hundred of tokens, making it hard to learn the long dependencies within it. Inspired by ( <ref type="bibr" target="#b14">Lin et al., 2017)</ref>, we apply a self-attended layer to rearrange the information U p as:</p><formula xml:id="formula_4">ˆ U p = U p drop diag (f attention (U p , U p )).<label>(3)</label></formula><p>In other words, we first obtain an n × n attention matrix with U p onto itself, apply dropout, then multiply this matrix with U p to obtain an updatedˆU updatedˆ updatedˆU p . Instead of using a penalization term as in ( <ref type="bibr" target="#b14">Lin et al., 2017)</ref>, we dropout the diagonal of the similarity matrix forcing each token in the passage to align to other tokens rather than itself. At last, the working memory is generated by using another BiLSTM based on all the information gathered:</p><formula xml:id="formula_5">M = BiLST M ([U p ; ˆ U p ])<label>(4)</label></formula><p>where the semicolon mark ; indicates the vector/matrix concatenation operator. Answer module. There is a Chinese proverb that says: "wisdom of masses exceeds that of any individual." Unlike other multi-step reasoning models, which only uses a single output either at the last step or some dynamically determined final step, our answer module employs all the outputs of multiple step reasoning. Intuitively, by applying dropout, it avoids a "step bias problem" (where models places too much emphasis one particular step's predictions) and forces the model to produce good predictions at every individual step. Further, during decoding, we reuse wisdom of masses instead of individual to achieve a better result. We call this method "stochastic prediction dropout" because dropout is being applied to the final predictive distributions.</p><p>Formally, our answer module will compute over T memory steps and output the answer span. This module is a memory network and has some similarities to other multi-step reasoning networks: namely, it maintains a state vector, one state per step. At the beginning, the initial state s 0 is the summary of the Q:</p><formula xml:id="formula_6">s 0 = j α j H q j , where α j = exp(w 4 ·H q j ) j exp(w 4 ·H q j )</formula><p>. At time step t in the range of {1, 2, ..., T − 1}, the state is defined by</p><formula xml:id="formula_7">s t = GRU (s t−1 , x t ).</formula><p>Here, x t is computed from the previous state s t−1 and memory M : x t = j β j M j and β j = sof tmax(s t−1 W 5 M ). Finally, a bilinear function is used to find the begin and end point of answer spans at each reasoning step t ∈ {0, 1, . . . , T − 1}.</p><formula xml:id="formula_8">P begin t = sof tmax(s t W 6 M )<label>(5)</label></formula><formula xml:id="formula_9">P end t = sof tmax([s t ; j P begin t,j M j ]W 7 M ).</formula><p>(6) From a pair of begin and end points, the answer string can be extracted from the passage. However, rather than output the results (start/end points) from the final step (which is fixed at T − 1 as in Memory Networks or dynamically determined as in ReasoNet), we utilize all of the T outputs by averaging the scores:</p><formula xml:id="formula_10">P begin = avg([P begin 0 , P begin 1 , ..., P begin T −1 ]) (7) P end = avg([P end 0 , P end 1 , ..., P end T −1 ]) (8) Each P begin t or P end t</formula><p>is a multinomial distribution over {1, . . . , n}, so the average distribution is straightforward to compute.</p><p>During training, we apply stochastic dropout to before the above averaging operation. For example, as illustrated in <ref type="figure">Figure 1</ref>, we randomly delete several steps' predictions in Equations 7 and 8 so that P begin might be avg([P begin Our stochastic prediction dropout is similar in motivation to the dropout introduced by <ref type="bibr">(Srivas- tava et al., 2014</ref>). The difference is that theirs is dropout at the intermediate node-level, whereas ours is dropout at the final layer-level. Dropout at the node-level prevents correlation between features. Dropout at the final layer level, where randomness is introduced to the averaging of predictions, prevents our model from relying exclusively on a particular step to generate correct output. We used a dropout rate of 0.4 in experiments.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Experiment Setup</head><p>Dataset: We evaluate on the Stanford Question Answering Dataset (SQuAD) ( <ref type="bibr" target="#b23">Rajpurkar et al., 2016)</ref>. This contains about 23K passages and 100K questions. The passages come from approximately 500 Wikipedia articles and the questions and answers are obtained by crowdsourcing. The crowdsourced workers are asked to read a passage (a paragraph), come up with questions, then mark the answer span. All results are on the official development set, unless otherwise noted.</p><p>Two evaluation metrics are used: Exact Match (EM), which measures the percentage of span predictions that matched any one of the ground truth answer exactly, and Macro-averaged F1 score, which measures the average overlap between the prediction and the ground truth answer.</p><p>Implementation details: The spaCy tool 2 is used to tokenize the both passages and questions, and generate lemma, part-of-speech and named entity tags. We use 2-layer BiLSTM with d = 128 hidden units for both passage and question encoding. The mini-batch size is set to <ref type="bibr">32 and Adamax (Kingma and Ba, 2014</ref>) is used as our optimizer. The learning rate is set to 0.002 at first and decreased by half after every 10 epochs. We set the dropout rate for all the hidden units of LSTM, and the answer module output layer to 0.4. To prevent degenerate output, we ensure that at least one step in the answer module is active during training.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Results</head><p>The main experimental question we would like to answer is whether the stochastic dropout and averaging in the answer module is an effective technique for multi-step reasoning. To do so, we fixed all lower layers and compared different architectures for the answer module:</p><p>1. Standard 1-step: generate prediction from s 0 , the first initial state.</p><p>2. 5-step memory network: this is a memory network fixed at 5 steps. We try two variants: the standard variant outputs result from the final step s T −1 . The averaged variant outputs results by averaging across all 5 steps, and is like SAN without the stochastic dropout.</p><p>3. ReasoNet 3 : this answer module dynamically decides the number of steps and outputs results conditioned on the final step.</p><p>4. SAN: proposed answer module that uses stochastic dropout and prediction averaging.</p><p>The main results in terms of EM and F1 are shown in <ref type="table" target="#tab_2">Table 1</ref> The K-best oracle results is shown in <ref type="figure" target="#fig_4">Figure 3</ref>. The K-best spans are computed by ordering the spans according the their probabilities P begin × P end . We limit K in the range 1 to 4 and then pick the span with the best EM or F1 as oracle. SAN also outperforms the other models in terms of K-best oracle scores. Impressively, these models achieve human performance at K = 2 for EM and K = 3 for F1.</p><p>Finally, we compare our results with other top models in <ref type="table" target="#tab_3">Table 2</ref>. Note that all the results in Table 2 are taken from the published papers. We see that SAN is very competitive in both single and ensemble settings (ranked in second) despite its simplicity. Note that the best-performing model ( <ref type="bibr" target="#b22">Peters et al., 2018</ref>) used a large-scale language model as an extra contextual embedding, which gave a significant improvement (+4.3% dev F1). We expect significant improvements if we add this to SAN in future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Answer Module</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>EM F1 Standard 1-step 75.139 83.367 Fixed 5-step with Memory Network (prediction from final step) 75.033 83.327 Fixed 5-step with Memory Network (prediction averaged from all steps) 75.256 83.215 Dynamic steps (max 5) with ReasoNet 75.355 83.360 Stochastic Answer Network (SAN ), Fixed 5-step</head><p>76.235 84.056  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Analysis</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">How robust are the results?</head><p>We are interested in whether the proposed model is sensitive to different random initial conditions. <ref type="table" target="#tab_4">Table 3</ref> shows the development set scores of SAN trained from initialization with different random seeds. We observe that the SAN results are consistently strong regardless of the 10 different initializations. For example, the mean EM score is 76.131 and the lowest EM score is 75.922, both of which still outperform the 75.355 EM of the Dynamic step ReasoNet in <ref type="table" target="#tab_2">Table 1</ref>. <ref type="bibr">4</ref> We are also interested in how sensitive are the results to the number of reasoning steps, which is a fixed hyper-parameter. Since we are using dropout, a natural question is whether we can extend the number of steps to an extremely large number. <ref type="table">Table 4</ref> shows the development set scores for T = 1 to T = 10. We observe that there is a gradual improvement as we increase T = 1 to T = 5, but after 5 steps the improvements have saturated. In fact, the EM/F1 scores drop slightly, but considering that the random initialization results in <ref type="table" target="#tab_4">Table 3</ref> show a standard deviation of 0.142 and a spread of 0.426 (for EM), we believe that the T = 10 result does not statistically differ from the T = 5 result. In summary, we think it is useful to perform some approximate hyper-parameter tuning for the number of steps, but it is not necessary to find the exact optimal value.</p><p>Finally, we test SAN on two Adversarial SQuAD datasets, AddSent and AddOneSent <ref type="bibr" target="#b9">(Jia and Liang, 2017)</ref>, where the passages contain  auto-generated adversarial distracting sentences to fool computer systems that are developed to answer questions about the passages. For example, AddSent is constructed by adding sentences that look similar to the question, but do not actually contradict the correct answer. AddOneSent is constructed by appending a random human-approved sentence to the passage.</p><p>We evaluate the single SAN model (i.e., the one presented in <ref type="table" target="#tab_3">Table 2</ref>) on both AddSent and AddOneSent. The results in <ref type="table" target="#tab_5">Table 5</ref> show that SAN achieves the new state-of-the-art performance and SAN's superior result is mainly attributed to the multi-step answer module, which leads to significant improvement in F1 score over the Standard 1-step answer module, i.e., +1.2 on AddSent and +0.7 on AddOneSent.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Is it possible to use different numbers of steps in test vs. train?</head><p>For practical deployment scenarios, prediction speed at test time is an important criterion. Therefore, one question is whether SAN can train with, e.g. T = 5 steps but test with T = 1 steps. <ref type="table" target="#tab_6">Table 6</ref> shows the results of a SAN trained on T = 5 steps, but tested with different number of steps. As exSeed# EM F1 Seed# EM F1 Seed 1 76.24 84.06 Seed 6 76.23 83.99 Seed 2 76.30 84.13 Seed 7 76.35 84.09 Seed 3 75.92 83.90 Seed 8 76.07 83.71 Seed 4 76.00 83.95 Seed 9 75.93 83.85 Seed 5 76.12 83.99 Seed 10 76.15 84.11</p><p>Mean: 76.131, Std. deviation: 0.142 (EM) Mean: 83.977, Std. deviation: 0.126 (F1)  <ref type="table">Table 4</ref>: Effect of number of steps: best and worst results are boldfaced. pected, the results are best when T matches during training and test; however, it is important to note that small numbers of steps T = 1 and T = 2 nevertheless achieve strong results. For example, prediction at T = 1 achieves 75.58, which outperforms a standard 1-step model (75.14 EM) as in <ref type="table" target="#tab_2">Table 1</ref> that has approximate equivalent prediction time.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">How does the training time compare?</head><p>The average training time per epoch is comparable: our implementation running on a GTX Titan X is 22 minutes for 5-step memory net, 30 minutes for ReasoNet, and 24 minutes for SAN. The learning curve is shown in <ref type="figure" target="#fig_5">Figure 4</ref>. We observe that all systems improve at approximately the same rate up to 10 or 15 epochs. However, SAN continues to improve afterwards as other models start to saturate. This observation is consistent with previous works using dropout <ref type="bibr" target="#b30">(Srivastava et al., 2014</ref>). We believe that while training time per epoch is similar between SAN and other models, it is recommended to train SAN for more epochs in order to achieve gains in EM/F1.</p><p>Single model: AddSent AddOneSent LR ( <ref type="bibr" target="#b23">Rajpurkar et al., 2016)</ref> 23.2 30.3 SEDT ( <ref type="bibr" target="#b15">Liu et al., 2017a)</ref> 33.9 44.8 BiDAF ( <ref type="bibr" target="#b26">Seo et al., 2016)</ref> 34.3 45.7 jNet ( <ref type="bibr" target="#b39">Zhang et al., 2017)</ref> 37.9 47.0 ReasoNet(  39.4</p><p>50.3 RaSoR( <ref type="bibr" target="#b12">Lee et al., 2016)</ref> 39.5 49.5 Mnemonic( <ref type="bibr" target="#b7">Hu et al., 2017)</ref> 46.6 56.0 QANet( <ref type="bibr">Yu et al., 2018)</ref> 45.2 55.7 Standard 1-step in <ref type="table" target="#tab_2">Table 1</ref> 45.4 55.8 SAN 46.6 56.5    </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">How does SAN perform by question type?</head><p>To see whether SAN performs well on a particular type of question, we divided the development set by questions type based on their respective Whword, such as "who" and "where". The score breakdown by F1 is shown in <ref type="figure" target="#fig_6">Figure 5</ref>. We observe that SAN seems to outperform other models uniformly across all types. The only exception is the Why questions, but there is too little data to derive strong conclusions.  <ref type="figure">Figure 2</ref> is developed to generate answer from a single passage. Thus, we need to extend it to handle multiple passages. Following , we take two steps to generate an answer to a query Q from J passages, P 1 , ..., P J . First, we run SAN on ev- <ref type="bibr">ReasoNet++(Shen et al., 2017)</ref> 38.01 38.62 V-Net( <ref type="bibr" target="#b33">Wang et al., 2018)</ref> 45.65 -Standard 1-step in <ref type="table" target="#tab_2">Table 1</ref> 42.30 42.39 SAN 46.14 43.85 <ref type="table">Table 7</ref>: MS MARCO devset results.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.5">Experiments results on MS MARCO</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>SingleM odel</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ROUGE BLEU</head><p>ery (P j , Q) pair, generating J candidate answer spans, one from each passage. Then, we multiply the SAN score of each candidate answer span with its relevance score r(P j , Q) assigned by a passage ranker, and output the span with the maximum score as the answer. In our experiments, we use the passage ranker described in (  </p><formula xml:id="formula_11">5 .</formula><p>The ranker is trained on the same MS MARCO training data, and achieves 37.1 p@1 on the development set.</p><p>The results in <ref type="table">Table 7</ref> show that SAN outperforms V-Net ( <ref type="bibr" target="#b33">Wang et al., 2018)</ref> and becomes the new state of the art 6 .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Related Work</head><p>The recent big progress on MRC is largely due to the availability of the large-scale datasets <ref type="bibr">(Ra- jpurkar et al., 2016;</ref><ref type="bibr" target="#b19">Nguyen et al., 2016;</ref><ref type="bibr">Richard- son et al., 2013;</ref><ref type="bibr" target="#b5">Hill et al., 2016)</ref>, since it is possible to train large end-to-end neural network models. In spite of the variety of model structures and attenion types ( <ref type="bibr" target="#b0">Bahdanau et al., 2015;</ref><ref type="bibr" target="#b35">Xiong et al., 2016;</ref><ref type="bibr" target="#b26">Seo et al., 2016;</ref><ref type="bibr" target="#b32">Wang et al., 2017</ref>), a typical neural network MRC model first maps the symbolic representation of the documents and questions into a neural space, then search answers on top of it. We categorize these models into two groups based on the difference of the answer module: singlestep and multi-step reasoning. The key difference between the two is what strategies are applied to search the final answers in the neural space.</p><p>A single-step model matches the question and document only once and produce the final answers. It is simple yet efficient and can be trained using the classical back-propagation algorithm, thus it is adopted by most systems <ref type="bibr" target="#b26">Seo et al., 2016;</ref><ref type="bibr" target="#b32">Wang et al., 2017;</ref><ref type="bibr" target="#b16">Liu et al., 2017b;</ref><ref type="bibr" target="#b34">Weissenborn et al., 2017;</ref><ref type="bibr">5</ref> It is the same model structure as ( ) by using softmax over all candidate passages. A simple baseline, TF-IDF, obtains 20.1 p@1 on MS MARCO development. <ref type="bibr">6</ref> The official evaluation on MS MARCO on test is closed, thus here we only report the results on the development set. <ref type="bibr" target="#b7">Hu et al., 2017)</ref>. However, since humans often solve question answering tasks by re-reading and re-digesting the document multiple times before reaching the final answers (this may be based on the complexity of the questions/documents), it is natural to devise an iterative way to find answers as multi-step reasoning.</p><p>Pioneered by <ref type="bibr" target="#b5">(Hill et al., 2016;</ref><ref type="bibr" target="#b3">Dhingra et al., 2016;</ref><ref type="bibr" target="#b29">Sordoni et al., 2016;</ref><ref type="bibr" target="#b11">Kumar et al., 2015)</ref>, who used a predetermined fixed number of reasoning steps, <ref type="bibr" target="#b27">Shen et al (2016;</ref> showed that multi-step reasoning outperforms single-step ones and dynamic multi-step reasoning further outperforms the fixed multi-step ones on two distinct MRC datasets (SQuAD and MS MARCO). But these models have to be trained using reinforcement learning methods, e.g., policy gradient, which are tricky to implement due to the instability issue. Our model is different in that we fix the number of reasoning steps, but perform stochastic dropout to prevent step bias. Further, our model can also be trained by using the back-propagation algorithm, which is simple and yet efficient.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Conclusion</head><p>We introduce Stochastic Answer Networks (SAN), a simple yet robust model for machine reading comprehension. The use of stochastic dropout in training and averaging in test at the answer module leads to robust improvements on SQuAD, outperforming both fixed step memory networks and dynamic step ReasoNet. We further empirically analyze the properties of SAN in detail. The model achieves results competitive with the state-of-the-art on the SQuAD leaderboard, as well as on the Adversarial SQuAD and MS MARCO datasets. Due to the strong connection between the proposed model with memory networks and ReasoNet, we would like to delve into the theoretical link between these models and its training algorithms. Further, we also would like to explore SAN on other tasks, such as text classification and natural language inference for its generalization in the future.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Q</head><label></label><figDesc>: What collection does the V&amp;A Theator &amp; Performance galleries hold? P : The V&amp;A Theator &amp; Performance gal- leries opened in March 2009. ... They hold the UK's biggest national collection of material about live performance.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head></head><label></label><figDesc>and P end might be avg([P end 0 , P end 3 , P end 4 ]). The use of averaged predictions and dropout during train- ing improves robustness.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>(</head><label></label><figDesc>a) EM comparison on different systems. (b) F1 score comparison on different systems.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: K-Best Oracle results</figDesc><graphic url="image-412.png" coords="7,91.64,219.13,178.98,133.12" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Learning curve measured on Dev set.</figDesc><graphic url="image-414.png" coords="8,82.91,544.46,196.44,146.10" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: Score breakdown by question type.</figDesc><graphic url="image-415.png" coords="8,309.16,62.81,214.50,123.21" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head></head><label></label><figDesc>. We observe that SAN achieves 76.235 EM and 84.056 F1, outperforming all other models. Standard 1-step model only achieves 75.139 EM and dynamic steps (via ReasoNet) achieves only 75.355 EM. SAN also outperforms a 5-step memory net with averaging, which implies averaging predictions is not the only thing that led to SAN's superior results; indeed, stochastic pre- diction dropout is an effective technique.</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 1 :</head><label>1</label><figDesc></figDesc><table>Main results-Comparison of different answer module architectures. Note that SAN performs 
+best in both Exact Match and F1 metrics. 
+
+Ensemble model results: 
+Dev Set (EM/F1) Test Set (EM/F1) 
+BiDAF + Self Attention + ELMo (Peters et al., 2018) 
+-/-
+81.003/87.432 
+SAN (Ensemble model) 
+78.619/85.866 
+79.608/86.496 
+AIR-FusionNet (Huang et al., 2017) 
+-/-
+78.978/86.016 
+DCN+ (Xiong et al., 2017) 
+-/-
+78.852/85.996 
+M-Reader (Hu et al., 2017) 
+-/-
+77.678/84.888 
+Conductor-net (Liu et al., 2017b) 
+74.8 / 83.3 
+76.996/84.630 
+r-net (Wang et al., 2017) 
+77.7/83.7 
+76.9/84.0 
+ReasoNet++ (Shen et al., 2017) 
+75.4/82.9 
+75.0/82.6 
+Individual model results: 
+BiDAF + Self Attention + ELMo(Peters et al., 2018) 
+-/-
+78.580/85.833 
+SAN (single model) 
+76.235/84.056 
+76.828/84.396 
+AIR-FusionNet(Huang et al., 2017) 
+75.3/83.6 
+75.968/83.900 
+RaSoR + TR (Salant and Berant, 2017) 
+-/-
+75.789/83.261 
+DCN+(Xiong et al., 2017) 
+74.5/83.1 
+75.087/83.081 
+r-net(Wang et al., 2017) 
+72.3/80.6 
+72.3/80.7 
+ReasoNet++(Shen et al., 2017) 
+70.8/79.4 
+70.6/79.36 
+BiDAF (Seo et al., 2016) 
+67.7/77.3 
+68.0/77.3 
+Human Performance 
+80.3/90.5 
+82.3/91.2 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 : Test performance on SQuAD. Results are sorted by Test F1.</head><label>2</label><figDesc></figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Robustness of SAN (5-step) on dif-
+ferent random seeds for initialization: best and 
+worst scores are boldfaced. Note that our official 
+submit is trained on seed 1. 
+
+SAN 
+EM 
+F1 
+SAN 
+EM 
+F1 
+1 step 75.38 83.29 6 step 75.99 83.72 
+2 step 75.43 83.41 7 step 76.04 83.92 
+3 step 75.89 83.57 8 step 76.03 83.82 
+4 step 75.92 83.85 9 step 75.95 83.75 
+5 step 76.24 84.06 10 step 76.04 83.89 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Test performance on the adversarial 
+SQuAD dataset in F1 score. 
+
+T = EM 
+F1 T = EM 
+F1 
+1 
+75.58 83.86 4 
+76.12 83.98 
+2 
+75.85 83.90 5 
+76.24 84.06 
+3 
+75.98 83.95 10 75.89 83.88 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 6 :</head><label>6</label><figDesc></figDesc><table>Prediction on different steps T . Note 
+that the SAN model is trained using 5 steps. 
+
+</table></figure>
+
+			<note place="foot" n="2"> https://spacy.io</note>
+
+			<note place="foot" n="3"> The ReasoNet here is not an exact re-implementation of (Shen et al., 2017). The answer module is the same as (Shen et al., 2017) but the lower layers are set to be the same as SAN, 5-step memory network, and standard 1-step as described in Figure 2. We only vary the answer module in our experiments for a fair comparison.</note>
+
+			<note place="foot" n="4"> Note the Dev EM/F1 scores of ReasoNet in Table 1 do not match those of ReasoNet++ in Table 2. While the answer module is the same architecture, the lower encoding layers are different.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We thank Pengcheng He, Yu Wang and Xinying Song for help to set up dockers. We also thank Pranav Samir Rajpurkar for help on SQuAD evaluations, and the anonymous reviewers for valuable discussions and comments.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Neural machine translation by jointly learning to align and translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">A thorough examination of the cnn/daily mail reading comprehension task</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Bolton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<ptr target="http://www.aclweb.org/anthology/P16-1223" />
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Berlin, Germany</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="2358" to="2367" />
+		</imprint>
+	</monogr>
+	<note>Long Papers)</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Reading Wikipedia to answer opendomain questions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Fisch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Association for Computational Linguistics (ACL)</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Gated-attention readers for text comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bhuwan</forename><surname>Dhingra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hanxiao</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>William W Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Salakhutdinov</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.01549</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Goodfellow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mehdi</forename><surname>Warde-Farley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Mirza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1302.4389</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">Maxout networks. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">The goldilocks principle: Reading children&apos;s books with explicit memory representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Felix</forename><surname>Hill</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note>ICLR</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Mnemonic reader for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minghao</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuxing</forename><surname>Peng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xipeng</forename><surname>Qiu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.02798</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Fusionnet: Fusing via fullyaware attention with application to machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hsin-Yuan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chenguang</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yelong</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Weizhu</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Chen</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1711.07341</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Adversarial examples for evaluating reading comprehension systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robin</forename><surname>Jia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2017 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="2021" to="2031" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diederik</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Ba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6980</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Ask me anything: Dynamic memory networks for natural language processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ankit</forename><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ozan</forename><surname>Irsoy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename><surname>Su</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert</forename><surname>English</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Brian</forename><surname>Pierce</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><surname>Ondruska</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ishaan</forename><surname>Gulrajani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno>CoRR abs/1506.07285</idno>
+		<ptr target="http://arxiv.org/abs/1506.07285" />
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Learning recurrent span representations for extractive question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tom</forename><surname>Kwiatkowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ankur</forename><surname>Parikh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dipanjan</forename><surname>Das</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01436</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Rouge: A package for automatic evaluation of summaries</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chin-Yew</forename><surname>Lin</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">A structured self-attentive sentence embedding</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhouhan</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minwei</forename><surname>Feng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cicero</forename><surname>Nogueira</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mo</forename><surname>Santos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bing</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Xiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1703.03130</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Structural embedding of syntactic trees for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rui</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junjie</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zi</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><surname>Nyberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2017 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="815" to="824" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Phase conductor on multi-layered attentions for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rui</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Weiguang</forename><surname>Mao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maria</forename><surname>Chikina</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1710.10504</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodong</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Duh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1804.07888</idno>
+		<title level="m">Stochastic answer networks for natural language inference</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bryan</forename><surname>Mccann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1708.00107</idno>
+		<title level="m">Learned in translation: Contextualized word vectors</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Ms marco: A human generated machine reading comprehension dataset</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tri</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mir</forename><surname>Rosenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xia</forename><surname>Song</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Saurabh</forename><surname>Tiwary</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rangan</forename><surname>Majumder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Deng</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.09268</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Bleu: a method for automatic evaluation of machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kishore</forename><surname>Papineni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Salim</forename><surname>Roukos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Todd</forename><surname>Ward</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Weijing</forename><surname>Zhu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 40th annual meeting on association for computational linguistics</title>
+		<meeting>the 40th annual meeting on association for computational linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="311" to="318" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+		<ptr target="http://www.aclweb.org/anthology/D14-1162" />
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing (EMNLP). Association for Computational Linguistics</title>
+		<meeting>the 2014 Conference on Empirical Methods in Natural Language Processing (EMNLP). Association for Computational Linguistics<address><addrLine>Doha, Qatar</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1532" to="1543" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">E</forename><surname>Peters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Neumann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Iyyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gardner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+		<title level="m">Deep contextualized word representations</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Squad: 100,000+ questions for machine comprehension of text pages</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pranav</forename><surname>Rajpurkar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Konstantin</forename><surname>Lopyrev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+		<ptr target="https://aclweb.org/anthology/D16-1264" />
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2383" to="2392" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">MCTest: A challenge dataset for the open-domain machine comprehension of text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Richardson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">C</forename><surname>Christopher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erin</forename><surname>Burges</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Renshaw</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2013 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2013 Conference on Empirical Methods in Natural Language Processing<address><addrLine>Seattle, Washington, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="193" to="203" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Contextualized Word Representations for Reading Comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Salant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Berant</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Bidirectional attention flow for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minjoon</forename><surname>Seo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aniruddha</forename><surname>Kembhavi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ali</forename><surname>Farhadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hannaneh</forename><surname>Hajishirzi</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01603</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Reasonet: Learning to stop reading in machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yelong</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Po-Sen</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Weizhu</forename><surname>Chen</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.05284</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">An empirical analysis of multiple-turn reasoning strategies in reading comprehension tasks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yelong</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodong</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Duh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1711.03230</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Sordoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philip</forename><surname>Bachman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Trischler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.02245</idno>
+		<title level="m">Iterative alternating neural attention for machine reading</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Dropout: a simple way to prevent neural networks from overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Vaswani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Niki</forename><surname>Parmar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jakob</forename><surname>Uszkoreit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Llion</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aidan</forename><forename type="middle">N</forename><surname>Gomez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Illia</forename><surname>Polosukhin</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1706.03762</idno>
+		<title level="m">Attention is all you need</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Gated self-matching networks for reading comprehension and question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenhui</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nan</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Furu</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Baobao</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Zhou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="189" to="198" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">Multi-Passage Machine Reading Comprehension with Cross-Passage Answer Verification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Lyu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Wang</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<monogr>
+		<title level="m" type="main">Fastqa: A simple and efficient neural architecture for question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dirk</forename><surname>Weissenborn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Georg</forename><surname>Wiese</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Laura</forename><surname>Seiffe</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1703.04816</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title level="m" type="main">Dynamic coattention networks for question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01604</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+		<title level="m" type="main">Dcn+: Mixed objective and deep residual coattention for question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1711.00106</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adams</forename><forename type="middle">Wei</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Dohan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minh-Thang</forename><surname>Luong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rui</forename><surname>Zhao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohammad</forename><surname>Norouzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Quoc</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<monogr>
+		<title level="m" type="main">Qanet: Combining local convolution with global self-attention for reading comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Le</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+		<title level="m" type="main">Exploring question understanding and adaptation in neuralnetwork-based question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junbei</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodan</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qian</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lirong</forename><surname>Dai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hui</forename><surname>Jiang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1703.04617</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

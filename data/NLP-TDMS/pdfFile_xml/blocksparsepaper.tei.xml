@@ -1,0 +1,808 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:49+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">GPU Kernels for Block-Sparse Weights</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Scott</forename><surname>Gray</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alec</forename><surname>Radford</surname></persName>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diederik</forename><forename type="middle">P</forename><surname>Kingma</surname></persName>
+							<email>dpkingma]@openai.com</email>
+						</author>
+						<title level="a" type="main">GPU Kernels for Block-Sparse Weights</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We&apos;re releasing highly optimized GPU kernels for an underexplored class of neural network architectures: networks with block-sparse weights. The kernels allow for efficient evaluation and differentiation of linear layers, including convolutional layers, with flexibly configurable block-sparsity patterns in the weight matrix. We find that depending on the sparsity, these kernels can run orders of magnitude faster than the best available alternatives such as cuBLAS. Using the kernels we improve upon the state-of-the-art in text sentiment analysis and generative modeling of text and images. By releasing our kernels in the open we aim to spur further advancement in model and algorithm design.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Research in the field of contemporary deep learning <ref type="bibr" target="#b13">[LeCun et al., 2015]</ref> is largely constrained by the availability of efficient GPU kernels for defining, evaluating and differentiating various model architectures. Only a small number of types of linear operations currently have efficient GPU implementations; three linear operations that currently enjoy efficient GPU implementations are dense dot products, convolutional operations and (most recently) depth-wise operations. Such operations have two variables as inputs: one input is usually a layer of network activations (corresponding to the current minibatch of datapoints), and another input that is usually the set of learned weights for that layer. For dense linear operations, these weights are a dense matrix or a dense higher-dimensional tensor. Two dimensions of these weights correspond to the so-called feature dimensions, whose lengths equal the so-called widths of the input and output layers of the operations. Such dense linear operations do not scale well in the feature dimensions, since the number of weights is proportional to both the number of input features, and the number of output features. Linearly scaling up the number of input and output features, results in a quadratic increase in the total number of weights, and a quadratic increase in the computational cost.</p><p>Ideally, we would have efficient operations that allow for sparsity in the two feature dimensions. With sparsity, we mean that the value of a subset of weights are specified to be exactly zero. If a weight is zero, then the linear operation associated with that weight can be skipped, since any value times zero equals zero. Therefore, the computational cost of sparse linear operations is only proportional to the number of non-zero weights. A problem of operations with weights with arbitrary sparsity, is that they cannot be efficiently implemented on contemporary GPUs. GPUs consist of thousands of computational cores that all operate in parallel. This restricts us to the set of operations that allow for a high degree of parallelizability, which does not include operations with arbitrary sparsity patterns.</p><p>However, we found that highly optimized block-sparse operations, with block sizes as small as 8 × 8, can still run efficiently on contemporary GPUs. See <ref type="figure">figure 1</ref> which explains block-sparse connectivity. We introduce highly optimized GPU implementations of various block-sparse operations. The operations come in roughly two flavors: (1) block-sparse matrix multiplications, and (2) blocksparse convolutional operations. The kernels and their main documentation can be found on GitHub <ref type="bibr">1</ref> . Please refer to this GitHub page for more information on the API.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Dense weights</head><p>Block-sparse weights Corresponding sparsity pattern Figure 1: Visualization of random dense and random block-sparse weight matrices, where white indicates a weight of zero. Our new kernels allow efficient usage of block-sparse weights in fully connected and convolutional layers, as illustrated in the middle <ref type="figure">figure.</ref> For convolutional layers, the kernels allow for sparsity in input and output feature dimensions; the connectivity is still dense in the spatial dimensions. The sparsity is defined at the level of blocks (right <ref type="figure">figure)</ref>, with block size of at least 8 × 8. At the block level, the sparsity pattern is completely configurable. Since the kernels skip computations of blocks that are zero, the computational cost is only proportional to the number of weights, not the number of input/output features.</p><p>Figure 2: Dense linear layers (left) can be replaced with layers that are sparse and wider (center) or sparse and deeper (right) while approximately retaining computational cost and memory cost. Note these costs are, in principle, proportional to the number of non-zero weights (edges). The shown networks have an equal number of edges. However, the sparse and wide network has the potential advantage of a larger information bandwidth, while the deeper network has the potential benefit of fitting nonlinear functions.</p><p>Block-sparsity unlocks various research directions (see section 6). One application we explore in experiments is the widening or deepening of neural networks, while increasing sparsity, such that the computational cost remains approximately equal as explained in <ref type="figure">figure 2</ref>. In experiments we have only scratched the surface of the applications of block-sparse linear operations; by releasing our kernels in the open, we aim to spur further advancement in model and algorithm design.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Capabilities</head><p>The two main components of this release are a block-sparse matrix multiplication kernel and a block-sparse convolution kernel. Both are wrapped in Tensorflow <ref type="bibr" target="#b0">[Abadi et al., 2016]</ref> ops for easy use and the kernels are straightforward to integrate into other frameworks, such as PyTorch.</p><p>Both kernels support an arbitrary block size and are optimized for 8x8, 16x16, and 32x32 block sizes. The matrix multiplication kernel supports an arbitrary block layout which is specified via a masking matrix. In addition, the feature axis is configurable. The convolution kernel supports non-contiguous input/output feature blocks of any uniform or non-uniform size specified via a configuration format (see API) though multiples of 32x32 perform best. Arbitrary dense spatial filter sizes are supported in addition to dilation, striding, padding, and edge biasing.</p><p>A variety of efficient helper ops are included for common routines such as layer and batch normalization of activations, L2 normalization of weights, dropout, activation functions, and elementwise math.</p><p>Since sparse networks allow for much larger activation tensors than dense networks, operations tend to be bandwidth bound instead of compute bound on GPU hardware. Reduced precision formats lower bandwidth significantly which helps alleviate this problem. To this end, the kernels support fp16 in addition to fp32 with additional compact formats such as bfloat16 in active development.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Benchmarks</head><p>3.1 Performance (GFLOPS) compared to cuBLAS and cuSPARSE kernels  In order to verify the efficiency of our proposed kernels, we compare against three baseline techniques for linear layers with block-sparse weights. For all cases, we tested on a NVIDIA Pascal Titan X GPU, with minibatch size 32 and block size 32 × 32.</p><p>The first baseline technique is the naïve use of cuBLAS kernels with sparse weight matrices. Since this technique does not 'skip' blocks of weights whose values are 0, the computational complexity is proportional to the total number of entries in the matrix, not the number of non-zero blocks. Therefore, this technique performs a lot of unnecessary operations. See <ref type="figure" target="#fig_2">figure 3</ref> for the relative speed of our kernel, compared to this technique. For higher degrees of sparsity, we see as expected a speedup factor close to 1 1−s/100 , where s is the sparsity percentage. We also compared against baselines of (1) block-sparse matrix multiplication through performing a sequence of small per-block matrix multiplications with cuBLAS, and (2) block-sparse matrix multplication using the cuSPARSE library. Unlike the previous baseline, the computational complexities of these methods are only proportional to the number of non-zero blocks. Still, in our experiments, these baselines faired worse than the previously baseline of naïve usage of cuBLAS; the number of GFLOPS did not not exceed about 50, regardless of the degree of sparsity. Our kernels typically performed one or two orders of magnitude faster in terms of GFLOPS.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Effect of block size, features axis and hidden state size</head><p>We benchmarked the performance of our kernels, in terms of GFLOPS, as a function block size, features axis and hidden state size; see <ref type="figure" target="#fig_3">figure 4</ref>. In each experiment, we kept the total number of parameters fixed. This experiment was performed on a NVIDIA P100 GPU, with a small-world LSTM with about 3 million parameters, with a hidden state size ranging from 1792 to 10752, corresponding to 0% to 97% sparsity. The evaluation was done with a minibatch size of 64; this size often performs best due to reduced cache dilution compared to larger minibatch sizes. The connectivity pattern is generated with the Watts-Strogatz algorithm, with 20% random long range connections, but performance with Barabási-Albert connectivity is close.</p><p>The operation with feature_axis=1 corresponds to an assembly-optimized kernel, and is essentially the same kernel as the openai-gemm kernel, now also used in cuBLAS for tile size 32x32. This kernel clearly outperforms the kernel for feature axis 0, but does not work for Kepler and Volta GPUs. <ref type="figure" target="#fig_3">Figure 4a</ref> shows performance of the fprop/bprop operation, which compute forward activations, and compute gradients w.r.t. the forward activations respectively. Since bprop is the transpose of the fprop operation, and transposes can be done in-place, the two operations have identical performance. Note that, perhaps somewhat surprisingly, in this experiment a higher degree of sparsity generally leads to better performance in GFLOPS. This is due to the higher parallelizability of the accumulation operation in case of larger hidden state sizes.</p><p>In figures 4b and 4c we benchmarked the update operation, which computes derivatives w.r.t. the block-sparse weights. Note that if a weight matrix is re-used multiple times in a computational graph, such as in an LSTM, this operation can be grouped, i.e. performed in parallel across multiple timesteps. Comparing <ref type="figure" target="#fig_3">figure 4b</ref> with 4c, it is clear that the grouping leads to substantial improvement in GFLOPS. Grouped update operations are easy to perform, since the kernels take lists of (activation, gradients) as input, avoiding the requirement of pre-concatenation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Experiments</head><p>Our new kernels open up a large space of new possibilities for learning algorithms and neural network architectures. In this section ,we experiment with some relatively simple block-sparse patterns with fixed sparse topology. Note that the kernels in principle allow for much more exotic methods, such as a learned sparsity structure, and more exotic models; we leave this for future work.  The block-sparse kernels allow us to efficiently implement LSTMs with block-sparsity connectivity. With sparse connectivity, we mean that the linear operations in a LSTM are replaced by block-sparse linear operations. Sparse connectivity allows us to, for example, widen the network without increasing the number of parameters.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">LSTMs with Deep Updates</head><p>One appealing property of LSTMs with densely connected recurrent connections is that the value of each activation (neuron) at timestep t is a function of all hidden activations, and all inputs, at timestep (t − 1). In other words, information fully mixes between timesteps. This is not true for a LSTM with naïve block-sparse connectivity: since not all neurons are directly connected, information would not fully mix between timesteps. A similar observation was made in <ref type="bibr" target="#b25">[Wen et al., 2017]</ref> and motivated their structured sparsity approach.</p><p>We choose to tackle this problem with the introduction of a sparse multi-layer network within each LSTM cell; see <ref type="figure" target="#fig_5">figure 5</ref> for an illustration, and algorithm 1 in the appendix for pseudo-code of this LSTM with deep updates. Given the right block-sparse connectivity, such networks can fully mix within a relatively small number of layers when combined with a small-world connectivity, as we will explain in section4.2. The LSTM architecture builds on the multiplicative LSTM (mSLTM) architecture proposed in <ref type="bibr" target="#b11">[Krause et al., 2016]</ref>, and utilizes layer normalization <ref type="bibr" target="#b1">[Ba et al., 2016]</ref> for improved efficiency.</p><p>Adding internal depth is a good way to increase parameter efficiency, even in the dense case; see <ref type="figure">figure 8</ref> in the appendix. Performance seems to saturate after about 4 internal steps.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Small-World Networks</head><p>In the choice of sparse connectivity, we take inspiration from the field of small-world networks, as we will now explain. A network is defined to be a small-world network <ref type="bibr" target="#b22">[Watts, 1999]</ref> if the following two properties hold.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>1-Dimensional Watts-Strogatz</head><p>Barabasi-Albert Random <ref type="figure">Figure 6</ref>: Visualization of adjacency matrices of random, Watts-Strogatz (WS) with a 1-Dimensional ring lattice, and Barabási-Albert (BA) networks. The latter two correspond to small-world networks, defined as having both a large clustering coefficient, and short average path length (see section 4.2). The purely random network, shown left, is not a small-world network, as it lacks clustering.</p><p>1. The clustering coefficient is not small. The clustering coefficient is a measure of locality of connectivity, and is high when the graph contains many cliques or near-cliques: subnetworks that are almost fully interconnected. Note that RNNs constructed with block-sparse connectivity automatically have this property.</p><p>2. The average path length L between nodes (neurons) scales only logarithmically with the total number of nodes/neurons N , i.e. L ∝ log N . The path length between nodes equals the length of the shortest path between these nodes. A short average path length leads to rapid mixing of information.</p><p>A well-known example of small-world networks is the human social network <ref type="bibr" target="#b23">[Watts, 2004]</ref>: our friends, family and acquaintances often also know eachother (high clustering), but we are also on average only about 'six handshakes away' from a random other person on earth. Another example is the human brain, whose anatomical and functional networks often also exhibit smallworldness <ref type="bibr" target="#b3">[Bassett and Bullmore, 2006</ref>].</p><p>Some algorithms for generating graphs with small-world properties are:</p><p>1. Random block-sparse connectivity. Note that a plain block-sparse structure with non-trivially sized blocks, automatically has some degree of clustering. This results in the simplest type of small-world RNN.</p><p>2. The Watts-Strogatz (WS) model <ref type="bibr" target="#b24">[Watts and Strogatz, 1998</ref>]. The algorithm that construct WS graphs starts out with a K-dimensional ring lattice with a dense purely local connectivity; every node is connected to every other node within a certain distance within the lattice. Then a random subset (k%) of all connections is replaced with a random connection. The other (100 − k)% local connections are retained.</p><p>3. The Barabási-Albert (BA) model <ref type="bibr" target="#b2">[Barabási and Albert, 1999]</ref>. The algorithm that constructs such graphs begins with an initial densely connected network with m 0 nodes. Then, new nodes are added on at a time, each new node connected to m ≤ m 0 existing nodes, where the probability that a new node connects to a particular existing node i is proportional to the degree (the number of connections) of that existing node. This leads to a power law degree distribution, with a very small number of nodes with a very large degree of connectivity ('the rich get richer').</p><p>Our block-sparse GPU kernels allow us to implement models with WS and BA connectivity on the block level. See <ref type="figure">figure 6</ref> for an illustration of the types of connectivity.</p><p>Neural networks with small-world connectivity allow us to train wider networks without incurring a quadratic increase in the number of parameters. This let us scale RNNs to very large states. Since the average path length between neurons scales only as the logarithm of the total number of neurons, even very large networks are fully connected within a short number of timesteps. As a result, information has the ability to mix rapidly within the network.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Small-World LSTMs</head><p>We trained LSTMs with deep updates and small-world block-sparse connectivity, which we refer to as Small-World LSTMs. For a large scale experiment we follow the setup of <ref type="bibr" target="#b18">[Radford et al., 2017]</ref> and train byte-level generative models on the Amazon Reviews corpus <ref type="bibr" target="#b15">[McAuley et al., 2015]</ref>. Due to more efficient implementations, models are trained for four epochs instead of only one. Batch size is also increased by 4x resulting in an equivalent amount of total updates. As in other experiments, we train models with nearly equivalent parameter counts and the same hyper-parameters, comparing dense weight matrices with a block-sparse variant. A dense model with a state size of 3168 is trained. The sparse model uses a Barabási-Albert connectivity pattern with an effective sparsity of ~97% and a state size of 18432. The dense model reaches 1.058 bits per byte -already a significant improvement over the 1.12 bits per byte previously reported on this dataset. The sparse model improves this further, reaching 1.048 bits per byte.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Binary Sentiment Representation Learning</head><p>In addition to the generative results above, we also compare the usefulness of these models for the task of binary sentiment classification in <ref type="figure" target="#fig_6">figure 7</ref>. We follow the semi-supervised methodology established by <ref type="bibr" target="#b10">[Kiros et al., 2015]</ref> which trains a task-specific supervised linear model on top of a more general purpose unsupervised representation. Due in part to the much higher feature dimensionality of the sparse model increasing the effective capacity of the linear model, it outperforms the dense model on all sentiment datasets. Of particular note, our sparse model improves the state of the art on the document level IMDB dataset from 5.91% error <ref type="bibr" target="#b16">[Miyato et al., 2016]</ref> to 5.01%. This is a promising improvement compared to <ref type="bibr" target="#b18">[Radford et al., 2017]</ref> which performed best only on shorter sentence level datasets. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5">Block-Sparse Convolutional Networks</head><p>Finally, we tested whether replacement of dense (regular) convolutional kernels with block-sparse kernels improves results in a generative modeling benchmark. In order to maximize fairness of comparison, we took a pre-existing implementation of a SOTA model, and kept all hyper-parameters (including those for optimization) unchanged, while sparsifying and deepening the model such that the total number of parameters is approximately unchanged. Specifically, we took the openly available implementation of the PixelCNN++ <ref type="bibr" target="#b20">[Salimans et al., 2017]</ref> generative model, and replaced the regular convolutions with block-sparse convolution with a block-diagonal structure. This is also known as grouped convolution <ref type="bibr" target="#b26">, Xie et al., 2016</ref>. Similar to , we added a shuffle operator after every block-sparse convolution. In our case, shuffling has no additional computational or memory cost, since it can be merged with the convolution operation, simply by doing shuffling of the sparsity structure.</p><p>We found that increasing the depth of each stage of the model by a factor 2 or 4, while increasing the sparsity so as to keep the total number of parameters approximately constant, leads to increasingly better performance in terms of the bits per dimension (bpd). With an increase of the depth by a factor 4, this resulted in 2.90 bpd, which is (to the best of our knowledge) the best reported number in the literature so far.</p><p>These results are consistent with findings by  and <ref type="bibr" target="#b26">[Xie et al., 2016]</ref>, who found that similarly grouped convolution led to improvements in classification error in supervised tasks.</p><p>For extensive experimental evidence that block-sparse convolutions can significantly improve results, we refer to these previous publications.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Related Work</head><p>There is extensive evidence in the literature that architectures with block-sparse linear operations can substantially improve results.</p><p>In <ref type="bibr" target="#b26">[Xie et al., 2016]</ref>, for example, a novel convolutional network architecture called ResNeXt was proposed using block-sparse convolutions, improving upon the state-of-the-art. Later, the ShuffleNet [  used block-sparse convolutions as well, this time in combination with a shuffle operation, like we did in our convolutional experiments. These architecture can potentially greatly benefit from efficient block-sparse GPU kernels.</p><p>Depthwise separable convolutions <ref type="bibr" target="#b21">[Simonyan and Zisserman, 2014]</ref> can be viewed as block-sparse convolutions with a block-diagonal connectivity matrix, and block size 1. Depthwise separable convolutions have been used to advance the state of the art in image classification in various publications, starting in <ref type="bibr" target="#b21">[Simonyan and Zisserman, 2014]</ref>, later in the Xception <ref type="bibr" target="#b5">[Chollet, 2016]</ref> and MobileNet <ref type="bibr" target="#b7">[Howard et al., 2017]</ref> architectures.</p><p>One of our motivations for block-sparsity in RNNs; larger state sizes without significantly increased computational or parameter costs, has been successfully addressed in numerous ways by other approaches. The projection LSTM of <ref type="bibr" target="#b19">[Sak et al., 2014]</ref> allows for more efficient usage of high dimensional states by reducing the number of parameters and computation in the hidden to hidden transition of an LSTM and has been scaled up to achieve state of the art results in large scale language modeling <ref type="bibr" target="#b9">[Jozefowicz et al., 2016]</ref>. This work has been further improved by <ref type="bibr" target="#b12">[Kuchaiev and Ginsburg, 2017]</ref> who explore additional factorization methods for LSTMs.</p><p>In contrast to our small-world LSTM approach which trains with a fixed block-level sparsity pattern, more flexible methods which learn structured sparsity in RNNs have been explored. Group lasso regularization <ref type="bibr" target="#b27">[Yuan and Lin, 2006</ref>] is a popular technique which by appropriate definition of a group encourages structured sparsity. Closely related to our work, <ref type="bibr" target="#b17">[Narang et al., 2017]</ref> used carefully scheduled thresholding and group lasso on blocks of weight matrices to learn block-sparse RNNs.</p><p>[ <ref type="bibr" target="#b25">Wen et al., 2017]</ref> achieved unit level pruning via group lasso regularization of "Intrinsic Sparse Structure weight groups" -which correspond to the rows and columns of LSTM weight matrices for a specific unit.</p><p>We are far from the first to apply internal steps in a recurrent neural network. In <ref type="bibr" target="#b29">[Zilly et al., 2016]</ref> and <ref type="bibr" target="#b6">[Graves, 2016]</ref>, for example, RNNs were trained with multiple internal steps per external timestep.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Research Directions</head><p>There remain a large number of unexplored research directions and potential applications of the block-sparse kernels. Here we list some open questions and suggestions for future research.</p><p>• Often, a large percentage of the weights in neural networks can be pruned after training has finished, as shown by various recent work summarized in <ref type="bibr" target="#b4">[Cheng et al., 2017]</ref>. Typically these results could not be translated into wall-clock speedups, since there was an absence of GPU kernels that could leverage sparsity. How much wall-clock time speed-up is possible at inference time, when using block-wise pruning of weights, together with block-sparse kernels? • In biological brains, the sparse structure of the network is partially determined during development, in addition to connection strengths. Can we do something similar in artificial neural networks, where we use gradients to not only learn the connection weights, but also the optimal sparsity structure? A recent paper proposed a method for learning block-sparse recurrent neural networks <ref type="bibr" target="#b17">[Narang et al., 2017]</ref>, and we recently proposed an algorithm for L0 regularization in neural networks <ref type="bibr" target="#b14">[Louizos et al., 2017]</ref>, which can be used towards this end.</p><p>• We trained LSTMs with tens of thousands of hidden units, leading to better models of text.</p><p>More generally, sparse layers make it possible to train models with huge weight matrices but the same number of parameters and the same computational cost as their smaller dense counterparts. What are application domains where this will make the most difference to performance?</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Conclusion</head><p>We released highly optimized GPU kernels for gradient-based learning and inference in neural networks with block-sparse weights. In benchmarking experiments, we found that our GPU kernels indeed work much more efficiently than alternative kernels that are not optimized for block-sparse weights. We use the kernels to implement small-world LSTMs, which allow us to scale up to much wider states than typically used in LSTMs. We compared the representations (learned generatively on Amazon reviews data) of a dense network <ref type="bibr" target="#b18">[Radford et al., 2017]</ref> with the wider and sparse variant, in terms of their usefulness for classifying sentiment. We found that the wider state indeed helped identify sentiment, leading to state-of-the-art results on various sentiment classification benchmarks. The bits-per-character results on the Amazon reviews dataset are also the best reported in the literature so far. We also saw improvements in the bits-per-dimension performance in generative modeling of CIFAR-10, when using sparse layers. Much is left to be explored in the space of block-sparse neural networks, and we have listed some potentially fruitful directions for future research. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>1.35</head><p>Test-set BPC ( <ref type="bibr">WikiText-103)</ref> depth=2, width=1448 depth=3, width=1344 depth=4, width=1256 depth=5, width=1184 depth=6, width=1120</p><p>Figure 8: Training curves of our LSTM with deep updates and dense connectivity, as a function of the internal depth and the network width. The network width was chosen in order to closely match the number of parameters of the network with an internal depth of 2.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Empirical speed-ups, in terms of relative GFLOPS, of block-sparse matrix multiplication with a 12288 × 12288 weight matrix, a minibatch size of 32, and a block size of 32. We compare against cuBLAS (CUDA 8) matrix multiplication. Other baselines typically faired worse than cuBLAS.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: (a-c): Performance of elementary operations in our proposed kernels in terms of GFLOPS as a function of block size, feature axis and the hidden state size. See section 3.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>LSTM Gate Logic [c, h]t- 1 [c, h]t xt Multiply and Add LSTM Gate Logic [c, h]t- 1 [</head><label>11</label><figDesc>c, h]t xt Original mLSTM architecture (b) Our LSTM architecture with deep updates</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: In experiments, we use an LSTM architecture with deep updates (right), where all linear operations have block-sparse connectivity with small-world topology. The architecture can be seen as an evolution of the multiplicative LSTM (left) [Krause et al., 2016].</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 7 :</head><label>7</label><figDesc>Figure 7: Binary sentiment classification error (%) of linear models trained on the features of dense and sparse generative models with approximately equivalent total parameter counts. SOTA for the Customer Reviews and Stanford Sentiment Treebank datasets from [Radford et al., 2017], for IMDB [Miyato et al., 2016], for Yelp [Johnson and Zhang, 2017].</figDesc><graphic url="image-78.png" coords="7,109.98,357.82,392.04,192.73" type="bitmap" /></figure>
+
+			<note place="foot" n="1"> https://github.com/openai/blocksparse</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+			</div>
+
+			<div type="annex">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A Appendix</head><p>Algorithm 1: Pseudo-code of one step in our LSTM architecture with deep updates. Every linear() operation consists of a dense or block-sparse linear operation followed by layer normalization Ba et al. <ref type="bibr">[2016]</ref>, which includes (as usual) a bias and gain operation. The parameters θ stand for the weights, biases and gains of each linear layer. We found that layer normalization resulted in superior stability and performance. Note that due to the nonlinear layer normalization operation inside linear(), it is strictly speaking not a linear operation. </p></div>			</div>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martín</forename><surname>Abadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Agarwal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Barham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Brevdo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhifeng</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Craig</forename><surname>Citro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andy</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Dean</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthieu</forename><surname>Devin</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.04467</idno>
+		<title level="m">Large-scale machine learning on heterogeneous distributed systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><forename type="middle">Lei</forename><surname>Ba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jamie</forename><forename type="middle">Ryan</forename><surname>Kiros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.06450</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">Layer normalization. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Emergence of scaling in random networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Albert-László</forename><surname>Barabási</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Réka</forename><surname>Albert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">science</title>
+		<imprint>
+			<biblScope unit="volume">286</biblScope>
+			<biblScope unit="issue">5439</biblScope>
+			<biblScope unit="page" from="509" to="512" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Small-world brain networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danielle</forename><forename type="middle">Smith</forename><surname>Bassett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">D</forename><surname>Bullmore</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The neuroscientist</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="512" to="523" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">A survey of model compression and acceleration for deep neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yu</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Duo</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pan</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tao</forename><surname>Zhang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1710.09282</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Xception: Deep learning with depthwise separable convolutions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">François</forename><surname>Chollet</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1610.02357</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Adaptive computation time for recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.08983</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Mobilenets: Efficient convolutional neural networks for mobile vision applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Menglong</forename><surname>Andrew G Howard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bo</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dmitry</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Weijun</forename><surname>Kalenichenko</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tobias</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marco</forename><surname>Weyand</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hartwig</forename><surname>Andreetto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Adam</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.04861</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Deep pyramid convolutional neural networks for text categorization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rie</forename><surname>Johnson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tong</forename><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="562" to="570" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Exploring the limits of language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Wu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1602.02410</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Skip-thought vectors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Kiros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yukun</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Ruslan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raquel</forename><surname>Zemel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antonio</forename><surname>Urtasun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sanja</forename><surname>Torralba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Fidler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="3294" to="3302" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Multiplicative lstm for sequence modelling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ben</forename><surname>Krause</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Liang</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iain</forename><surname>Murray</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Renals</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.07959</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Factorization tricks for lstm networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oleksii</forename><surname>Kuchaiev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Boris</forename><surname>Ginsburg</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1703.10722</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Deep learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yann</forename><surname>Lecun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Nature</title>
+		<imprint>
+			<biblScope unit="volume">521</biblScope>
+			<biblScope unit="issue">7553</biblScope>
+			<biblScope unit="page" from="436" to="444" />
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christos</forename><surname>Louizos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Max</forename><surname>Welling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diederik</forename><forename type="middle">P</forename><surname>Kingma</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1712.01312</idno>
+		<title level="m">Learning sparse neural networks through l0 regularization</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Inferring networks of substitutable and complementary products</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julian</forename><surname>Mcauley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rahul</forename><surname>Pandey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jure</forename><surname>Leskovec</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 21th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining</title>
+		<meeting>the 21th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="785" to="794" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Adversarial training methods for semi-supervised text classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Takeru</forename><surname>Miyato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Andrew</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ian</forename><surname>Dai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Goodfellow</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1605.07725</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Block-sparse recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sharan</forename><surname>Narang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><surname>Undersander</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gregory</forename><surname>Diamos</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1711.02782</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title level="m" type="main">Learning to generate reviews and discovering sentiment</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alec</forename><surname>Radford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.01444</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Long short-term memory recurrent neural network architectures for large scale acoustic modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ha¸simha¸sim</forename><surname>Sak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Senior</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Françoise</forename><surname>Beaufays</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Fifteenth Annual Conference of the International Speech Communication Association</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Pixelcnn++: A pixelcnn implementation with discretized logistic mixture likelihood and other modifications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Salimans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrej</forename><surname>Karpathy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Diederik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yaroslav</forename><surname>Knigma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bulatov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Learning Representations (ICLR</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Very deep convolutional networks for large-scale image recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karen</forename><surname>Simonyan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Zisserman</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.1556</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Duncan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Watts</surname></persName>
+		</author>
+		<title level="m">Small worlds: the dynamics of networks between order and randomness</title>
+		<imprint>
+			<publisher>Princeton university press</publisher>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Six degrees: The science of a connected age</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Duncan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Watts</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2004" />
+			<publisher>WW Norton &amp; Company</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">Collective dynamics of&apos;small-world&apos;networks. nature</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Duncan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Watts</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Steven</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Strogatz</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="volume">393</biblScope>
+			<biblScope unit="page">440</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Learning intrinsic sparse structures within long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Wen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuxiong</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samyam</forename><surname>Rajbhandari</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenhan</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fang</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bin</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yiran</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hai</forename><surname>Li</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1709.05027</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Saining</forename><surname>Xie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ross</forename><surname>Girshick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Piotr</forename><surname>Dollár</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.05431</idno>
+		<title level="m">Zhuowen Tu, and Kaiming He. Aggregated residual transformations for deep neural networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Model selection and estimation in regression with grouped variables</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Yuan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yi</forename><surname>Lin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of the Royal Statistical Society: Series B (Statistical Methodology)</title>
+		<imprint>
+			<biblScope unit="volume">68</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="49" to="67" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">Shufflenet: An extremely efficient convolutional neural network for mobile devices</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiangyu</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xinyu</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mengxiao</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Sun</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.01083</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julian</forename><surname>Georg Zilly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh</forename><forename type="middle">Kumar</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Koutník</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.03474</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">Recurrent highway networks. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+		<title level="m" type="main">LSTM gates: 16 i ← sigmoid(linear(h, θ i )) Input gate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">//</forename><surname>Compute</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">← sigmoid(linear(h, θ f )) Forget gate</title>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">// Apply Lstm</forename><surname>Update</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+	<note>21 c ← f c + i tanh(linear(h, θu</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

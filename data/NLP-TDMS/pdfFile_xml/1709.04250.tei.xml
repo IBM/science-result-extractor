@@ -1,0 +1,574 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:41+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Dialogue Act Sequence Labeling using Hierarchical encoder with CRF</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Harshit</forename><surname>Kumar</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">IBM Research</orgName>
+								<address>
+									<country key="IN">India</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arvind</forename><surname>Agarwal</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">IBM Research</orgName>
+								<address>
+									<country key="IN">India</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Riddhiman</forename><surname>Dasgupta</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">IBM Research</orgName>
+								<address>
+									<country key="IN">India</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sachindra</forename><surname>Joshi</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">IBM Research</orgName>
+								<address>
+									<country key="IN">India</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arun</forename><surname>Kumar</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">IBM Research</orgName>
+								<address>
+									<country key="IN">India</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Dialogue Act Sequence Labeling using Hierarchical encoder with CRF</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Dialogue Act recognition associate dialogue acts (i.e., semantic labels) to utterances in a conversation. The problem of associating semantic labels to utterances can be treated as a sequence labeling problem. In this work, we build a hierarchical recurrent neural network using bidirectional LSTM as a base unit and the conditional random field (CRF) as the top layer to classify each utterance into its corresponding dialogue act. The hierarchical network learns representations at multiple levels, i.e., word level, utterance level, and conversation level. The conversation level representations are input to the CRF layer, which takes into account not only all previous utterances but also their dialogue acts, thus mod-eling the dependency among both, labels and utterances, an important consideration of natural dialogue. We validate our approach on two different benchmark data sets, Switchboard and Meeting Recorder Dialogue Act, and show performance improvement over the state-of-the-art methods by 2.2% and 4.1% absolute points, respectively. It is worth noting that the inter-annotator agreement on Switchboard data set is 84%, and our method is able to achieve the accuracy of about 79% despite being trained on the noisy data.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Introduction</head><p>Dialogue Acts (DA) are semantic labels attached to utterances in a conversation that serve to concisely characterize speakers' intention in producing those utterances. The identification of DAs ease the interpretation of utterances and help in understanding a conversation. One of primary applications of DAs ( <ref type="bibr" target="#b2">Higashinaka et al. 2014</ref>) is in building a natural language dialogue system, where knowing the DAs of the past utterances helps in the prediction of the DA of the current utterance, and thus, limiting the number of candidate utterances to be generated for the current turn. For example, if the previous utterance is of type Greeting then the next utterance is most likely going to be of the same type, i.e., Greeting. <ref type="table" target="#tab_1">Table 1</ref> shows a snippet of a conversation showing such dependency among DAs. Another application of DA identification is in building a conversation summarizer where DAs can be used to generate a summary of a conversation by collecting pair of utterances that have specific DA labels.</p><p>DA recognition is a well-understood problem, and several different approaches ranging from multi-class classification to structured prediction have been applied to it (Grau   <ref type="bibr" target="#b6">Lendvai and Geertzen 2007;</ref><ref type="bibr" target="#b12">Tavafi et al. 2013</ref>). These approaches use handcrafted features, often designed keeping in mind the characteristics of the underlying data, and therefore do not scale well across datasets. Furthermore, in a natural conversation, there is a strong dependency among consecutive utterances, and consecutive DAs, as is evident from the previous Greeting example, so it is important that any model should account for these dependencies. However, the standard multi-class classification such as Na¨ıveNa¨ıve Bayes does not account for any of these dependencies, and classify DAs independently, whereas structured prediction algorithms such as HMM only take into account the label dependency, not the dependencies among utterances. For the DA recognition task, one of the earlier works ( <ref type="bibr" target="#b2">Grau et al. 2004</ref>) used Na¨ıveNa¨ıve Bayes and reported an accuracy of 66% on the Switchboard (SwDA) corpus. The SwDA corpus has since become the standard corpus for DA recognition task because of its wide-spread use, and has been used as a benchmark data to compare different algorithms. Furthermore, structured prediction algorithms such as HMM ( <ref type="bibr" target="#b11">Stolcke et al. 2006</ref>) and SVM-HMM ( <ref type="bibr" target="#b6">Lendvai and Geertzen 2007;</ref><ref type="bibr" target="#b12">Tavafi et al. 2013</ref>) though have reported an accuracy of 71% and 74.32%, respectively, they are are still far from the human reported inter-annotator agreement of 84% on SwDA corpus. The emergence of deep learning has dramatically improved the state-of-the-art across several domains <ref type="bibr">(LeCun, Bengio, and Hinton 2015)</ref>, from image classification to natural language generation. Recent studies <ref type="bibr" target="#b0">(Blunsom and Kalchbrenner 2013;</ref><ref type="bibr" target="#b6">Lee and Dernoncourt 2016;</ref><ref type="bibr" target="#b5">Khanpour, Guntakandla, and Nielsen 2016;</ref><ref type="bibr" target="#b4">Ji, Haffari, and Eisenstein 2016)</ref> have used deep learning models for the DA recognition task, and have shown promising results. However, most of these models do not leverage the implicit and intrinsic dependencies among DAs. A further limitation of existing methods is that they consider a conversation as a flat structure, attempting to recognize each DA in isolation. A conversation naturally has a hierarchical structure, i.e., a conversation is made up of utterances, utterances are made up of words, and so on. In our method, we make use of this structure to build a hierarchical recurrent neural network with four layers, the first three layers representing words, utterances and conversation, and the fourth layer representing the CRF (classification) layer. Among these four layers, the first three layers capture the dependencies among utterances, whereas the fourth layer captures the dependencies among dialogue acts, hence accounting for both kind of dependencies. Our method is in contrast to the existing methods which only capture one kind of dependency either utterance dependency <ref type="bibr" target="#b0">(Blunsom and Kalchbrenner 2013)</ref> or label dependency <ref type="bibr" target="#b3">(Huang, Xu, and Yu 2015;</ref><ref type="bibr" target="#b6">Ma and Hovy 2016)</ref>. The main contributions of this paper are as follows:</p><p>• We propose a Hierarchical Bi-LSTM-CRF (Bi-directional Long Short Term Memory with CRF) model for the DA recognition task, that can capture both kind of dependencies, i.e., among dialogue acts and among utterances.</p><p>• We evaluate the proposed method on two benchmark datasets, SwDA and MRDA, and show performance improvement over the state-of-the-art by a significant margin. For the SwDA dataset, our method is able to achieve an accuracy of 79.2% compared to the state-of-the-art accuracy of 77%, a step closer to the human reported interannotator agreement of 84%. On MRDA, our method achieves an accuracy of 90.9% compared to the state-ofthe-art accuracy of 86.8%.</p><p>• We analyze the effect of incorporating linguistic features, and additional context through intra-attention <ref type="bibr" target="#b6">(Paulus, Xiong, and Socher 2017)</ref> on the top of the proposed model, however, these additional variations do not result in any performance improvement. Although additional context does not boost the performance, it does help in convergence of the model at the time of training.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Related Work</head><p>DA recognition is a supervised classification problem that assigns DA label to each utterance in a conversation. There exist several approaches tackling this problem in different ways, and most of them can be grouped into the following two categories: 1) those that predict the entire DA sequence for all utterances in a conversation, in other words, those that treat DA identification as a sequence labeling problem <ref type="bibr">(Stol- cke et al. 2006;</ref><ref type="bibr" target="#b6">Lendvai and Geertzen 2007;</ref><ref type="bibr">Zimmermann 2009</ref>; Lee and Dernoncourt 2016); 2) those that predict DA label for each utterance independently ( <ref type="bibr" target="#b12">Tavafi et al. 2013;</ref><ref type="bibr" target="#b5">Khanpour, Guntakandla, and Nielsen 2016;</ref><ref type="bibr" target="#b4">Ji, Haffari, and Eisenstein 2016)</ref>. Until deep learning based models, the best reported accuracy on the benchmark SwDA dataset was 71% by HMM ( <ref type="bibr" target="#b11">Stolcke et al. 2006</ref>), using hand-crafted features along with contextual and lexical information, while the same for the MRDA dataset was 82% by <ref type="bibr" target="#b6">(Lendvai and Geertzen 2007</ref>) using a naive Bayesian formulation.</p><p>Recently, researchers have started using deep learning based models for this task <ref type="bibr" target="#b6">(Lee and Dernoncourt 2016;</ref><ref type="bibr" target="#b5">Khanpour, Guntakandla, and Nielsen 2016;</ref><ref type="bibr" target="#b12">Tavafi et al. 2013</ref>), and have shown significant improvements over previous models. ( <ref type="bibr" target="#b6">Lee and Dernoncourt 2016)</ref> proposes a model based on CNNs and RNNs that incorporates preceding short texts as context to classify current DAs; the CNN based model performs better than the RNN based model for both SwDA and MRDA data sets. In another work, <ref type="bibr" target="#b0">(Blunsom and Kalchbrenner 2013</ref>) builds a sentence representation using a combination of Hierarchical CNN (HCNN) and RNN, followed by the classification of these sentence representation into corresponding DAs. However, <ref type="bibr">(Blunsom and Kalch- brenner 2013</ref>) predict the dialogue act of each utterance individually, i.e., they do not take into account the label dependency. In another line of work <ref type="bibr" target="#b4">(Ji, Haffari, and Eisenstein 2016)</ref>, authors propose a Latent Variable Recurrent Neural Network (LVRNN) where they tackle the problem of dialogue act classification and dialogue generation simultaneously. They use the context vector of previous utterance to predict the DA label of the next utterance which is then, along with the previous utterance vector, used to generate the next utterance. Although this model take into account the utterance dependency, it does not capture the dependencies among labels directly.</p><p>There has been some work on using conditional random fields with LSTM models (Huang, Xu, and Yu 2015; Ma and Hovy 2016) for sequence tagging tasks such as POS tagging and named entity recognition. However, they do not make use of the hierarchical structure of language, and therefore, although they take into account the label dependency, they are unable to capture the dependencies among utterances in a principled way.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Methodology</head><p>Before describing the proposed model in detail, we first set the mathematical notation for the problem of DA identification. Suppose, we have a set D of N conversations or dia-</p><formula xml:id="formula_0">logues, i.e. D = (C 1 , C 2 , . . . C N ) with (Y 1 , Y 2 , . . . Y N ) corresponding target DAs. Each conversation C i itself is a sequence of R i utterances C i = (u 1 , u 2 , . . . u Ri ) with Y i = (y 1 , y 2 , .</formula><p>. . y Ri ) being the corresponding target DAs. In other words, for each utterance u j in each conversation, we have an associated target label y j ∈ Y, where Y is the set of all possible DAs. Each utterance u j in turn is itself a sequence of S j words stringed together, i.e., u j = (w 1 , w 2 , . . . w Sj ).</p><p>The whole sequence of utterances in each conversation can be considered as a single very long chain of words, with output tags or labels only appearing sparsely, i.e., at the end of each utterance. However, such a construct suffers because of extremely long sequence lengths, which severely hampers neural network training as backpropagation through time becomes impractical due to vanishing/exploding gradients at extreme lengths. To mitigate the <ref type="figure">Figure 1</ref>: An illustration of our proposed hierarchical Bi-LSTM CRF model. The input is a conversation C i consisting of Ri utterances u1, u2, . . . uR i , with each utterance uj itself being a sequence of words w1, w2, . . . wS j . As can be seen, there are four main layers, viz. embedding, utterance encoder, conversation encoder, and CRF classifier. The output is a DA prediction for each utterance in the conversation.</p><p>aforementioned problem, we take into consideration the hierarchical nature of dialogues and conversations, and opt to use a hierarchical recurrent encoder. Hierarchical recurrent encoders have been used previously by <ref type="bibr" target="#b9">Serban et al. 2016;</ref><ref type="bibr" target="#b2">Dehghani et al. 2017)</ref>, and have been shown to perform better compared to standard non-hierarchical models. We propose a hierarchical recurrent encoder, where the first encoder operates at the utterance level, encoding each word in each utterance, and the second encoder operates at the conversation level, encoding each utterance in the conversation, based on the representations of the previous encoder. These two encoders make sure that the output of the second encoder capture the dependencies among utterances.</p><p>The output of the second encoder can be followed by any type of classification module which takes in the representation of each utterance, and in our formulation, we combine the hierarchical encoder with a linear chain conditional random field (CRF) <ref type="bibr">(Lafferty, McCallum, and Pereira 2001)</ref> for structured prediction. DA identification can be treated as a sequence labeling problem and can be tackled naively by assigning a label to each element of the sequence independently. However, the implicit nature of dependencies among consecutive elements in a sequence means that instead of labeling each item independently, structured prediction models such as hidden Markov models, conditional random fields, etc., are naturally better choice. An illustration of the complete proposed model -a combination of word embedding layer, a recurrent hierarchical encoder, and a CRF based classification layer-is shown in <ref type="figure">figure 1</ref>. The proposed model is trainable end-to-end, and constructs and captures the representation at multiple levels of granularity, e.g. word level, utterance level, and conversation level.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Hierarchical Recurrent Encoder</head><p>For a given conversation, each word w k of each utterance u j is processed by an embedding layer which converts onehot vocabulary vectors to dense representations, followed by a word-level bidirectional LSTM (Hochreiter and Schmidhuber 1997), which serves as the first encoder in our hierarchical encoder. The embedding layer can be initialized using pretrained embeddings such as Word2Vec ( <ref type="bibr" target="#b6">Mikolov et al. 2013</ref>) or Glove (Pennington, Socher, and Manning 2014). Since we consider bidirectional LSTMs, the representation of each word is obtained by concatenating the outputs from the forward and backward RNNs at that timestep. For an utterance u j comprised of a sequence of words w 1 , w 2 , . . . w Sj , the series of operations is as follows:</p><formula xml:id="formula_1">e k = f embed (w k ) ∀k ∈ 1, 2, . . . S j h k = f 1 rnn (h k−1 , e k ) ∀k ∈ 1, 2, . . . S j<label>(1)</label></formula><p>Here, f embed represents the embedding layer, whereas f 1 rnn denotes the utterance-level encoder in our hierarchical encoder. Note that the embedding layer can ideally capture finer granularities, such as character level ( <ref type="bibr" target="#b5">Kim et al. 2016)</ref> or subword level <ref type="bibr" target="#b9">(Sennrich, Haddow, and Birch 2017)</ref> embeddings, which would potentially increase the depth of our hierarchical encoder. In order to keep the complexity of the model manageable, we decide to skip additional finer grained levels. Due to the hierarchical nature of conversations, the representation of each utterance u j , denoted by v j can be obtained by combining the representations of its constituent words. The combination can be done in many possible ways, e.g. average-pooling, max-pooling, etc. In the case of last pooling, we simply take the last representation of the last timestep of the word-level encoder as the representation of the entire utterance, i.e. v j = h Sj (2) This is because the final time-step contains context of all the words and time-steps preceding it, and serves as a good approximation to a representation of the entire utterance. At this stage, we have a sequence of utterance representations v 1 , v 2 , . . . v Ri , corresponding to the conversation C i consisting of utterances u 1 , u 2 , . . . u Ri . This sequence of utterance representation is then passed on to the conversation-level encoder which is realized by means of another bidirectional LSTM. Once again, we concatenate the vectors obtained from the forward and backward RNNs at each time-step to form the final representation of each utterance. For each utterance u j , the representation v j is transformed via the utterance level encoder to obtain another representation g j as follows:</p><formula xml:id="formula_2">g j = f 2 rnn (g j−1 , v j ) ∀j ∈ 1, 2 . . . R i<label>(3)</label></formula><p>Here, f 2 rnn denotes the utterance level RNN that forms the second level in our hierarchical encoder. For a conversation C i , we are left with a representation g j for each utterance u j , which can be passed forward to a classification layer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Linear Chain CRF</head><p>In our proposed model, the classifier of choice is a linear chain CRF, which enables us to model dependencies among labels. Note that the dependencies among utterances has already been captured by the bidirectional encoders. In sequence tagging, greedily predicting the tag at each timestep might not lead to the optimal solution, and instead, it is better to look at correlations between labels in neighborhoods in order to jointly decode the best chain of tags. CRFs are undirected graphical models that model the conditional probability of a label sequence given an observed example sequence. Now, for a given conversation C i , with utterances u 1 , u 2 , . . . u Ri and corresponding associated dialogue acts y 1 , y 2 , . . . y Ri , the probability of predicting the sequence of dialogue acts can be written as:</p><formula xml:id="formula_3">p(y 1 , y 2 , . . . y Ri , u 1 , u 2 , . . . u Ri ; θ) = Ri j=1 ψ(y j−1 , y j , g j ; θ) Y Ri j=1 ψ(y j−1 , y j , g j ; θ)<label>(4)</label></formula><p>where g j is the dense representation of each utterance u j obtained from the second level encoder. Here θ is the set of parameters corresponding to the CRF layer, and ψ() is the feature function, providing us with unary and pairwise potentials. The CRF layer in our proposed model is parameterized by a state transition matrix, to model the transition from a label j −1 to a label j at any time-step. The state transition matrix is of size K × K, for a tag-set of size K and is position independent, i.e. it remains the same for each pair of consecutive time-steps. The transition matrix provides us with the pairwise feature function for the CRF, while the output of the hierarchical encoder, i.e. g j is considered as the unary feature function. We do not opt for higher order potentials, and restrict ourselves to only pairwise potentials, since the target sequence is a chain of tags.</p><p>To learn the CRF parameters, we use maximum likelihood training estimation. For the given training set D, i.e. (C i , Y i ) pairs, the log likelihood can be written as:</p><formula xml:id="formula_4">L = N i=1 log p(Y i |C i , Θ)<label>(5)</label></formula><p>where Θ is the set of network parameters i.e. parameters of all layers, viz. word embedding layer, hierarchical recurrent encoders, and CRF classifier. At the time of testing, dynamic programming techniques <ref type="bibr" target="#b8">(Rabiner 1989)</ref> can be used to obtain the optimal sequence via the Viterbi algorithm (Viterbi 1967), i.e.,</p><formula xml:id="formula_5">Y * = arg max Y ∈Y p(Y |C, Θ)<label>(6)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Experiments</head><p>In this section we describe the experimental evaluation of our approach.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Datasets</head><p>We evaluate the performance of our model on two benchmark datasets used in several prior studies for the DA identification task, viz.:</p><p>• MRDA scheme provides several class-maps and corresponding scripts for grouping several related tags together into smaller number of DAs. For this work, we use the most widely used class-map that groups all tags into 5 DAs, i.e., statements (S), questions(Q), Floorgrabber (F), Backchannel (B), Disruption (D). <ref type="table" target="#tab_3">Table 2</ref> presents different statistics for both datasets. For SwDA, train and test sets are provided but not the validation set, so we use the standard practice of taking a part of training data set as validation set ( <ref type="bibr" target="#b6">Lee and Dernoncourt 2016)</ref>. Because of the noise and informal nature of utterances, we performed a series of pre-processing steps. For both datasets, exclamations and commas were stripped, and characters were converted to lower-case. The datasets are also highly imbalanced in terms of label distribution: the DA labels non-opinion (sd) and backchannel (b) in SwDA are assigned to more than 50% of utterances, while more than 50% of utterances in MRDA have DA label statement (s).  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Parameter</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Hyperparameter Tuning</head><p>Conversations with the same number of utterances were grouped together into mini-batches, and each utterance in a mini-batch was padded to the maximum length for that batch. The maximum batch-size allowed was 64. We used L2 regularization of 1e − 4 in the form of weight decay and the Adadelta optimizer. All other hyper-parameters were selected by tuning one hyper-parameter at a time while keeping the others fixed. The hyper-parameters were tuned using the SwDA validation set. The final set of hyper-parameters were then used to train two different models, one each on SwDA and MRDA training datasets. <ref type="table" target="#tab_6">Table 3</ref> lists the range of values for each parameter that we experimented with, and the final value that was selected. The word vectors were initialized with the 300-dimensional Glove embeddings <ref type="bibr">(Pen- nington, Socher, and Manning 2014)</ref>, and were also updated during training. Dropout was applied to the embeddings obtained from the output of each encoder. The learning rate was initialized to 1.0 and reduced by a factor of 0.5 every 5 epochs. Early stopping is also used on the validation set with a patience of 5 epochs. Increasing the number of stacked LSTM layers reduced the accuracy of the model, so we settled with only one layer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Results and Discussion</head><p>The results reported in this section are based on the hyperparameters values tuned in the previous section. The Hierarchical Bi-LSTM-CRF model is compared against seven different baseline models.</p><p>• DRLM-Conditional (Ji, Haffari, and Eisenstein 2016) -a latent variable recurrent neural network architecture for joint modeling of utterance and DA label.</p><p>• LSTM-Softmax (Khanpour, Guntakandla, and Nielsen 2016) -Bidirectional LSTMs on word embeddings followed by a softmax classifier.</p><p>• RCNN(Blunsom and Kalchbrenner 2013) -Hierarchical CNN on word embeddings to model utterances followed by a RNN to capture context, with a softmax classifier.</p><p>• CNN(Lee and Dernoncourt 2016) -An utterance level CNN followed by a conversation CNN, with softmax classifiers. The utterance and conversation layers only consider the current utterance and at most 2 preceding ones.</p><p>• CRF -Simple baseline with pre-trained word embeddings followed by a CRF classifier.</p><p>• LR -Simple baseline with pre-trained word embeddings followed by a logistic regression classifier.  <ref type="table">Table 4</ref>: Comparing accuracy of our method (Hierarchical Bi-LSTM-CRF) with other methods in the literature on SwDA dataset. <ref type="table">Table 4</ref> compares the results obtained using our model with the other previous models. The results show that our Hierarchical Bi-LSTM-CRF model outperforms the state-ofthe-art. Our model improved the DA labeling accuracy over DRLM-Conditional model by 2.2% absolute points. In order to further analyze the results, we looked into the confusion matrix to know which labels are incorrectly/correctly assigned to utterances. <ref type="table">Table 5</ref> shows the confusion matrix of our proposed model for the SwDA dataset. Among them the most confused pairs are (sd,sv) and (aa,b) which represent (statement-non-opinion, statement-opinion) and (agreeaccept, acknowledge) respectively. The total number of utterances with DA 'sd', 'sv', 'aa', and 'b' are 1317, 717, 208, and 762, respectively. 103 utterances (7.8%) with true label non-opinion were predicted incorrectly as opinion, whereas, 1155 utterances (87.7%) with true label non-opinion were predicted correctly. Similarly, 200 utterances (27.9%) with true label opinion were predicted incorrectly as non-opinion whereas 473 utterances (66%) with true label opinion were predicted correctly. On further analysis of the cause of this confusion between these two class pairs, we identified that there are utterances which were classified correctly by the model, however, they were marked incorrectly classified because of bias in the ground truth. For some of the utterances, classes were not distinguishable even by humans because of the subjectivity.  <ref type="table">Table 5</ref>: Confusion matrix of Hierarchical Bi-LSTM-CRF model for the SwDA dataset (10 DA class labels), where the row denotes the true label and the column denotes the predicted label. The numbers in the bracket besides the DA label in the first cell of each row is the count of the number of utterances of that DA label.</p><p>We show examples of some of these cases in <ref type="table" target="#tab_9">Table 6</ref>. For instance, the utterance no. 1692 seems to be an opinion ('sv') and is also predicted as 'sv', but its true label is non-opinion ('sd'). Similarly, utterance no. 1334 underlying text is 'Yeah', its true label is agree/accept ('aa'). Also, utterance no. 1362 and 1371 underlying text is 'Yeah', this time its true label is backchannel('b'). This means two utterances with the same underlying text have two different DA associations. We accepted it as the characteristics of the SwDA dataset, this thought is echoed by the authors who created the dataset that the inter-labeler agreement is 84.0%.</p><p>The results on the MRDA dataset are shown in <ref type="table" target="#tab_10">Table 7</ref>. From this table, it is clear that our method outperforms the state-of-the-art by a significant margin i.e. by 4.1%. <ref type="table" target="#tab_11">Table 8</ref> shows the confusion matrix for the MRDA dataset. Except for the class label 'B', all other DA class labels are predicted accurately. Approximately 21% of DA class label 'B' are incorrectly predicted as 'S'. One of the reasons for this behavior is that the MRDA dataset is highly imbalanced, with more than 50% of the utterances labeled as class 'S'.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Effect of Hierarchy and Label Dependency</head><p>In this section, we discuss the influence of adding hierarchical layers (utterance layer, conversation layer) and classification layer on accuracy. In particular, we perform ablation studies by evaluating the model layer by layer to understand if the addition of new layers provides any improvement in performance.</p><p>The first model, WE, is a plain two layer network with a word embedding layer followed by the classification layer, i.e., the pre-trained Glove word embeddings are fed as input to the classification layer. No form of dependency, among utterances, across utterances, across DA labels, are captured here. The second model, WE+UL, is a three layer network that takes word embeddings as input. The output of WE layer is input to the utterance layer to learn utterance vectors. Each utterance vector is a compositional representation of all words in that utterance. Utterance vector is fed as input directly to the classification layer to predict the label. Dependencies across utterances are not captured here. The third model, WE+UL+CL, is a four layer network similar to the proposed hierarchical Bi-LSTM-CRF model, except that the final layer can be either logistic regression (LR) or a CRF based classifier. <ref type="table" target="#tab_12">Table 9</ref> shows the results of various networks with both LR and CRF layer. From the table, we observe that the models WE, WE+UL, and WE+UL+CL with LR layer at the top produce an accuracy of 71.4%, 72.2%, and 74.1%, respectively. In the final layer, if LR is replaced with CRF then the accuracy of WE, WE+UL, and WE+UL+CL (Hierarchical Bi-LSTM-CRF) is 72.2%, 72.7%, and 79.2%, respectively. From these results it is clear that adding additional layers, viz. utterance layer and conversation layer, improve the results by a few notches. Also, replacing LR with CRF further improves the results. Note that the accuracy of WE+UL with LR and WE with CRF is same. We understand that the output of utterance layer at each time step is a vector representing the context of the utterance till that word. The word vector at the last time step is the final representation of the utterance. This means, adding an utterance layer generates a compositional vector of all words in an utterance, and thus  Model Acc(%) Hierarchical Bi-LSTM-CRF 90.9 LSTM-Softmax( <ref type="bibr" target="#b5">Khanpour et al. 2016)</ref> 86.8 CNN( <ref type="bibr" target="#b6">Lee and Dernoncourt 2016)</ref> 84.6 Naiive Bayes( <ref type="bibr" target="#b6">Lendvai and Geertzen 2007)</ref> 82.0   serves as a good representation of all words in the utterance. Adding the utterance layer and replacing the LR with CRF in the existing model produces more or less the same result. Addition of conversation layer results in major improvement in the accuracy, approximately 2% absolute points with LR in the final layer, and 6% absolute points with CRF . This is because the output of conversation layer for an utterance is a representational vector capturing the context of itself and utterances preceding it.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Effect of Linguistic Features and Context</head><p>For Dialogue Act identification, linguistic features-( <ref type="bibr" target="#b12">Tavafi et al. 2013</ref>) and context information (Ribeiro, Ribeiro, and de Matos 2015) have shown to improve the performance of the underlying model. In our model, we add linguistic features, in particular the part-of-speech tags (POS) associated with words in an utterance. More specifically, we add a POS tag layer with POS tag embeddings followed by an encoder, working in parallel to the utterance encoder, to learn a representation for each POS tag sequence associated with each utterance, and concatenate it with the utterance vector at the conversation layer, right before they are fed to the CRF layer.</p><p>The results show that the addition of POS reduces the accuracy by approximately 1%.</p><p>In another extension, we explore capturing context of an utterance through intra-attention (Paulus, Xiong, and Socher Extension Accuracy(%) POS 77.9</p><p>Context length 10 77.4 length 5 78.3 length 3</p><p>78.1 <ref type="table" target="#tab_1">Table 10</ref>: Accuracy obtained using two extensions to the Hierarchical Bi-LSTM-CRF model. 2017), and concatenating it to the utterance vector to produce a new utterance vector. Recent research ( <ref type="bibr" target="#b1">Cho et al. 2014</ref>) has shown that LSTM performance deteriorates as the length of input sentence increases since they are not able to capture long context. Therefore, capturing context explicitly through attention (Bahdanau, Cho, and Bengio 2015) is an alternate way to model long-term dependencies. In our model, after obtaining utterance vectors from the conversation layer, a normalized attention weight vector is computed for each utterance vector, by computing its similarity from previous utterance vectors. These attention weights are then used to compute the context vector by taking a weighted sum of the previous K utterance vectors. The new context vector is concatenated to the utterance vector produced by the conversation layer to obtain new utterance vector, which is input to the classification layer. We experimented with this attention by varying the length of the context (number of previous utterances) i.e. K ∈ (10, 5, 3). In a conversation, an utterance at time step t is mostly dependent upon the previous two or three utterances. Modeling too long dependencies therefore reduces the performance, as is shown in <ref type="table" target="#tab_1">Table 10</ref>. Overall, adding additional context or POS representations to the Hierarchical Bi-LSTM-CRF model does not improve the performance, which means, these new additions are not contributing any new information to the existing model. The original hierarchical encoder has all the required information it needs to model the utterance representation and the dependencies among them. Although additional context does not help in performance, it helps quite a bit in convergence. We observed that training the model with additional context results in much faster convergence compared to training without context. For the SwDA dataset, the accuracy with additional context and without it after the first epoch was 68.8% and 65.1%, respectively. Similarly, for the MRDA dataset, the accuracy after first epoch while training the model with additional context was 88%, whereas without it was 87%.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>CONCLUSION</head><p>In this paper, we used a Hierarchical Bi-LSTM-CRF model for labeling sequence of utterances in a conversation with Dialogue Acts. The proposed model captures long term dependencies between words in an utterance and across utterances, thus generating vector representations for each utterance in a conversation. The sequence of vectors corresponding to utterances in a conversation are sent to a CRF based classifier to model the dependencies between the Dialog Act labels and the utterance representations. We demonstrated the efficacy of our model on two popular datasets, SwDA and MRDA. Experimental results highlight that our proposed model outperforms the state-of-the-art for both data sets.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0"><head></head><label></label><figDesc></figDesc><graphic url="image-1.png" coords="3,54.00,54.00,504.02,274.17" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 1 :</head><label>1</label><figDesc></figDesc><table>A snippet of a conversation showing few dialogues 
+between a User (U) and System(S). 
+
+et al. 2004; Ang, Liu, and Shriberg 2005; Stolcke et al. 2006; 
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>|C| is the number of Dialogue Act classes, |V | is 
+the vocabulary size. Training, Validation and Testing indi-
+cate the number of conversations (number of utterances) in 
+the respective splits. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 3 :</head><label>3</label><figDesc>Hyperparameter tuning -the 2 nd column lists the various values tried, while the 3 rd column lists the final value chosen for the corresponding hyperparameter.</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_9" validated="false"><head>Table 6 :</head><label>6</label><figDesc></figDesc><table>Example of utterances of confused pairs (non-opinion, opinion) and (agree/accept, backchannel) 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_10" validated="true"><head>Table 7 : Comparing Accuracy of our method (Bi-LSTM- CRF) with other methods in the literature on the MRDA dataset.</head><label>7</label><figDesc></figDesc><table>F 
+D 
+S 
+B 
+Q 
+(1314) F 80.06 
+4.95 
+6.7 
+8.3 
+0.00 
+(2244) D 
+4.86 
+90.06 
+2.45 
+2.41 
+0.22 
+(8564) S 
+0.39 
+0.02 
+94.69 
+4.85 
+0.06 
+(1961) B 
+1.12 
+0.15 
+20.96 77.77 
+0.00 
+(1112) Q 
+0.00 
+0.00 
+0.54 
+0.00 
+99.46 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_11" validated="false"><head>Table 8 :</head><label>8</label><figDesc></figDesc><table>Confusion matrix of Bi-LSTM-CRF for the MRDA 
+dataset, where the row denotes the true DA label and the 
+column denotes the predicted DA label. The numbers in the 
+bracket besides the DA label in the first cell of each row is 
+the count of the number of utterances of that DA label. 
+
+Model 
+Accuracy Accuracy 
+with LR 
+with CRF 
+WE 
+71.4 
+72.2 
+WE+UL 
+72.2 
+72.7 
+WE+UL+CL 74.1 
+79.2 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_12" validated="false"><head>Table 9 :</head><label>9</label><figDesc></figDesc><table>WE is Word Embedding layer, UL is Utterance 
+Layer, CL is Conversation Layer, LR is Logistic regression 
+and CRF is Conditional Random Field. 
+
+</table></figure>
+
+			<note place="foot" n="1"> The paper claimed accuracy of 80.1. Personal correspondence with the authors revealed that a non-standard test set was used by accident.</note>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Automatic dialog act segmentation and classification in multiparty meetings</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Liu</forename><surname>Ang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Shriberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Blunsom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Kalchbrenner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2013 Workshop on Continuous Vector Space Models and their Compositionality</title>
+		<meeting>the 2013 Workshop on Continuous Vector Space Models and their Compositionality</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+	<note>ICASSP</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">On the properties of neural machine translation: Encoder-decoder approaches</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">[</forename><surname>Cho</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Semantics and Structure in Statistical Translation</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Learning to attend, copy, and generate for session based query suggestion</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">G</forename><surname>Core</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Allen</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Dehghani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Rothe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Alfonseca</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Fleury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Grau</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Towards an open-domain conversational system fully based on natural language processing. In COLING</title>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+	<note>AAAI Fall Symposium On Communicative Action In Humans And Machines. Long short-term memory. Neural computation 9</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Bidirectional lstm-crf models for sequence tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xu</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yu ;</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yu</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename></persName>
+		</author>
+		<idno type="arXiv">arXiv:1508.01991</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">A latent variable recurrent neural network for discourse relation language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Janin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICASSP. [Ji, Haffari, and Eisenstein</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+	<note>NAACL-HLT</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Dialogue act classification in domain-independent conversations using a deep recurrent neural network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jurafsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guntakandla</forename><surname>Khanpour</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Nielsen ; Khanpour</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Guntakandla</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Nielsen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Jernite</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Sontag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">M</forename><surname>Rush</surname></persName>
+		</author>
+		<ptr target="Switchboardswbd-damslshallow-discourse-functionannotationcodersmanual.www.dcs.shef.ac.uk/nlp/amities/files/bib/ics-tr-97-02.pdf" />
+	</analytic>
+	<monogr>
+		<title level="m">COLING</title>
+		<editor>AAAI. [Lafferty, McCallum, and Pereira 2001] Lafferty, J. D.</editor>
+		<editor>McCallum, A.</editor>
+		<editor>and Pereira, F. C. N.</editor>
+		<meeting><address><addrLine>Hinton; LeCun, Y</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+	<note>ICML. and Hinton, G. 2015. Deep learning. Nature</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Sequential short-text classification with recurrent and convolutional neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">Y</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Dernoncourt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lendvai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Geertzen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Hovy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Dean</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Paulus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.04304</idno>
+	</analytic>
+	<monogr>
+		<title level="m">A deep reinforced model for abstractive summarization</title>
+		<meeting><address><addrLine>Pennington, J.</addrLine></address></meeting>
+		<imprint>
+			<publisher>Pennington, Socher</publisher>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+	<note>SIGDIAL Workshop on Discourse and Dialogue. and Manning</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">A tutorial on hidden markov models and selected applications in speech recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">R</forename><surname>Rabiner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings of the IEEE</title>
+		<imprint>
+			<date type="published" when="1989" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Building end-to-end dialogue systems using generative hierarchical neural network models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ribeiro</forename><surname>Ribeiro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>De Matos ; Ribeiro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Ribeiro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">M</forename><surname>De Matos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Sennrich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Haddow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Birch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><forename type="middle">V</forename><surname>Serban</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Sordoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">C</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Pineau</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1506.00839</idno>
+	</analytic>
+	<monogr>
+		<title level="m">The influence of context on dialogue act recognition</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+	<note>AAAI</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">A hierarchical latent variable encoder-decoder model for generating dialogues</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Serban</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">A hierarchical recurrent encoder-decoder for generative context-aware query suggestion</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sordoni</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CIKM</title>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="volume">26</biblScope>
+		</imprint>
+	</monogr>
+	<note>Dialogue act modeling for automatic tagging and recognition of conversational speech</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Dialogue act recognition in synchronous and asynchronous conversations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">[</forename><surname>Tavafi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGDIAL</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Error bounds for convolutional codes and an asymptotically optimum decoding algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Viterbi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Information Theory</title>
+		<imprint>
+			<date type="published" when="1967" />
+		</imprint>
+	</monogr>
+	<note>Joint segmentation and classification of dialog acts using conditional random fields. InterSpeech</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

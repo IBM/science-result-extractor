@@ -1,0 +1,1208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:49+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Getting the Most out of AMR Parsing</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher>Association for Computational Linguistics</publisher>
+				<availability status="unknown"><p>Copyright Association for Computational Linguistics</p>
+				</availability>
+				<date>September 7-11, 2017. 2017</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chuan</forename><surname>Wang</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Brandeis University</orgName>
+							</affiliation>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Xue</surname></persName>
+							<email>xuen@brandeis.edu</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Brandeis University</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Getting the Most out of AMR Parsing</title>
+					</analytic>
+					<monogr>
+						<title level="m">Natural Language Processing</title>
+						<meeting> <address><addrLine>Copenhagen, Denmark</addrLine></address>
+						</meeting>
+						<imprint>
+							<publisher>Association for Computational Linguistics</publisher>
+							<biblScope unit="page" from="1257" to="1268"/>
+							<date type="published">September 7-11, 2017. 2017</date>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>This paper proposes to tackle the AMR parsing bottleneck by improving two components of an AMR parser: concept identification and alignment. We first build a Bidirectional LSTM based concept iden-tifier that is able to incorporate richer contextual information to learn sparse AMR concept labels. We then extend an HMM-based word-to-concept alignment model with graph distance distortion and a rescoring method during decoding to incorporate the structural information in the AMR graph. We show integrating the two components into an existing AMR parser results in consistently better performance over the state of the art on various datasets.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Abstract Meaning Representation (AMR) ( <ref type="bibr">Ba- narescu et al., 2013</ref>) is a semantic representation where the meaning of a sentence is encoded as a rooted, directed graph. A number of AMR parsers have been developed in recent years ( <ref type="bibr" target="#b13">Flanigan et al., 2014;</ref><ref type="bibr" target="#b41">Wang et al., 2015b;</ref><ref type="bibr" target="#b0">Artzi et al., 2015;</ref><ref type="bibr" target="#b33">Pust et al., 2015;</ref><ref type="bibr" target="#b30">Peng et al., 2015;</ref><ref type="bibr" target="#b43">Zhou et al., 2016;</ref><ref type="bibr" target="#b16">Goodman et al., 2016a)</ref>, and the initial benefit of AMR parsing has been demonstrated in various downstream applications such as Information Extraction ( <ref type="bibr" target="#b28">Pan et al., 2015;</ref><ref type="bibr" target="#b20">Huang et al., 2016)</ref>, Machine Comprehension ( <ref type="bibr" target="#b35">Sachan and Xing, 2016)</ref>, and Language Generation ( <ref type="bibr">Flani- gan et al., 2016b;</ref><ref type="bibr" target="#b5">Butler, 2016)</ref>. However, AMR parsing parsing accuracy is still in the high 60%, as measured by the SMatch score , and a significant improvement is needed in order for it to positively impact a larger number of applications.</p><p>Previous research has shown that concept identification is the bottleneck to further improvement of AMR parsing. For example, JAMR <ref type="bibr">(Flani- gan et al., 2014</ref>), the first AMR parser, is able to achieve an F-score of 80% (close to the interannotator agreement of 83) if gold concepts are provided. Its parsing accuracy drops sharply to 62.3% when the concepts are identified automatically.</p><p>One of the challenges in AMR concept identification is data sparsity. A large portion of AMR's concepts are either word lemmas or sense-disambiguated lemmas drawn from Propbank ( <ref type="bibr" target="#b27">Palmer et al., 2005</ref>). Since the AMR Bank is relatively small, many of the concept labels in the development or test set only occur a few times or never appear in the training set. <ref type="bibr" target="#b42">Werling et al. (2015)</ref> addresses this problem by defining a set of generative actions that maps words in the sentence to their AMR concepts and use a local classifier to learn these actions. Given such sparse data, making full use of contextual information is crucial to accurate concept labeling. Bidirectional LSTM has shown its success on many sequence labeling tasks since it is able to combine contextual information from both directions and avoid manual feature engineering. However, it is non-trivial to formalize concept identification as a sequence labeling problem because of the large concept label set. Inspired by <ref type="bibr" target="#b14">Foland and Martin (2016;</ref>, who first apply the Bidirectional LSTM to AMR concept identification by categorizing the large labels into a finite set of predefined types, we propose to address concept identification using Bidirectional LSTM with Factored Concept Labels (FCL), where we re-group the concept label set based on their shared graph structure. This makes it possible for different concepts to be represented by one common label that captures the shared semantics of these concepts.</p><p>Accurate concept identification also crucially depends on the word-to-AMR-concept alignment. Since there is no manual alignment in the AMR annotation, typically either a rule-based or unsupervised aligner is applied to the training data to extract the mapping between words and concepts. This mapping will then be used as reference data to train concept identification models. The JAMR aligner <ref type="bibr" target="#b13">(Flanigan et al., 2014)</ref> greedily aligns a span of words to graph fragments using a set of heuristics. While it can easily incorporate information from additional linguistic sources such as WordNet, it is not adaptable to other domains. Unsupervised aligners borrow techniques from Machine Translation and treat sentence-to-AMR alignment as a word alignment problem between a source sentence and its linearized AMR graph ( <ref type="bibr" target="#b32">Pourdamghani et al., 2014</ref>) and solve it with IBM word alignment models <ref type="bibr" target="#b4">(Brown et al., 1993)</ref>. However, the distortion model in the IBM models is based on the linear distance between source side words while the linear order of the AMR concepts has no linguistic significance, unlike word order in natural language. A more appropriate sentence-to-AMR alignment model should be one that takes the hierarchical structure of the AMR into account. We develop a Hidden Markov Model (HMM)-based sentence-to-AMR alignment method with a novel Graph Distance distortion model to take advantage of the structural information in AMR, and apply a structural constraint to re-score the posterior during decoding time.</p><p>We present experimental results that show incorporating these two improvements to CAMR ( <ref type="bibr" target="#b39">Wang et al., 2016)</ref>, a state-of-the-art transition-based AMR parser, results in consistently better Smatch scores over the state of the art on various datasets. The rest of paper is organized as follows. Section 2 describes related work on AMR parsing. Section 3 describes our improved LSTM based concept identification model, and Section 4 describes our alignment method. We present experimental results in Section 5, and conclude in Section 6.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>Existing AMR parsers are either transition-based or graph-based. Transition-based AMR parsers ( <ref type="bibr">Wang et al., 2015b,a;</ref><ref type="bibr">Goodman et al., 2016a,b)</ref>, focus on modeling the correspondence between the dependency tree and the AMR graph of a sentence by designing a small set of actions that transform the dependency tree into the AMR graph. <ref type="bibr" target="#b33">Pust et al. (2015)</ref> formulates AMR parsing as a machine translation problem in which the sentence is the source language input and the AMR is the target language output. AMR parsing systems that focus on modeling the graph aspect of the AMR includes JAMR ( <ref type="bibr" target="#b13">Flanigan et al., 2014</ref><ref type="bibr" target="#b11">Flanigan et al., , 2016a</ref><ref type="bibr" target="#b43">Zhou et al., 2016)</ref>, which treats AMR parsing as a procedure for searching for the Maximum Spanning Connected Subgraphs (MSCGs) from an edge-labeled, directed graph of all possible relations. Parsers based on Hyperedge Replacement Grammars (HRG) ( <ref type="bibr" target="#b8">Chiang et al., 2013;</ref><ref type="bibr" target="#b3">Björklund et al., 2016;</ref><ref type="bibr" target="#b18">Groschwitz et al., 2015</ref>) put more emphasis on modeling the formal properties of the AMR graph. One practical implementation of HRG-based parsing is that of ( <ref type="bibr" target="#b30">Peng et al., 2015;</ref><ref type="bibr" target="#b29">Peng and Gildea, 2016)</ref>. The adoption of Combinatory Categorical Grammar (CCG) in AMR parsing has also been explored in ( <ref type="bibr" target="#b0">Artzi et al., 2015;</ref><ref type="bibr" target="#b25">Misra and Artzi, 2016)</ref>, where a number of extensions have been proposed to enable CCG to work on the broad-coverage AMR corpus.</p><p>More recently, <ref type="bibr" target="#b14">Foland and Martin (2016;</ref> describe a neural network based model that decomposes the AMR parsing task into a series of subproblems. Their system first identifies the concepts using a Bidirectional LSTM Recurrent Neural Network (Hochreiter and Schmidhuber, 1997), and then locates and labels the arguments and attributes for each predicate, and finally constructs the AMR using the concepts and relations identified in previous steps. ( <ref type="bibr" target="#b2">Barzdins and Gosko, 2016</ref>) first applies the sequence-tosequence model <ref type="bibr" target="#b37">(Sutskever et al., 2014</ref>) typically used in neural machine translation to AMR parsing by simply treating the pre-order traversal of AMR as foreign language strings. ( <ref type="bibr" target="#b31">Peng et al., 2017</ref>) also adopts the sequence-to-sequence model for neural AMR parsing and focuses on reducing data sparsity in neural AMR parsing with categorization of the concept and relation labels. In contrast, ( <ref type="bibr" target="#b22">Konstas et al., 2017</ref>) adopts a different approach and tackles the data sparsity problem with a self-training procedure that can utilize a large set of unannotated external corpus. <ref type="bibr" target="#b6">(Buys and Blunsom, 2017</ref>) design a generic transitionbased system for semantic graph parsing and apply sequence-to-sequence framework to learn the transformation from natural language sequences to action sequences.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Concept Identification with Bidirectional LSTM</head><p>In this section, we first introduce how we categorize AMR concepts using Factored Concept Labels. We then integrate character-level information into a Bidirectional LSTM through Convolutional Neural Network (CNN)-based embeddings.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Background and Notation</head><p>Given a pair of AMR graph G and English sentence S, a look-up table M is first generated which maps a span of tokens to concepts using an aligner. Although there are differences among results generated by different aligners, in general, the aligned AMR concepts can be classified into the following types:</p><p>• PREDICATE. Concepts with sense tags, which are frames borrowed from Propbank, belong to this case. Most of the tokens aligned to this type are verbs and nouns that have their own argument structures.</p><p>• NON-PREDICATE. This type of concepts are mostly lemmatized word tokens from the original English sentences.</p><p>• CONST. Most of the numerical expressions in English sentences are aligned to this type, where AMR concepts are normalized numerical expressions.</p><p>• MULTICONCEPT. In this type, one or more word tokens in an English sentence are aligned to multiple concepts that form a sub-structure in an AMR graph. The most frequent case is named entity subgraphs. For example, in <ref type="figure" target="#fig_0">Figure 1</ref>, "Mr. Vinken" is aligned to subgraph (p / person :name (m / name :op1 "Mr." :op2 "Vinken").</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Factored Concept Labels</head><p>To be able to fit AMR's large concept label space into a sequence labeling framework, redefining the label set is necessary in order to make the learning process feasible. While it is trivial to categorize the PREDICATE, NON-PREDICATE, CONST cases, there is no straightforward way to deal with the MULTICONCEPT type. <ref type="bibr" target="#b14">Foland and Martin (2016)</ref> only handle named entities, which constitute the  Based on the observation that many of the MULTICONCEPT cases are actually similarly structured subgraphs that only differ in the lexical items, we choose to factor the lexical items out of the subgraph fragments and use the skeletal structure as the fine-grained labels, which we refer as Factored Concept Label (FCL). <ref type="figure" target="#fig_2">Figure 4</ref> shows that although English words "visitor" and "worker" have been aligned to different subgraph fragments, after replacing the lexical items, in this case the leaf concepts visit-01 and work-01 with a placeholder "x", we are able to arrive at the same FCL. The strategy for determining the FCL for a word is simple: for each English word w and the subgraph s it aligns to, if the length of the longest overlapping substring be- <ref type="figure">Figure 3</ref>: One example of generating FCL for sentence "NATO allies said the cyber attack was unprecedented." Despite this simple strategy, our results show that it can capture a wide range of MULTICON-CEPT cases while keeping the new label space manageable. While the named entity can be easily categorized using FCL, it can also cover some other common cases such as morphological expressions of negation (e.g., "inadequate") and comparatives (e.g., "happier"). Setting a frequency threshold to prune out the noisy labels, we are able to extract 91 canonical FCL labels on the training set. Our empirical results show that this canonical FCL label set can cover 96% of the MULTICONCEPT cases on the development set. <ref type="figure">Figure 3</ref> gives one full example of FCLs generated for one sentence. For the PREDICATE cases, following <ref type="bibr" target="#b14">(Foland and Martin, 2016)</ref>, we only use the sense tag as its label.</p><p>We use label other to label stop words that do not map to AMR concepts. The MULTICON-CEPT cases are handled by FCL. The FCL label set generated by this procedure can be treated as an abstraction of the original AMR concept label space, where it groups concepts that have similar AMR subgraphs into the same category.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">CNN-based Character-level Embedding</head><p>After constructing the new label set with FCL, we set up a baseline Bidirectional LSTM using the concatenation of word and NER embeddings as the input. For each input word w and its NER tag t, their embeddings e w and e t are extracted from a word embedding matrix W wd ∈ R d wd ×|V wd | and a NER tag embedding matrix W t ∈ R dt×|Vt| respectively, where d wd and d t are the dimensions of the word and NER tag embedding matricies, |V wd | and |V t | are the sizes of the word and NER tag vocabulary.</p><p>Although this architecture is able to capture long-range contextual information, it fails to extract information originating from the word form itself. As we have discussed above, in some of the MULTICONCEPT cases the concepts are associated with the word forms themselves and won't benefit from its contextual information. For example, in "unprecedented", the prefix "un" itself already gives enough information to predict the FCL label x : polarity -, which indicates negative polarity. In order to incorporate such morphological and shape information, we choose to add a convolutional layer to extract character-level representations. A similar technique has been applied to Named Entity Recognition ( <ref type="bibr" target="#b36">Santos and Guimaraes, 2015;</ref><ref type="bibr" target="#b9">Chiu and Nichols, 2015)</ref> and we only provide a brief description of the architecture here. For a word w composed of characters {c 1 , c 2 , . . . , c l }, where l is the length of word w, we learn a character embedding matrix W c ∈ R dc×|Vc| , where d c is the character embedding dimension defined by the user and V c is character vocabulary size. After retrieving the character embedding ch i for each character c i in word w, we obtain a sequence of vectors {ch 1 , ch 2 , . . . , ch l }. This serves as the input to convolutional layer. The convolutional layer applies a linear transformation to the local context of a character in the input sequence, where the local context is parameterized by window size k. Here we define the local context of the character embedding ch i to be:</p><formula xml:id="formula_0">f i = (ch i−(k−1)/2 , . . . , ch i+(k−1)/2 ) (1)</formula><p>The j-th element of the convolutional layer output vector e wch is computed by element-wise maxpooling ( <ref type="bibr" target="#b34">Ranzato et al., 2007)</ref>:</p><formula xml:id="formula_1">[e wch ] j = max 1≤i≤l [W 0 f i + b 0 ] j<label>(2)</label></formula><p>W 0 and b 0 are the parameters of the convolutional layer. And the output vector e wch is the character level representation of the word w. The architecture of the model is shown in <ref type="figure" target="#fig_3">Figure 5</ref>. The final input to the Bidirectional LSTM is the concatenation of three embeddings [e w , e t , e wch ] for each word position.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Aligning an English Sentence to its AMR graph</head><p>Given an AMR graph G and English sentence e = {e 1 , e 2 , . . . , e i , . . . , e I }, in order to fit them into the traditional word alignment framework, the AMR graph G is normally linearized using depth first search by printing each node as soon as it it visited. The re-entrance node is printed but not expanded to preserve the multiple mentions of concept. The relation (also called AMR role token) between concepts are preserved in the unsupervised aligner ( <ref type="bibr" target="#b32">Pourdamghani et al., 2014</ref>) because they also try to align relations to English words. We ignore the relations here since we focus on aligning concepts. Therefore the linearized concept sequences can be represented as g = {g 1 , g 2 , . . . , g j , . . . , g J }. However, although this configuration makes it easy to adopt existing word alignment models, it also ignores the structural information in the AMR graph.</p><p>In this section, we proposes a method that incorporates the structural information in the AMR graph through a distortion model inside an HMMbased word aligner. We then further improve the model with a re-scoring method during decoding time.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">HMM-based Aligner with Graph Distance Distortion</head><p>Given a sequence pair (e, g), the HMM-based word alignment model assumes that each source word is assigned to exactly one target word, and defines an asymmetric alignment for the sentence pair as a = {a 1 , a 2 , . . . , a i , . . . , a I }, where each a i ∈ [0, J] is an alignment from source position i to target position a i , a i = 0 means that e i is not aligned to any target words. Note that in the AMR to English alignment context, both the alignment and the graph structure is asymmetric, since we only have AMR graph annotation on in linearized AMR sequence g. Unlike the traditional word alignment for machine translation, here we will have different formulas for each translation direction. In this section, we only discuss the translation from English (source) to linearized AMR concepts (target) and we will discuss the AMR to English direction in the following section.</p><p>The HMM-based model breaks the generative alignment process into two factors:</p><formula xml:id="formula_2">P (e, a | g) = I i=1 P d (a i | a i−1 , J)P t (e i |g a i )<label>(3)</label></formula><p>where P d is the distortion model and P t is the translation model. Traditionally, the distortion probability P d (j | j , J) is modeled to depend only on the jump width (j −j ) ( <ref type="bibr" target="#b38">Vogel et al., 1996)</ref> and is defined as:</p><formula xml:id="formula_3">P d (j | j , J) = ct(j − j ) J j =1 ct(j − j )<label>(4)</label></formula><p>where ct(j − j ) is the count of jump width. This formula simultaneously satisfies the normalization constraint and captures the locality assumption that words that are adjacent in the source sentence tend to align to words that are closer in the target sentence.</p><p>As the linear locality assumption does not hold among linearized AMR concepts, we choose instead to encode the distortion probability through graph distance, which is given by:</p><formula xml:id="formula_4">P gd (j | j , G) = ct(d(j, j )) j ct(d(j , j ))<label>(5)</label></formula><p>The graph distance d(j, j ) is the length of shortest path on AMR graph G from concept j to concept j . Note that we have to artificially normalize P gd (j | j , G), because unlike the linear distance between word tokens in a sentence, there can be multiple concepts that can have the same distance from the j -th concept in the AMR graph, as pointed out in ( <ref type="bibr" target="#b21">Kondo et al., 2013)</ref>. During training, just like the original HMMbased aligner, an EM algorithm can be applied to update the parameters of the model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Improved Decoding with Posterior Rescoring</head><p>So far, we have integrated the graph structure information into the forward direction (English to AMR). To also improve the reverse direction model (AMR to English), we choose to use the graph structure to rescore the posterior during decoding time.</p><p>Compared with Viterbi decoding, posterior thresholding has shown better results in word alignment tasks ( <ref type="bibr" target="#b23">Liang et al., 2006</ref>). Given threshold γ, for all possible alignments, we select the final alignment based on the following criteria:</p><formula xml:id="formula_5">a = {(i, j) : p(a j = i | g, e) &gt; γ}<label>(6)</label></formula><p>where the state probability p(a j = i | g, e) is computed using the forward-backward algorithm. The forward algorithm is defined as:</p><formula xml:id="formula_6">α j,i = i α j−1,i p(a j = i | a j−1 = i )p(g j | e a j )<label>(7)</label></formula><p>To incorporate the graph structure, we rescale the distortion probability in reverse direction model as:</p><formula xml:id="formula_7">p new (a j = i |a j−1 = i ) = p(a j = i | a j−1 = i ) e ∆d (8)</formula><p>where the scaling factor ∆d = d j − d j−1 is the graph depth difference between the adjacent AMR concepts g j and g j−1 . We also apply the same procedure for the backward computation. Note that since the model is in reverse direction, the distortion p(a j = i | a j−1 = i ) here is still based on English word distance, jump width. This rescaling procedure is based on the intuition that after we have processed the last concept g j−1 in some subgraph, the next concept g j 's aligned English position i is not necessarily related to the last aligned English position i . <ref type="figure">Fig- ure 6</ref> illustrates this phenomenon: Although we and current are adjacent concepts in linearized AMR sequence, they are actually far away from each other in the graph (with a graph depth difference of -2). However, the distortion based on the English word distance mostly tends to choose the closer word, which may yield a very low probability for our correct answer here (the jump width between "Currently" and "our" is -6). By applying the exponential scaling factor, we are able to reduce the differences between different distortion probabilities. On the contrary, when the distortion probability is reliable (the absolute value of the graph depth difference is small), the model chooses to trust the distortion and picks the closer English word.</p><p>The rescaling factor can be viewed as a selection filter for decoding, where it relies on the graph depth difference ∆d to control the effect of learned distortion probability. Note that after the rescaling, the resulting distortion probability no longer satisfies the normalization constraint. However, we only apply this during decoding time and experiments show that the typical threshold γ = 0.5 still works well for our case.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Combining Both Directions</head><p>Empirical results show that combining alignments from both directions improve the alignment quality <ref type="bibr" target="#b10">(DeNero and Klein, 2007;</ref><ref type="bibr" target="#b26">Och and Ney, 2003;</ref><ref type="bibr" target="#b23">Liang et al., 2006</ref>). To combine the alignments, we adopt a slightly modified version of posterior thresholding, competitive thresholding, as proposed in <ref type="bibr" target="#b10">(DeNero and Klein, 2007)</ref>, which tends to select alignments that form a contiguous span. <ref type="figure">Figure 6</ref>: AMR graph annotation, linearized concepts for sentence "Currently, there is no asbestos in our products". The concept we in solid line is the (j − 1)-th token in linearized AMR. It is aligned to English word "our" and its depth in graph d j−1 is 3. While the word distance-based distortion prefers an alignment near "our", the correct alignment needs a longer distortion.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Experiments</head><p>We first test the performance of our Bidirectional LSTM concept identifier and HMM-based aligner as standalone tasks, where we investigate the effectiveness of each component in AMR parsing. Then we report the final results by incorporating both components to CAMR ( <ref type="bibr" target="#b39">Wang et al., 2016)</ref>. At the model development stage, we mainly use the dataset LDC2015E86 used in the SemEval Shared Task <ref type="bibr" target="#b24">(May, 2016)</ref>. Note that this dataset includes :wiki relations where every named entity concept is linked to its wikipedia entry. We remove this information in the training data throughout the development of our models. At the final testing stage, we add wikification using an off-theshelf AMR wikifier ( <ref type="bibr" target="#b28">Pan et al., 2015</ref>) as a postprocessing step. All AMR parsing results are evaluated using the <ref type="bibr">Smatch (Cai and Knight, 2013</ref>) scorer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Bidirectional LSTM Concept Identification Evaluation</head><p>In order to isolate the effects of our concept identifier, we first use the official alignments provided by SemEval. The alignment is generated by the unsupervised aligner described in ( <ref type="bibr" target="#b32">Pourdamghani et al., 2014</ref>). After getting the alignment table, we generate our FCL label set by filtering out noisy FCL labels that occur fewer than 30 times in the training data. The remaining FCL labels account for 96% of the MULTICONCEPT cases in the development set. Adding other labels that include PREDICATE, NON-PREDICATE and CONST gives us 116 canonical labels. UNK label is added to handle the unseen concepts.</p><p>In the Bidirectional LSTM, the hyperparameter settings are as follows: word embedding dimension d wd = 128, NER tag embedding dimension d t = 8, character embedding dimension d c = 50, character level embedding dimension d wch = 50, convolutional layer window size k = 2.  <ref type="table">Table 1</ref> shows the performance on the development set of LDC2015E86, where the precision, recall and F-score are computed by treating other as the negative label and accuracy is calculated using all labels. We include accuracy here since correctly predicting words that don't invoke concepts is also important. We can see that utilizing CNN-based character level embedding yields an improvement of around 2 percentage points absolute for both F-score and accuracy, which indicates that morphological and word shape information is important for concept identification.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Input</head><p>Impact on AMR Parsing In order to test the impact of our concept identification component on AMR parsing, we add the predicted concept labels as features to CAMR. Here is the detailed feature set we add to CAMR's feature templates. To clarify the notation, we refer the concept labels predicted by our concept identifier as c pred and the candidate concept labels in CAMR as c cand :</p><p>• pred label. c pred used directly as a feature.</p><p>• is eq sense. A binary feature of whether a c pred and c cand have the same sense (if applicable).</p><p>One reason why we choose to add the concept label and sense as features to predict the concept rather than using the predicted label to recover the concept directly is that the latter is not a straightforward process. For example, since we generalize all the predicates to a compact form &lt;pred-xx&gt;, for irregular verbs like "became" ⇒ become-01, simply stemming the inflected verb form will not give us the correct concept even if the sense is predicted correctly. However, since CAMR uses the alignment table to store all possible concept candidates for a word, adding our predicated label as a feature could potentially help the parser to choose the correct concept. In order to take full advantage of the predicted concept labels, we also extend CAMR so that it can discover candidate concepts outside of the alignment table. To achieve this, during the FCL label generation process, we first store the string-to-concept mapping as a template. For example, when we generate the FCL label (person :ARG0-of &lt;x&gt;-01) from "worker", we also store the template &lt;x&gt;er -&gt; (person :ARG0-of &lt;x&gt;-01). Then during decoding time, we would enumerate every template and try to use the left hand side of the template (which is &lt;x&gt;er) as a regular expression to match current word. Once we find a match in all the template entries, we would substitute the placeholder in right hand side with the matched substring to get the candidate concept label. As a result, even we haven't seen "teacher", by matching teacher with the regular expression (..)er, we could generate the correct answer (person :ARG0-of teach-01). We refer this process as unknown concept generation. <ref type="table">Table 2</ref> summarizes the impact of our proposed methods on development set of LDC2015E86. We can see that by utilizing the unknown concept generation and features derived from c pred , both precision and recall improve by about 1 percentage point, which indicates that the new feature brings richer information to the concept prediction model to help correctly score candidate concepts from the alignment  <ref type="table">Table 2</ref>: Performance of AMR parsing with c pred features without wikification on dev set of LDC2015E86. The first row is performance of the baseline parser. The second row adds unknown concept generation and the last row additionally extends the baseline parser with c pred features.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">HMM-based AMR-to-English Aligner Evaluation</head><p>To validate the effectiveness of our proposed alignment methods, we first evaluate our for-  ward (English-to-AMR) and reverse (AMR-toEnglish) aligners against the baseline HMM word alignment model, which is the Berkeley aligner toolkit <ref type="bibr" target="#b10">(DeNero and Klein, 2007)</ref>. Then we combine the forward and reverse alignment results using competitive thresholding. We set the threshold γ to be 0.5 in the following experiments. To evaluate the alignment quality, we use 200 hand-aligned sentences from ( <ref type="bibr" target="#b32">Pourdamghani et al., 2014</ref>) split equally as the development and test sets. We process the English sentences by removing stop words, following similar procedure as in <ref type="bibr">(Pour- damghani et al., 2014</ref>). When linearizing AMR graphs, we instead remove all the relations and only keep the concepts. For all models, we run 5 iterations of IBM Model 1 and 2 iterations of HMM on the whole dataset. From <ref type="figure" target="#fig_4">Figure 7a</ref>, we can see that our graphdistance based model improves both the precision and recall by a large margin, which indicates the graph distance distortion better fits the Englishto-AMR alignment task. For the reverse model, although our HMM rescaling model loses accuracy in recall, it is able to improve the precision by around 4 percentage points, which confirms our intuition that the rescoring factor is able to keep reliable alignments and penalize unreliable ones. We then combine our forward and reverse alignment result using competitive thresholding.   <ref type="table">Table 4</ref>: AMR parsing result (without wikification) with different aligner on development and test of LDC2015E86, where JAMR is the rulebased aligner, ISI is the modified IBM Model 4 aligner Impact on AMR Parsing To investigate our aligner's contribution to AMR parsing, we replace the alignment table generated by the best performing aligner (the forward and reverse combined) in the previous section and re-train CAMR with the predicted concept label features included.</p><p>From <ref type="table">Table 4</ref>, we can see that the unsupervised aligner (ISI and HMM) generally outperforms the JAMR rule-based aligner, and our improved HMM aligner is more consistent than the ISI aligner ( <ref type="bibr" target="#b32">Pourdamghani et al., 2014</ref>), which is a modified version of IBM Model 4.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Comparison with other Parsers</head><p>We first add the wikification information to the parser output using the off-the-shelf AMR wikifier ( <ref type="bibr" target="#b28">Pan et al., 2015)</ref> and compare results with the state-of-the-art parsers in 2016 SemEval Shared Task. We also report our result on the previous release (LDC2014T12), AMR annotation Release 1.0, which is another popular dataset that most of the existing parsers report results on. Note that the Release 1.0 annotation doesn't include wiki information.   <ref type="bibr" target="#b2">Barzdins and Gosko, 2016</ref>) are the two best performing parsers that participated in SemEval 2016 shared task. While we use CAMR as our baseline system, the parser from RIGA is also based on a version of CAMR extended with a error-correction wrapper and an ensemble with a character-level neural sequence-tosequence model. Our parser outperforms both systems by around 1.5 percentage points, where the improvement in recall is more significant, at around 2 percentage points.  <ref type="table">Table 6</ref>: Comparison with the existing parsers on full test set of LDC2014T12 <ref type="table">Table 6</ref> shows the performance of our parser on the full test set of LDC2014T12. We include the previous best results on this dataset. The parser proposed in ( <ref type="bibr" target="#b43">Zhou et al., 2016</ref>) jointly learns the concept and relation through an incremental joint model. We also include the AMR parser by <ref type="bibr" target="#b33">(Pust et al., 2015</ref>) that models AMR parsing as a machine translation task and incorporates various external resources. Our parser still achieves the best result without incorporating external resources other than the NER information.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Dataset</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Parsers</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Conclusion</head><p>In this paper, we presents work that improves AMR parsing performance by focusing on two components of the parser: concept identification and alignment. We first build a Bidirectional LSTM based concept identifier which is able to incorporate richer context and learn sparse concept labels. Then we extend the HMM-based word alignment model with a graph distance distortion and a rescoring method during decoding to incorporate the graph structure information. By integrating the two components into an existing AMR parser, our parser is able to outperform state-ofthe-art AMR parsers and establish a new state of the art.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: An example AMR graph for sentence: "Mr. Vinken is chairman of Elsevier N.V., the Dutch publishing group.".</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: AMR concept label distribution for development set of LDC2015E86</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: One example of generating FCL</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: The architecture of the CNN-based character-level embedding.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 7 :</head><label>7</label><figDesc>Figure 7: Our improved forward (graph) and reverse(rescale) model compared with HMM baseline on hand aligned development set.</figDesc><graphic url="image-18.png" coords="8,435.34,87.27,68.26,53.54" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>table .</head><label>.</label><figDesc></figDesc><table>Parsers 
+P 
+R 
+F 1 
+CAMR (Wang et al., 2016) 72.3 61.4 66.5 
+CAMR-gen 
+72.1 62.0 66.6 
+CAMR-gen-c pred 
+73.6 62.6 67.6 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 3 shows</head><label>3</label><figDesc>the combined result against hand- aligned dev and test sets.</figDesc><table>Datasets 
+P 
+R 
+F 1 
+dev 
+97.7 84.3 90.5 
+test 
+96.9 84.6 90.3 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Combined HMM alignment result evalu-
+ation. </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Comparison with the winning systems in 
+SemEval (with wikification) on test and blind test 
+sets 
+
+</table></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We want to thank the anonymous reviewers for their suggestions and detailed error checking.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Broad-coverage CCG semantic parsing with AMR</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Artzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing<address><addrLine>Lisbon, Portugal</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1699" to="1710" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Abstract meaning representation for sembanking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Laura</forename><surname>Banarescu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Claire</forename><surname>Bonial</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shu</forename><surname>Cai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Madalina</forename><surname>Georgescu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kira</forename><surname>Griffitt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ulf</forename><surname>Hermjakob</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Knight</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philipp</forename><surname>Koehn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martha</forename><surname>Palmer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nathan</forename><surname>Schneider</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 7th Linguistic Annotation Workshop and Interoperability with Discourse</title>
+		<meeting>the 7th Linguistic Annotation Workshop and Interoperability with Discourse</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Riga at semeval-2016 task 8: Impact of smatch extensions and character-level neural translation on amr parsing accuracy</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guntis</forename><surname>Barzdins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Didzis</forename><surname>Gosko</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1604.01278</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Between a rock and a hard place-uniform parsing for hyperedge replacement dag grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Henrik</forename><surname>Björklund</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Frank</forename><surname>Drewes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Petter</forename><surname>Ericson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Language and Automata Theory and Applications</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="521" to="532" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">The mathematics of statistical machine translation: Parameter estimation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent J Della</forename><surname>Peter F Brown</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen A Della</forename><surname>Pietra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert L</forename><surname>Pietra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mercer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational linguistics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="263" to="311" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Deterministic natural language generation from meaning representations for machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alastair</forename><surname>Butler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2nd Workshop on Semantics-Driven Machine Translation</title>
+		<meeting>the 2nd Workshop on Semantics-Driven Machine Translation</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1" to="9" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Robust incremental neural semantic graph parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Buys</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+		<idno>abs/1704.07092</idno>
+		<imprint>
+			<date type="published" when="2017" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Smatch: an evaluation metric for semantic feature structures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shu</forename><surname>Cai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Knight</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 51st Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 51st Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Short Papers</publisher>
+			<date type="published" when="2013" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="748" to="752" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Parsing graphs with hyperedge replacement grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Chiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Andreas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Bauer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karl</forename><forename type="middle">Moritz</forename><surname>Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bevan</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Knight</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 51st Meeting of the Association of Computational Linguistics</title>
+		<meeting>the 51st Meeting of the Association of Computational Linguistics<address><addrLine>Sofia, Bulgaria</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Named entity recognition with bidirectional lstm-cnns</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">C</forename><surname>Jason</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><surname>Chiu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nichols</surname></persName>
+		</author>
+		<idno>abs/1511.08308</idno>
+		<imprint>
+			<date type="published" when="2015" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Tailoring Word Alignments to Syntactic Machine Translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Denero</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 45th Annual Meeting of the Association of Computational Linguistics</title>
+		<meeting>the 45th Annual Meeting of the Association of Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="17" to="24" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">CMU at SemEval-2016 task 8: Graph-based AMR Parsing with Infinite Ramp Loss</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Flanigan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">Noah</forename><surname>Smith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jaime</forename><surname>Carbonell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 10th International Workshop on Semantic Evaluation (SemEval-2016)</title>
+		<meeting>the 10th International Workshop on Semantic Evaluation (SemEval-2016)</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1202" to="1206" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Generation from Abstract Meaning Representation using tree transducers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Flanigan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">Noah</forename><surname>Smith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jaime</forename><surname>Carbonell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2016 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 2016 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="731" to="739" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">A Discriminative Graph-Based Parser for the Abstract Meaning Representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Flanigan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sam</forename><surname>Thomson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jaime</forename><surname>Carbonell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 52nd Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 52nd Annual Meeting of the Association for Computational Linguistics<address><addrLine>Baltimore, Maryland</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1426" to="1436" />
+		</imprint>
+	</monogr>
+	<note>Long Papers). Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">CU-NLP at SemEval-2016 Task 8: AMR parsing using LSTM-based recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William</forename><surname>Foland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H. James</forename><surname>Martin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 10th International Workshop on Semantic Evaluation (SemEval-2016)</title>
+		<meeting>the 10th International Workshop on Semantic Evaluation (SemEval-2016)</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1197" to="1201" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Abstract meaning representation parsing using lstm recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William</forename><surname>Foland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Martin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association of the Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association of the Computational Linguistics<address><addrLine>Vancouver, Canada</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Noise reduction and targeted exploration in imitation learning for abstract meaning representation parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Goodman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andreas</forename><surname>Vlachos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Naradowsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1" to="11" />
+		</imprint>
+	</monogr>
+	<note>Long Papers)</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">UCL+Sheffield at SemEval-2016 task 8: Imitation learning for amr parsing with an alpha-bound</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Goodman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andreas</forename><surname>Vlachos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Naradowsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 10th International Workshop on Semantic Evaluation (SemEval-2016)</title>
+		<meeting>the 10th International Workshop on Semantic Evaluation (SemEval-2016)</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1167" to="1172" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Graph parsing with s-graph grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonas</forename><surname>Groschwitz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><surname>Koller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christoph</forename><surname>Teichmann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL (1)</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1481" to="1490" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Liberal event extraction and event schema induction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lifu</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Taylor</forename><surname>Cassidy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaocheng</forename><surname>Feng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">Clare</forename><surname>Heng Ji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiawei</forename><surname>Voss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Avirup</forename><surname>Han</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sil</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="258" to="268" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Hidden markov tree model for word alignment</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shuhei</forename><surname>Kondo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Duh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuji</forename><surname>Matsumoto</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Eighth Workshop on Statistical Machine Translation</title>
+		<meeting>the Eighth Workshop on Statistical Machine Translation</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="503" to="511" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Neural AMR: sequence-to-sequence models for parsing and generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ioannis</forename><surname>Konstas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Srinivasan</forename><surname>Iyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Yatskar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yejin</forename><surname>Choi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+		<idno>abs/1704.08381</idno>
+		<imprint>
+			<date type="published" when="2017" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Alignment by agreement</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ben</forename><surname>Taskar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the main conference on Human Language Technology Conference of the North American Chapter of the Association of Computational Linguistics</title>
+		<meeting>the main conference on Human Language Technology Conference of the North American Chapter of the Association of Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="104" to="111" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename></persName>
+		</author>
+		<title level="m">Semeval-2016 task 8: Meaning representation parsing. Proceedings of SemEval</title>
+		<imprint>
+			<date type="published" when="2016-05" />
+			<biblScope unit="page" from="1063" to="1073" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Neural shift-reduce ccg semantic parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kumar</forename><surname>Dipendra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Misra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Artzi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2016 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2016 Conference on Empirical Methods in Natural Language Processing<address><addrLine>Austin, Texas</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1775" to="1786" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">A systematic comparison of various statistical alignment models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Josef</forename><surname>Franz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hermann</forename><surname>Och</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational linguistics</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="19" to="51" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">The proposition bank: An annotated corpus of semantic roles</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martha</forename><surname>Palmer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Gildea</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Kingsbury</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">31</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="71" to="106" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Unsupervised entity linking with abstract meaning representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaoman</forename><surname>Pan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Taylor</forename><surname>Cassidy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ulf</forename><surname>Hermjakob</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ji</forename><surname>Heng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Knight</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 2015 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1130" to="1139" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">UofR at SemEval-2016 Task 8: Learning synchronous hyperedge replacement grammar for AMR parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaochang</forename><surname>Peng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Gildea</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 10th International Workshop on Semantic Evaluation (SemEval-2016)</title>
+		<meeting>the 10th International Workshop on Semantic Evaluation (SemEval-2016)</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1185" to="1189" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">A synchronous hyperedge replacement grammar based approach for AMR parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaochang</forename><surname>Peng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Linfeng</forename><surname>Song</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Gildea</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Nineteenth Conference on Computational Natural Language Learning</title>
+		<meeting>the Nineteenth Conference on Computational Natural Language Learning</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Addressing the data sparsity issue in neural amr parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaochang</forename><surname>Peng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chuan</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Gildea</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Xue</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 15th Conference of the European Chapter of the Association for Computational Linguistics</title>
+		<meeting>the 15th Conference of the European Chapter of the Association for Computational Linguistics<address><addrLine>Valencia, Spain. As</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="366" to="375" />
+		</imprint>
+	</monogr>
+	<note>sociation for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Aligning English strings with abstract meaning representation graphs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nima</forename><surname>Pourdamghani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yang</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ulf</forename><surname>Hermjakob</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Knight</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing (EMNLP)</title>
+		<meeting>the 2014 Conference on Empirical Methods in Natural Language Processing (EMNLP)</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="425" to="429" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Parsing English into abstract meaning representation using syntaxbased machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Pust</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ulf</forename><surname>Hermjakob</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Knight</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Marcu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing<address><addrLine>Lisbon, Portugal</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2015-05" />
+			<biblScope unit="page" from="1143" to="1154" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Unsupervised learning of invariant feature hierarchies with applications to object recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ranzato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">J</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><forename type="middle">L</forename><surname>Boureau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Lecun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">2007 IEEE Conference on Computer Vision and Pattern Recognition</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="1" to="8" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Machine comprehension using rich semantic representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mrinmaya</forename><surname>Sachan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><surname>Xing</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="486" to="492" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cicero</forename><surname>Nogueira</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dos</forename><surname>Santos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Guimaraes</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1505.05008</idno>
+		<title level="m">Boosting named entity recognition with neural character embeddings</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+		<title level="m" type="main">Sequence to sequence learning with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Quoc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Le</surname></persName>
+		</author>
+		<idno>abs/1409.3215</idno>
+		<imprint>
+			<date type="published" when="2014" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">HMM-based word alignment in statistical translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephan</forename><surname>Vogel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hermann</forename><surname>Ney</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christoph</forename><surname>Tillmann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 16th conference on Computational linguistics</title>
+		<meeting>the 16th conference on Computational linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="1996" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="836" to="841" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">CAMR at semeval-2016 task 8: An extended transition-based AMR parser</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chuan</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sameer</forename><surname>Pradhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaoman</forename><surname>Pan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ji</forename><surname>Heng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Xue</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 10th International Workshop on Semantic Evaluation (SemEval-2016)</title>
+		<meeting>the 10th International Workshop on Semantic Evaluation (SemEval-2016)<address><addrLine>San Diego, California</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1173" to="1178" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Boosting transition-based AMR parsing with refined actions and auxiliary analyzers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chuan</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Xue</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sameer</forename><surname>Pradhan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing</title>
+		<meeting>the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="857" to="862" />
+		</imprint>
+	</monogr>
+	<note>Short Papers</note>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">A transition-based algorithm for AMR parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chuan</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Xue</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sameer</forename><surname>Pradhan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 2015 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies<address><addrLine>Denver, Colorado</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="366" to="375" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<monogr>
+		<title level="m" type="main">Robust subgraph generation improves abstract meaning representation parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Keenon</forename><surname>Werling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gabor</forename><surname>Angeli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1506.03139</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">AMR Parsing with an Incremental Joint Model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junsheng</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Feiyu</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hans</forename><surname>Uszkoreit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><forename type="middle">U</forename><surname>Weiguang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ran</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yanhui</forename><surname>Gu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2016 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2016 Conference on Empirical Methods in Natural Language Processing<address><addrLine>Austin, Texas</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="680" to="689" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

@@ -1,0 +1,1272 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:08+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Recurrent Highway Networks</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julian</forename><forename type="middle">Georg</forename><surname>Zilly</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh</forename><forename type="middle">Kumar</forename><surname>Srivastava</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Koutník</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+						</author>
+						<title level="a" type="main">Recurrent Highway Networks</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Many sequential processing tasks require complex nonlinear transition functions from one step to the next. However, recurrent neural networks with &quot;deep&quot; transition functions remain difficult to train, even when using Long Short-Term Memory (LSTM) networks. We introduce a novel theoretical analysis of recurrent networks based on Geršgorin&apos;s circle theorem that illuminates several modeling and optimization issues and improves our understanding of the LSTM cell. Based on this analysis we propose Recurrent Highway Networks , which extend the LSTM architecture to allow step-to-step transition depths larger than one. Several language modeling experiments demonstrate that the proposed architecture results in powerful and efficient models. On the Penn Treebank corpus, solely increasing the transition depth from 1 to 10 improves word-level perplexity from 90.6 to 65.4 using the same number of parameters. On the larger Wikipedia datasets for character prediction (text8 and enwik8), RHNs outperform all previous results and achieve an entropy of 1.27 bits per character.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.">Introduction</head><p>Network depth is of central importance in the resurgence of neural networks as a powerful machine learning paradigm <ref type="bibr" target="#b41">(Schmidhuber, 2015)</ref>. Theoretical evidence indicates that deeper networks can be exponentially more efficient at representing certain function classes (see e.g. <ref type="bibr">Bengio &amp; Le- Cun (2007)</ref>; <ref type="bibr" target="#b2">Bianchini &amp; Scarselli (2014)</ref> and references therein). Due to their sequential nature, Recurrent Neural Networks <ref type="bibr">(RNNs;</ref><ref type="bibr" target="#b38">Robinson &amp; Fallside, 1987;</ref><ref type="bibr" target="#b46">Werbos, 1988;</ref><ref type="bibr" target="#b47">Williams, 1989)</ref> have long credit assignment paths and so are deep in time. However, certain internal function mappings in modern RNNs composed of units grouped in * Equal contribution 1 ETH Zürich, Switzerland <ref type="bibr">2</ref> The Swiss AI Lab IDSIA (USI-SUPSI) &amp; NNAISENSE, Switzerland. Correspondence to: Julian Zilly &lt;jzilly@ethz.ch&gt;, Rupesh Srivastava &lt;rupesh@idsia.ch&gt;. layers usually do not take advantage of depth ( <ref type="bibr" target="#b36">Pascanu et al., 2013)</ref>. For example, the state update from one time step to the next is typically modeled using a single trainable linear transformation followed by a non-linearity.</p><p>Unfortunately, increased depth represents a challenge when neural network parameters are optimized by means of error backpropagation <ref type="bibr" target="#b30">(Linnainmaa, 1970;</ref><ref type="bibr" target="#b31">1976;</ref><ref type="bibr" target="#b45">Werbos, 1982)</ref>. Deep networks suffer from what are commonly referred to as the vanishing and exploding gradient problems <ref type="bibr">(Hochre- iter, 1991;</ref><ref type="bibr" target="#b1">Bengio et al., 1994;</ref><ref type="bibr" target="#b19">Hochreiter et al., 2001</ref>), since the magnitude of the gradients may shrink or explode exponentially during backpropagation. These training difficulties were first studied in the context of standard RNNs where the depth through time is proportional to the length of input sequence, which may have arbitrary size. The widely used Long Short-Term Memory (LSTM; Hochreiter &amp; Schmidhuber, 1997; <ref type="bibr" target="#b9">Gers et al., 2000</ref>) architecture was introduced to specifically address the problem of vanishing/exploding gradients for recurrent networks.</p><p>The vanishing gradient problem also becomes a limitation when training very deep feedforward networks. Highway Layers ( <ref type="bibr" target="#b44">Srivastava et al., 2015b</ref>) based on the LSTM cell addressed this limitation enabling the training of networks even with hundreds of stacked layers. Used as feedforward connections, these layers were used to improve performance in many domains such as speech recognition ( <ref type="bibr" target="#b50">Zhang et al., 2016)</ref> and language modeling ( <ref type="bibr" target="#b26">Kim et al., 2015;</ref><ref type="bibr" target="#b24">Jozefowicz et al., 2016)</ref>, and their variants called Residual networks have been widely useful for many computer vision problems ( <ref type="bibr" target="#b16">He et al., 2015)</ref>.</p><p>In this paper we first provide a new mathematical analysis of RNNs which offers a deeper understanding of the strengths of the LSTM cell. Based on these insights, we introduce LSTM networks that have long credit assignment paths not just in time but also in space (per time step), called Recurrent Highway Networks or RHNs. Unlike previous work on deep RNNs, this model incorporates Highway layers inside the recurrent transition, which we argue is a superior method of increasing depth. This enables the use of substantially more powerful and trainable sequential models efficiently, significantly outperforming existing architectures on widely used benchmarks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">Related Work on Deep Recurrent Transitions</head><p>In recent years, a common method of utilizing the computational advantages of depth in recurrent networks is stacking recurrent layers <ref type="bibr" target="#b40">(Schmidhuber, 1992)</ref>, which is analogous to using multiple hidden layers in feedforward networks. Training stacked RNNs naturally requires credit assignment across both space and time which is difficult in practice. These problems have been recently addressed by architectures utilizing LSTM-based transformations for stacking ( <ref type="bibr" target="#b50">Zhang et al., 2016;</ref><ref type="bibr" target="#b25">Kalchbrenner et al., 2015)</ref>.</p><p>A general method to increase the depth of the step-to-step recurrent state transition (the recurrence depth) is to let an RNN tick for several micro time steps per step of the sequence <ref type="bibr" target="#b39">(Schmidhuber, 1991;</ref><ref type="bibr" target="#b43">Srivastava et al., 2013;</ref><ref type="bibr" target="#b12">Graves, 2016)</ref>. This method can adapt the recurrence depth to the problem, but the RNN has to learn by itself which parameters to use for memories of previous events and which for standard deep nonlinear processing. It is notable that while Graves (2016) reported improvements on simple algorithmic tasks using this method, no performance improvements were obtained on real world data. <ref type="bibr" target="#b36">Pascanu et al. (2013)</ref> proposed to increase the recurrence depth by adding multiple non-linear layers to the recurrent transition, resulting in Deep Transition RNNs (DT-RNNs) and Deep Transition RNNs with Skip connections (DT(S)-RNNs). While being powerful in principle, these architectures are seldom used due to exacerbated gradient propagation issues resulting from extremely long credit assignment paths <ref type="bibr">1</ref> . In related work <ref type="bibr" target="#b6">Chung et al. (2015)</ref> added extra connections between all states across consecutive time steps in a stacked RNN, which also increases recurrence depth. However, their model requires many extra connections with increasing depth, gives only a fraction of states access to the largest depth, and still faces gradient propagation issues along the longest paths.</p><p>Compared to stacking recurrent layers, increasing the recurrence depth can add significantly higher modeling power to an RNN. <ref type="figure" target="#fig_0">Figure 1</ref> illustrates that stacking d RNN layers allows a maximum credit assignment path length (number of non-linear transformations) of d + T − 1 between hidden states which are T time steps apart, while a recurrence depth of d enables a maximum path length of d × T . While this allows greater power and efficiency using larger depths, it also explains why such architectures are much more difficult to train compared to stacked RNNs. In the next sections, we address this problem head on by focusing on the key mechanisms of the LSTM and using those to design RHNs, which do not suffer from the above difficulties. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.">Revisiting Gradient Flow in Recurrent Networks</head><p>Let L denote the total loss for an input sequence of length T . Let x <ref type="bibr">[t]</ref> ∈ R m and y <ref type="bibr">[t]</ref> ∈ R n represent the output of a standard RNN at time t, W ∈ R n×m and R ∈ R n×n the input and recurrent weight matrices, b ∈ R n a bias vector and f a point-wise non-linearity. Then</p><formula xml:id="formula_0">y [t] = f (Wx [t] + Ry [t−1] + b) describes the dynamics of a standard RNN.</formula><p>The derivative of the loss L with respect to parameters θ of a network can be expanded using the chain rule:</p><formula xml:id="formula_1">dL dθ = 1≤t2≤T dL [t2] dθ = 1≤t2≤T 1≤t1≤t2</formula><p>∂L <ref type="bibr">[t2]</ref> ∂y <ref type="bibr">[t2]</ref> ∂y <ref type="bibr">[t2]</ref> ∂y <ref type="bibr">[t1]</ref> ∂y <ref type="bibr">[t1]</ref> ∂θ .</p><p>(1)</p><p>The Jacobian matrix ∂y [t 2 ] ∂y [t 1 ] , the key factor for the transport of the error from time step t 2 to time step t 1 , is obtained by chaining the derivatives across all time steps:</p><formula xml:id="formula_2">∂y [t2] ∂y [t1] := t1&lt;t≤t2 ∂y [t] ∂y [t−1] = t1&lt;t≤t2 R diag f (Ry [t−1] ) ,<label>(2)</label></formula><p>where the input and bias have been omitted for simplicity. We can now obtain conditions for the gradients to vanish or explode. Let A := ∂y <ref type="bibr">[t]</ref> ∂y <ref type="bibr">[t−1]</ref> be the temporal Jacobian, γ be a maximal bound on f (Ry <ref type="bibr">[t−1]</ref> ) and σ max be the largest singular value of R . Then the norm of the Jacobian </p><formula xml:id="formula_3">A ≤ R diag f (Ry [t−1] ) ≤ γσ max ,<label>(3)</label></formula><p>which together with (2) provides the conditions for vanishing gradients (γσ max &lt; 1). Note that γ depends on the activation function f , e.g.</p><formula xml:id="formula_4">|tanh (x)| ≤ 1, |σ (x)| ≤ 1 4 , ∀x ∈ R,</formula><p>where σ is a logistic sigmoid. Similarly, we can show that if the spectral radius ρ of A is greater than 1, exploding gradients will emerge since A ≥ ρ.</p><p>This description of the problem in terms of largest singular values or the spectral radius sheds light on boundary conditions for vanishing and exploding gradients yet does not illuminate how the eigenvalues are distributed overall. By applying the Geršgorin circle theorem we are able to provide further insight into this problem.</p><p>Geršgorin circle theorem (GCT) <ref type="bibr" target="#b10">(Geršgorin, 1931)</ref>: For any square matrix A ∈ R n×n ,</p><formula xml:id="formula_5">spec(A) ⊂ i∈{1,...,n}    λ ∈ C| λ − a ii C ≤ n j=1,j =i |a ij |    ,<label>(4)</label></formula><p>i.e., the eigenvalues of matrix A, comprising the spectrum of A, are located within the union of the complex circles centered around the diagonal values a ii of A with radius n j=1,j =i |a ij | equal to the sum of the absolute values of the non-diagonal entries in each row of A. Two example Geršgorin circles referring to differently initialized RNNs are depicted in <ref type="figure" target="#fig_1">Figure 2</ref>.</p><p>Using GCT we can understand the relationship between the entries of R and the possible locations of the eigenvalues of the Jacobian. Shifting the diagonal values a ii shifts the possible locations of eigenvalues. Having large off-diagonal entries will allow for a large spread of eigenvalues. Small off-diagonal entries yield smaller radii and thus a more confined distribution of eigenvalues around the diagonal entries a ii .</p><p>Let us assume that matrix R is initialized with a zero-mean Gaussian distribution. We can then infer the following:</p><p>• If the values of R are initialized with a standard deviation close to 0, then the spectrum of A, which is largely dependent on R, is also initially centered around 0. An example of a Geršgorin circle that could then be corresponding to a row of A is circle (1) in <ref type="figure" target="#fig_1">Figure 2</ref>. The magnitude of most of A's eigenvalues |λ i | are initially likely to be substantially smaller than 1. Additionally, employing the commonly used L 1 /L 2 weight regularization will also limit the magnitude of the eigenvalues.</p><p>• Alternatively, if entries of R are initialized with a large standard deviation, the radii of the Geršgorin circles corresponding to A increase. Hence, A's spectrum may possess eigenvalues with norms greater 1 resulting in exploding gradients. As the radii are summed over the size of the matrix, larger matrices will have an associated larger circle radius. In consequence, larger matrices should be initialized with correspondingly smaller standard deviations to avoid exploding gradients.</p><p>In general, unlike variants of LSTM, other RNNs have no direct mechanism to rapidly regulate their Jacobian eigenvalues across time steps, which we hypothesize can be efficient and necessary for learning complex sequence processing. <ref type="bibr" target="#b28">Le et al. (2015)</ref> proposed to initialize R with an identity matrix and small random values on the off-diagonals. This changes the situation depicted by GCT -the result of the identity initialization is indicated by circle (2) in <ref type="figure" target="#fig_1">Figure 2</ref>. Initially, since a ii = 1, the spectrum described in GCT is centered around 1, ensuring that gradients are less likely to vanish. However, this is not a flexible remedy. During training some eigenvalues can easily become larger than one, resulting in exploding gradients. We conjecture that due to this reason, extremely small learning rates were used by <ref type="bibr" target="#b28">Le et al. (2015)</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.">Recurrent Highway Networks (RHN)</head><p>Highway layers ( <ref type="bibr" target="#b42">Srivastava et al., 2015a</ref>) enable easy training of very deep feedforward networks through the use of adaptive computation.</p><formula xml:id="formula_6">Let h = H(x, W H ), t = T (x, W T ), c = C(x, W C )</formula><p>be outputs of nonlinear transforms H, T and C with associated weight matrices (including biases) W H,T,C . T and C typically utilize a sigmoid (σ) nonlinearity and are referred to as the transform and the carry gates since they regulate the passing of the transformed input via H or the carrying over of the original input x. The Highway layer computation is defined as</p><formula xml:id="formula_7">y = h · t + x · c,<label>(5)</label></formula><p>where "·" denotes element-wise multiplication.</p><p>Recall that the recurrent state transition in a standard RNN is described by</p><formula xml:id="formula_8">y [t] = f (Wx [t] + Ry [t−1] + b).</formula><p>We propose to construct a Recurrent Highway Network (RHN) layer with one or multiple Highway layers in the recurrent state transition (equal to the desired recurrence depth). Formally, let W H,T,C ∈ R n×m and R H ,T ,C ∈ R n×n represent the weights matrices of the H nonlinear transform and the T and C gates at layer ∈ {1, . . . , L}. The biases are denoted by b H ,T ,C ∈ R n and let s denote the intermediate output at layer with s <ref type="bibr">]</ref> . Then an RHN layer with a recurrence depth of L is described by</p><formula xml:id="formula_9">[t] 0 = y [t−1</formula><formula xml:id="formula_10">s [t] = h [t] · t [t] + s [t] −1 · c [t] ,<label>(6)</label></formula><p>where</p><formula xml:id="formula_11">h [t] = tanh(W H x [t] I {=1} + R H s [t] −1 + b H ), (7) t [t] = σ(W T x [t] I {=1} + R T s [t] −1 + b T ),<label>(8)</label></formula><formula xml:id="formula_12">c [t] = σ(W C x [t] I {=1} + R C s [t] −1 + b C ),<label>(9)</label></formula><p>and I {} is the indicator function.</p><p>A schematic illustration of the RHN computation graph is shown in <ref type="figure" target="#fig_3">Figure 3</ref>. The output of the RHN layer is the output of the L th Highway layer i.e.</p><formula xml:id="formula_13">y [t] = s [t]</formula><p>L . Note that x <ref type="bibr">[t]</ref> is directly transformed only by the first Highway layer ( = 1) in the recurrent transition <ref type="bibr">1</ref> and for this layer s Omitting the inputs and biases, the temporal Jacobian A = ∂y <ref type="bibr">[t]</ref> /∂y <ref type="bibr">[t−1]</ref> for an RHN layer with recurrence depth of 1 (such that <ref type="bibr">[t]</ref> ) is given by</p><formula xml:id="formula_14">y [t] = h [t] · t [t] + y [t−1] · c</formula><formula xml:id="formula_15">A = diag(c [t] )+H diag(t [t] )+C diag(y [t−1] )+T diag(h [t] ),<label>(10)</label></formula><p>where</p><formula xml:id="formula_16">H = R H diag tanh (R H y [t−1] ) ,<label>(11)</label></formula><formula xml:id="formula_17">T = R T diag σ (R T y [t−1] ) ,<label>(12)</label></formula><formula xml:id="formula_18">C = R C diag σ (R C y [t−1] ) ,<label>(13)</label></formula><p>and has a spectrum of:</p><formula xml:id="formula_19">spec(A) ⊂ i∈{1,...,n} λ ∈ C λ − c [t] i − H ii t [t] i − C ii y [t−1] i − T ii h [t] i C ≤ n j=1,j =i H ij t [t] i + C ij y [t−1] i + T ij h [t] i .<label>(14)</label></formula><p>Equation 14 captures the influence of the gates on the eigenvalues of A. Compared to the situation for standard RNN, it can be seen that an RHN layer has more flexibility in adjusting the centers and radii of the Geršgorin circles. In particular, two limiting cases can be noted. If all carry gates are fully open and transform gates are fully closed, we have c = 1 n , t = 0 n and T = C = 0 n×n (since σ is saturated). This results in</p><formula xml:id="formula_20">c = 1 n , t = 0 n ⇒ λ i = 1 ∀i ∈ {1, . . . , n},<label>(15)</label></formula><p>i.e. all eigenvalues are set to 1 since the Geršgorin circle radius is shrunk to 0 and each diagonal entry is set to c i = 1.</p><p>In the other limiting case, if c = 0 n and t = 1 n then the eigenvalues are simply those of H . As the gates vary between 0 and 1, each of the eigenvalues of A can be dynamically adjusted to any combination of the above limiting behaviors. The key takeaways from the above analysis are as follows.</p><p>Firstly, GCT allows us to observe the behavior of the full spectrum of the temporal Jacobian, and the effect of gating units on it. We expect that for learning multiple temporal dependencies from real-world data efficiently, it is not sufficient to avoid vanishing and exploding gradients. The gates in RHN layers provide a more versatile setup for dynamically remembering, forgetting and transforming information compared to standard RNNs. Secondly, it becomes clear that through their effect on the behavior of the Jacobian, highly non-linear gating functions can facilitate learning through rapid and precise regulation of the network dynamics. Depth is a widely used method to add expressive power to functions, motivating us to use multiple layers of H, T and C transformations. In this paper we opt for extending RHN layers to L &gt; 1 using Highway layers in favor of simplicity and ease of training. However, we expect that in some cases stacking plain layers for these transformations can also be useful. Finally, the analysis of the RHN layer's flexibility in controlling its spectrum furthers our theoretical understanding of LSTM and Highway networks and their variants. For feedforward Highway networks, the Jacobian of the layer transformation (∂y/∂x) takes the place of the temporal Jacobian in the above analysis. Each Highway layer allows increased flexibility in controlling how various components of the input are transformed or carried. This flexibility is the likely reason behind the performance improvement from Highway layers even in cases where network depth is not high ( <ref type="bibr" target="#b26">Kim et al., 2015</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.">Experiments</head><p>Setup: In this work, the carry gate was coupled to the transform gate by setting C(·) = 1 n − T (·) similar to the suggestion for Highway networks. This coupling is also used by the GRU recurrent architecture. It reduces model size for a fixed number of units and prevents an unbounded blow-up of state values leading to more stable training, but imposes a modeling bias which may be suboptimal for certain tasks ( <ref type="bibr" target="#b13">Greff et al., 2015;</ref><ref type="bibr" target="#b23">Jozefowicz et al., 2015</ref>). An output non-linearity similar to LSTM networks could alternatively be used to combat this issue. For optimization and Wikipedia experiments, we bias the transform gates towards being closed at the start of training. All networks use a single hidden RHN layer since we are only interested in studying the influence of recurrence depth, and not of stacking multiple layers, which is already known to be useful. Detailed configurations for all experiments are included in the supplementary material.</p><p>Regularization of RHNs: Like all RNNs, suitable regularization can be essential for obtaining good generalization with RHNs in practice. We adopt the regularization technique proposed by <ref type="bibr" target="#b8">Gal (2015)</ref>, which is an interpretation of dropout based on approximate variational inference. RHNs regularized by this technique are referred to as variational RHNs. For the Penn Treebank word-level language modeling task, we report results both with and without weighttying (WT) of input and output mappings for fair comparisons. This regularization was independently proposed by  and <ref type="bibr" target="#b37">Press &amp; Wolf (2016)</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1.">Optimization</head><p>RHN is an architecture designed to enable the optimization of recurrent networks with deep transitions. Therefore, the primary experimental verification we seek is whether RHNs with higher recurrence depth are easier to optimize compared to other alternatives, preferably using simple gradient based methods.</p><p>We compare optimization of RHNs to DT-RNNs and DT(S)-RNNs ( <ref type="bibr" target="#b36">Pascanu et al., 2013)</ref>. Networks with recurrence depth of 1, 2, 4 and 6 are trained for next step prediction on the JSB Chorales polyphonic music prediction dataset (Boulanger- <ref type="bibr" target="#b3">Lewandowski et al., 2012</ref>). Network sizes are chosen such that the total number of network parameters increases as the recurrence depth increases, but remains the same across architectures. A hyperparameter search is then conducted for SGD-based optimization of each architecture and depth combination for fair comparisons. In the absence of optimization difficulties, larger networks should reach a similar or better loss value compared to smaller networks. However, the swarm plot in <ref type="figure" target="#fig_4">Figure 4</ref> shows that both DT-RNN and DT(S)-RNN become considerably harder to optimize with increasing depth. Similar to feedforward Highway networks, increasing the recurrence depth does not adversely affect optimization of RHNs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2.">Sequence Modeling</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2.1.">PENN TREEBANK</head><p>To examine the effect of recurrence depth we train RHNs with fixed total parameters (32 M) and recurrence depths ranging from 1 to 10 for word level language modeling on the Penn TreeBank dataset ( <ref type="bibr" target="#b32">Marcus et al., 1993)</ref> preprocessed by <ref type="bibr" target="#b35">Mikolov et al. (2010)</ref>. The same hyperparameters are used to train each model. For each depth, we show the test set perplexity of the best model based on performance on the validation set in <ref type="figure" target="#fig_5">Figure 5</ref>(a). Additionally we also report the results for each model trained with WT regularization. In both cases the test score improves as the recurrence depth increases from 1 to 10. For the best 10 layer model, reducing the weight decay further improves the results to 67.9/65.4 validation/test perplexity.</p><p>As the recurrence depth increases from 1 to 10 layers the "width" of the network decreases from 1275 to 830 units since the number of parameters was kept fixed. Thus, these results demonstrate that even for small datasets utilizing parameters to increase depth can yield large benefits even though the size of the RNN "state" is reduced. <ref type="table">Table 1</ref> compares our result with the best published results on this dataset. The directly comparable baseline is Variational LSTM+WT, which only differs in network architecture and size from our models. RHNs outperform most single models as well as all previous ensembles, and also benefit from WT regularization similar to LSTMs. Solely the yet to be analyzed architecture found through reinforcement learning and hyperparamater search by <ref type="bibr" target="#b51">Zoph &amp; Le (2016)</ref> achieves better results.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2.2.">WIKIPEDIA</head><p>The task for this experiment is next symbol prediction on the challenging Hutter Prize Wikipedia datasets text8 and enwik8 (Hutter, 2012) with 27 and 205 unicode symbols in total, respectively. Due to its size (100 M characters in total) and complexity (inclusion of Latin/non-Latin alphabets, XML markup and various special characters for enwik8) these datasets allow us to stress the learning and generalization capacity of RHNs. We train various variational RHNs with recurrence depth of 5 or 10 and 1000 or 1500 units per hidden layer, obtaining state-of-the-art results. On text8 a <ref type="table">Table 1</ref>: Validation and test set perplexity of recent state of the art word-level language models on the Penn Treebank dataset. The model from <ref type="bibr" target="#b26">Kim et al. (2015)</ref> uses feedforward highway layers to transform a character-aware word representation before feeding it into LSTM layers. dropout indicates the regularization used by <ref type="bibr" target="#b49">Zaremba et al. (2014)</ref> which was applied to only the input and output of recurrent layers. Variational refers to the dropout regularization from Gal (2015) based on approximate variational inference. RHNs with large recurrence depth achieve highly competitive results and are highlighted in bold.  validation/test set BPC of 1.19/1.27 for a model with 1500 units and recurrence depth 10 is achieved. Similarly, on enwik8 a validation/test set BPC of 1.26/1.27 is achieved for the same model and hyperparameters. The only difference between the models is the size of the embedding layer, which is set to the size of the character set. <ref type="table" target="#tab_1">Table 2</ref> and <ref type="table" target="#tab_2">Table 3</ref> show that RHNs outperform the previous best models on text8 and enwik8 with significantly fewer total parameters. A more detailed description of the networks is provided in the supplementary material.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.">Analysis</head><p>We analyze the inner workings of RHNs through inspection of gate activations, and their effect on network performance. For the RHN with a recurrence depth of six optimized on the JSB Chorales dataset (subsection 5.1), <ref type="figure" target="#fig_5">Figure 5</ref>(b) shows the mean transform gate activity in each layer over time steps for 4 example sequences. We note that while the gates are biased towards zero (white) at initialization, all layers are utilized in the trained network. The gate activity in the first layer of the recurrent transition is typically high on average, indicating that at least one layer of recurrent transition is almost always utilized. Gates in other layers have varied behavior, dynamically switching their activity over time in a different way for each sequence.</p><p>Similar to the feedforward case, the Highway layers in RHNs perform adaptive computation, i.e. the effective amount of transformation is dynamically adjusted for each sequence and time step. Unlike the general methods mentioned in section 2, the maximum depth is limited to the recurrence depth of the RHN layer. A concrete description of such computations in feedforward networks has recently been offered in terms of learning unrolled iterative estimation ( <ref type="bibr" target="#b14">Greff et al., 2016</ref>  given new information. The memory state is then further refined by successive layers resulting in better estimates.</p><p>The contributions of the layers towards network performance can be quantified through a lesioning experiment ( <ref type="bibr" target="#b42">Srivastava et al., 2015a</ref>). For one Highway layer at a time, all the gates are pushed towards carry behavior by setting the bias to a large negative value, and the resulting loss on the training set is measured. The change in loss due to the biasing of each layer measures its contribution to the network performance. For RHNs, we find that the first layer in the recurrent transition contributes much more to the overall performance compared to others, but removing any layer in general lowers the performance substantially due to the recurrent nature of the network. A plot of obtained results is included in the supplementary material.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.">Conclusion</head><p>We developed a new analysis of the behavior of RNNs based on the Geršgorin Circle Theorem. The analysis provided insights about the ability of gates to variably influence learning in a simplified version of LSTMs. We introduced Recurrent Highway Networks, a powerful new model designed to take advantage of increased depth in the recurrent transition while retaining the ease of training of LSTMs. Experiments confirmed the theoretical optimization advantages as well as improved performance on well known sequence modeling tasks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8.">Supplementary Material</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8.1.">Details of Experimental Setups</head><p>The following paragraphs describe the precise experimental settings used to obtain results in this paper. The source code for reproducing the results on Penn Treebank, enwik8 and text8 experiments is available at https://github.com/julian121266/RecurrentHighwayNetworks on Github.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Optimization</head><p>In these experiments, we compare RHNs to Deep Transition RNNs (DT-RNNs) and Deep Transition RNNs with Skip connections (DT(S)-RNNs) introduced by <ref type="bibr" target="#b36">Pascanu et al. (2013)</ref>. We ran 60 random hyperparamter settings for each architecture and depth. The number of units in each layer of the recurrence was fixed to {1.5 × 10 5 , 3 × 10 5 , 6 × 10 5 , 9 × 10 5 } for recurrence depths of 1, 2, 4 and 6, respectively. The batch size was set to 32 and training for a maximum of 1000 epochs was performed, stopping earlier if the loss did not improve for 100 epochs. tanh(·) was used as the activation function for the nonlinear layers. For the random search, the initial transform gate bias was sampled from {0, −1, −2, −3} and the initial learning rate was sampled uniformly (on logarithmic scale) from [10 0 , 10 −4 ]. Finally, all weights were initialized using a Gaussian distribution with standard deviation sampled uniformly (on logarithmic scale) from [10 −2 , 10 −8 ]. For these experiments, optimization was performed using stochastic gradient descent with momentum, where momentum was set to 0.9.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Penn Treebank</head><p>The Penn Treebank text corpus <ref type="bibr" target="#b32">(Marcus et al., 1993</ref>) is a comparatively small standard benchmark in language modeling. The and pre-processing of the data was same as that used by <ref type="bibr" target="#b8">Gal (2015)</ref> and our code is based on Gal's (Gal, 2015) extension of Zaremba's ( <ref type="bibr" target="#b49">Zaremba et al., 2014</ref>) implementation. To study the influence of recurrence depth, we trained and compared RHNs with 1 layer and recurrence depth of from 1 to 10. with a total budget of 32 M parameters. This leads to RHN with hidden state sizes ranging from 1275 to 830 units. Batch size was fixed to 20, sequence length for truncated backpropagation to 35, learning rate to 0.2, learning rate decay to 1.02 starting at 20 epochs, weight decay to 1e-7 and maximum gradient norm to 10. Dropout rates were chosen to be 0.25 for the embedding layer, 0.75 for the input to the gates, 0.25 for the hidden units and 0.75 for the output activations. All weights were initialized from a uniform distribution between [−0.04, 0.04]. For the best 10-layer model obtained, lowering the weight decay to 1e-9 further improved results.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Enwik8</head><p>The Wikipedia enwik8 dataset (Hutter, 2012) was split into training/validation/test splits of 90 M, 5 M and 5 M characters similar to other recent work. We trained three different RHNs. One with 5 stacked layers in the recurrent state transition with 1500 units, resulting in a network with ≈23.4 M parameters. A second with 10 stacked layers in the recurrence with 1000 units with a total of ≈20.1 M parameters and a third with 10 stacked layers and 1500 units with a total of of ≈46.0 M parameters. An initial learning rate of 0.2 and a learning rate decay of 1.04 after 5 epochs was used. Only the large model with 10 stacked layers and 1500 units used a learning rate decay of 1.03 to ensure for a proper convergence. Training was performed on mini-batches of 128 sequences of length 50 with a weight decay of 0 for the first model and 1e-7 for the other two. The activation of the previous sequence was kept to enable learning of very long-term dependencies <ref type="bibr" target="#b11">(Graves, 2013)</ref>. To regularize, variational dropout <ref type="bibr" target="#b8">(Gal, 2015)</ref> was used. The first and second model used dropout probabilities of 0.1 at input embedding, 0.3 at the output layer and input to the RHN and 0.05 for the hidden units of the RHN. The larger third model used dropout probabilities of 0.1 at input embedding, 0.4 at the output layer and input to the RHN and 0.1 for the hidden units of the RHN. Weights were initialized uniformly from the range <ref type="bibr">[-0.04, 0.04]</ref> and an initial bias of −4 was set for the transform gate to facilitate learning early in training. Similar to the Penn Treebank experiments, the gradients were re-scaled to a norm of 10 whenever this value was exceeded. The embedding size was set to 205 and weight-tying <ref type="bibr" target="#b37">(Press &amp; Wolf, 2016)</ref> was not used.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Text8</head><p>The Wikipedia text8 dataset <ref type="bibr">(Hutter, 2012</ref>) was split into training/validation/test splits of 90 M, 5 M and 5 M characters similar to other recent work. We trained two RHNs with 10 stacked layers in the recurrent state transition. One with 1000 units and one with 1500 units, resulting in networks with ≈20.1 M and ≈45.2 M parameters, respectively. An initial learning rate of 0.2 and a learning rate decay of 1.04 for the 1000 unit model and 1.03 for the 1500 units model was used after 5 epochs. Training was performed on mini-batches of 128 sequences of length 100 for the model with 1000 units and 50 for the model with 1500 units with a weight decay of 1e-7. The activation of the previous sequence was kept to enable learning of very long-term dependencies <ref type="bibr" target="#b11">(Graves, 2013)</ref>. To regularize, variational dropout ( <ref type="bibr" target="#b8">Gal, 2015)</ref> was used with dropout probabilities of 0.05 at the input embedding, 0.3 at the output layer and input to the RHN and 0.05 for the hidden units of the RHN for the model with 1000 units. The model with 1500 units used dropout probabilities of 0.1 at the input embedding, 0.4 at the output layer and at the input to the RHN and finally 0.1 for the dropout probabilities of the hidden units of the RHN. Weights were initialized uniformly from the range <ref type="bibr">[-0.04, 0.04]</ref> and an initial bias of −4 was set for the transform gate to facilitate learning early in training. Similar to the Penn Treebank experiments, the gradients were rescaled to a norm of 10 whenever this value was exceeded. The embedding size was set to 27 and weight-tying <ref type="bibr" target="#b37">(Press &amp; Wolf, 2016)</ref> was not used. <ref type="figure" target="#fig_6">Figure 6</ref> shows the results of the lesioning experiment from section 6. This experiment was conducted on the RHN with recurrence depth 6 trained on the JSB Chorales dataset as part of the Optimization experiment in subsection 5.1. The dashed line corresponds to the training error without any lesioning. The x-axis denotes the index of the lesioned highway layer and the y-axis denotes the log likelihood of the network predictions. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Lesioning Experiment</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Recurrent Highway Networks</head></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Comparison of (a) stacked RNN with depth d and (b) Deep Transition RNN of recurrence depth d, both operating on a sequence of T time steps. The longest credit assignment path between hidden states T time steps is d × T for Deep Transition RNNs.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Illustration of the Geršgorin circle theorem. Two Geršgorin circles are centered around their diagonal entries a ii . The corresponding eigenvalues lie within the radius of the sum of absolute values of non-diagonal entries a ij . Circle (1) represents an exemplar Geršgorin circle for an RNN initialized with small random values. Circle (2) represents the same for an RNN with identity initialization of the diagonal entries of the recurrent matrix and small random values otherwise. The dashed circle denotes the unit circle of radius 1.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head></head><label></label><figDesc>−1 is the RHN layer's output of the previous time step. Subsequent Highway layers only process the outputs of the previous layers. Dotted vertical lines in Figure 3 separate multiple Highway layers in the recurrent transition. For conceptual clarity, it is important to observe that an RHN layer with L = 1 is essentially a basic variant of an LSTM layer. Similar to other variants such as GRU (Cho The simpler formulation of RHN layers allows for an analy- sis similar to standard RNNs based on GCT.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Schematic showing computation within an RHN layer inside the recurrent loop. Vertical dashed lines delimit stacked Highway layers. Horizontal dashed lines imply the extension of the recurrence depth by stacking further layers. H, T &amp; C are the transformations described in equations 7, 8 and 9, respectively.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Swarm plot of optimization experiment results for various architectures for different depths on next step prediction on the JSB Chorales dataset. Each point is the result of optimization using a random hyperparameter setting. The number of network parameters increases with depth, but is kept the same across architectures for each depth. For architectures other than RHN, the random search was unable to find good hyperparameters when depth increased. This figure must be viewed in color.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: (a) Test set perplexity on Penn Treebank word-level language modeling using RHNs with fixed parameter budget and increasing recurrence depth. Increasing the depth improves performance up to 10 layers. (b) Mean activations of the transform (T) gates in an RHN with a recurrence depth of 6 for 4 different sequences (A-D). The activations are averaged over units in each Highway layer. A high value (red) indicates that the layer transforms its inputs at a particular time step to a larger extent, as opposed to passing its input to the next layer (white).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 6 :</head><label>6</label><figDesc>Figure 6: Changes in loss when the recurrence layers are biased towards carry behavior (effectively removed), one layer at a time.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Entropy in Bits Per Character (BPC) on the 
+enwik8 test set (results under 1.5 BPC &amp; without dynamic 
+evaluation). LN refers to the use of layer normalization (Lei 
+Ba et al., 2016). 
+
+Model 
+BPC Size 
+
+Grid-LSTM (Kalchbrenner et al., 2015) 1.47 17 M 
+MI-LSTM (Wu et al., 2016) 
+1.44 17 M 
+mLSTM (Krause et al., 2016) 
+1.42 21 M 
+LN HyperNetworks (Ha et al., 2016) 
+1.34 27 M 
+LN HM-LSTM (Chung et al., 2016) 
+1.32 35 M 
+RHN -Rec. depth 5 
+1.31 23 M 
+RHN -Rec. depth 10 
+1.30 21 M 
+Large RHN -Rec. depth 10 
+1.27 46 M 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Entropy in Bits Per Character (BPC) on the text8 
+test set (results under 1.5 BPC &amp; without dynamic evalua-
+tion). LN refers to the use of layer normalization (Lei Ba 
+et al., 2016). 
+
+Model 
+BPC Size 
+
+MI-LSTM (Wu et al., 2016) 
+1.44 17 M 
+mLSTM (Krause et al., 2016) 
+1.40 10 M 
+BN LSTM (Cooijmans et al., 2016) 
+1.36 16 M 
+HM-LSTM (Chung et al., 2016) 
+1.32 35 M 
+LN HM-LSTM (Chung et al., 2016) 1.29 35 M 
+RHN -Rec. depth 10 
+1.29 20 M 
+Large RHN -Rec. depth 10 
+1.27 45 M 
+
+</table></figure>
+
+			<note place="foot" n="1"> Training of our proposed architecture is compared to these models in subsection 5.1. (a) (b)</note>
+
+			<note place="foot" n="1"> This is not strictly necessary, but simply a convenient choice. et al., 2014) and those studied by Greff et al. (2015) and Jozefowicz et al. (2015), it retains the essential components of the LSTM -multiplicative gating units controlling the flow of information through self-connected additive cells. However, an RHN layer naturally extends to L &gt; 1, extending the LSTM to model far more complex state transitions. Similar to Highway and LSTM layers, other variants can be constructed without changing the basic principles, for example by fixing one or both of the gates to always be open, or coupling the gates as done for the experiments in this paper.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Scaling learning algorithms towards ai. Large-scale kernel machines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yann</forename><surname>Lecun</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="volume">34</biblScope>
+			<biblScope unit="page" from="1" to="41" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Learning long-term dependencies with gradient descent is difficult</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Patrice</forename><surname>Simard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paolo</forename><surname>Frasconi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE transactions on neural networks</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="157" to="166" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">On the complexity of neural network classifiers: A comparison between shallow and deep architectures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Monica</forename><surname>Bianchini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Franco</forename><surname>Scarselli</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Neural Networks</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Modeling temporal dependencies in high-dimensional sequences: Application to polyphonic music generation and transcription</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Boulanger-Lewandowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Vincent</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012-06" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Learning phrase representations using rnn encoderdecoder for statistical machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Van</forename><surname>Merriënboer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bart</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Caglar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Dzmitry</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bougares</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Fethi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Holger</forename><surname>Schwenk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1406.1078</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Hierarchical Multiscale Recurrent Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016-09" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Gated feedback recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junyoung</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Caglar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Machine Learning</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Cooijmans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Laurent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ç</forename><surname>Gülçehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Courville</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016-03" />
+		</imprint>
+	</monogr>
+	<note>Recurrent Batch Normalization. ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">A theoretically grounded application of dropout in recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yarin</forename><surname>Gal</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1512.05287</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Learning to forget: Continual prediction with lstm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Felix</forename><forename type="middle">A</forename><surname>Gers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fred</forename><surname>Cummins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">10</biblScope>
+			<biblScope unit="page">2</biblScope>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Bulletin de l&apos;Acadèmie des Sciences de l&apos;URSS. Classe des sciences mathèmatiques</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Geršgorin</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1931" />
+			<biblScope unit="page" from="749" to="754" />
+		</imprint>
+	</monogr>
+	<note>Über die Abgrenzung der Eigenwerte einer Matrix</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Generating sequences with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Graves</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2013-08" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Adaptive Computation Time for Recurrent Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Graves</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016-03" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Greff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">K</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Koutník</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">R</forename><surname>Steunebrink</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lstm</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1503.04069</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">A Search Space Odyssey. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Highway and residual networks learn unrolled iterative estimation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Greff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Rupesh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1612.07771</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">ArXiv e-prints</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Ha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Dai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Le</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><forename type="middle">V</forename><surname>Hypernetworks</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016-09" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Deep residual learning for image recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Sun</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1512.03385</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Untersuchungen zu dynamischen neuronalen Netzen</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1991" />
+		</imprint>
+		<respStmt>
+			<orgName>Institut f. Informatik, Technische Univ. Munich</orgName>
+		</respStmt>
+	</monogr>
+	<note>Master&apos;s thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Gradient flow in recurrent nets: the difficulty of learning long-term dependencies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Frasconi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">A Field Guide to Dynamical Recurrent Neural Networks</title>
+		<editor>Kremer, S. C. and Kolen, J. F.</editor>
+		<imprint>
+			<publisher>IEEE Press</publisher>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">The human knowledge compression contest</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hutter</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Tying Word Vectors and Word Classifiers: A Loss Framework for Language Modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Inan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Khosravi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016-11" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hakan</forename><surname>Inan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Khashayar</forename><surname>Khosravi</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note>Improved learning through augmenting the loss</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">An empirical exploration of recurrent network architectures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wojciech</forename><surname>Zaremba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ilya</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">Exploring the limits of language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Oriol</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mike</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Wu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1602.02410</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Grid long short-term memory. CoRR, abs/1507.01526</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ivo</forename><surname>Danihelka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<ptr target="http://arxiv.org/abs/1507.01526" />
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoon</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Jernite</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Yacine</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Sontag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><forename type="middle">M</forename><surname>Rush</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1508.06615</idno>
+		<title level="m">Character-aware neural language models</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Multiplicative LSTM for sequence modelling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Krause</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Murray</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Renals</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016-09" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">A Simple Way to Initialize Recurrent Networks of Rectified Linear Units</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><forename type="middle">V</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Jaitly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2015-04" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+		<title level="m" type="main">Layer Normalization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lei</forename><surname>Ba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kiros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">R</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016-07" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+		<title level="m" type="main">The representation of the cumulative rounding error of an algorithm as a taylor expansion of the local rounding errors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Linnainmaa</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1970" />
+		</imprint>
+		<respStmt>
+			<orgName>Univ. Helsinki</orgName>
+		</respStmt>
+	</monogr>
+<note type="report_type">Master&apos;s thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Taylor expansion of the accumulated rounding error</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Seppo</forename><surname>Linnainmaa</surname></persName>
+		</author>
+		<idno>1572-9125</idno>
+	</analytic>
+	<monogr>
+		<title level="j">BIT Numerical Mathematics</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="146" to="160" />
+			<date type="published" when="1976" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Building a large annotated corpus of english: The penn treebank</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell</forename><forename type="middle">P</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mary</forename><surname>Marcinkiewicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Beatrice</forename><surname>Santorini</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comput. Linguist</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="891" to="2017" />
+			<date type="published" when="1993-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">Pointer Sentinel Mixture Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016-09" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<monogr>
+		<title level="m" type="main">Context dependent recurrent neural network language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Zweig</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="234" to="239" />
+		</imprint>
+		<respStmt>
+			<orgName>SLT</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Recurrent neural network based language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Karafiát</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Martin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Burget</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lukas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Cernock`cernock`y</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Khudanpur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sanjeev</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In Interspeech</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page">3</biblScope>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+		<title level="m" type="main">How to construct deep recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Pascanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2013-12" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+		<title level="m" type="main">Using the Output Embedding to Improve Language Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Press</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Wolf</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016-08" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<monogr>
+		<title level="m" type="main">The utility driven dynamic error propagation network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Robinson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Fallside</surname></persName>
+		</author>
+		<idno>CUED/F- INFENG/TR.1</idno>
+		<imprint>
+			<date type="published" when="1987" />
+		</imprint>
+		<respStmt>
+			<orgName>Cambridge University Engineering Department</orgName>
+		</respStmt>
+	</monogr>
+<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Reinforcement learning in markovian and non-markovian environments</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<publisher>Morgan-Kaufmann</publisher>
+			<date type="published" when="1991" />
+			<biblScope unit="volume">3</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Learning complex, extended sequences using the principle of history compression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="234" to="242" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Deep learning in neural networks: An overview</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Networks</title>
+		<imprint>
+			<biblScope unit="volume">61</biblScope>
+			<biblScope unit="page" from="85" to="117" />
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Training very deep networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh</forename><forename type="middle">K</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Greff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Juergen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<publisher>Curran Associates, Inc</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="page" from="2368" to="2376" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">First experiments with powerplay</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Steunebrink</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Bas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Networks</title>
+		<imprint>
+			<biblScope unit="volume">41</biblScope>
+			<biblScope unit="page" from="130" to="136" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Greff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1505.00387</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">Highway networks. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><forename type="middle">J</forename><surname>Werbos</surname></persName>
+		</author>
+		<title level="m">System Modeling and Optimization: Proceedings of the 10th IFIP Conference</title>
+		<meeting><address><addrLine>New York City, USA; Berlin Heidelberg</addrLine></address></meeting>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="1981-09-04" />
+			<biblScope unit="page" from="762" to="770" />
+		</imprint>
+	</monogr>
+	<note>chapter Applications of advances in nonlinear sensitivity analysis</note>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">Generalization of backpropagation with application to a recurrent gas market model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><forename type="middle">J</forename><surname>Werbos</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Networks</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="339" to="356" />
+			<date type="published" when="1988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<monogr>
+		<title level="m" type="main">Complexity of exact gradient computation algorithms for recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">J</forename><surname>Williams</surname></persName>
+		</author>
+		<idno>NU- CCS-89-27</idno>
+		<imprint>
+			<date type="published" when="1989" />
+			<pubPlace>Boston</pubPlace>
+		</imprint>
+		<respStmt>
+			<orgName>Northeastern University, College of Computer Science</orgName>
+		</respStmt>
+	</monogr>
+<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<monogr>
+		<title level="m" type="main">On Multiplicative Integration with Recurrent Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016-06" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<monogr>
+		<title level="m" type="main">Recurrent Neural Network Regularization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Zaremba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Vinyals</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014-09" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Highway long short-term memory RNNS for distant speech recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yu</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Guoguo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Dong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Yao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kaisheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sanjeev</forename><surname>Khudanpur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Glass</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barret</forename><surname>Zoph</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Le</forename><surname>Quoc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01578</idno>
+		<title level="m">Neural architecture search with reinforcement learning</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

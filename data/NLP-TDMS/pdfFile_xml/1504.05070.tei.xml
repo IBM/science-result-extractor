@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:10+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Self-Adaptive Hierarchical Sentence Model</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Han</forename><surname>Zhao</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+							<email>§lu.zhengdong@huawei.com</email>
+							<affiliation key="aff1">
+								<orgName type="laboratory">Noah&apos;s Ark Lab</orgName>
+								<orgName type="institution">Huawei Technologies</orgName>
+								<address>
+									<settlement>Shatin</settlement>
+									<country>HongKong</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pascal</forename><surname>Poupart</surname></persName>
+							<email>ppoupart@uwaterloo.ca</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><forename type="middle">R</forename><surname>Cheriton</surname></persName>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="department">School of Computer Science</orgName>
+								<orgName type="institution">University of Waterloo</orgName>
+								<address>
+									<region>ON</region>
+									<country key="CA">Canada</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Self-Adaptive Hierarchical Sentence Model</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>The ability to accurately model a sentence at varying stages (e.g., word-phrase-sentence) plays a central role in natural language processing. As an effort towards this goal we propose a self-adaptive hierarchical sentence model (AdaSent). AdaSent effectively forms a hierarchy of representations from words to phrases and then to sentences through recursive gated local composition of adjacent segments. We design a competitive mechanism (through gating networks) to allow the representations of the same sentence to be engaged in a particular learning task (e.g., classification), therefore effectively mitigating the gradient vanishing problem persistent in other recursive models. Both qualitative and quantitative analysis shows that AdaSent can automatically form and select the representations suitable for the task at hand during training, yielding superior classification performance over competitor models on 5 benchmark data sets.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>The goal of sentence modeling is to represent the meaning of a sentence so that it can be used as input for other tasks. Previously, this task was often cast as semantic parsing, which aims to find a logical form that can describe the sentence. With recent advances in distributed representations and deep neural networks, it is now common practice to find a vectorial representation of sentences, which turns out to be quite effective for tasks of classification <ref type="bibr" target="#b2">[Kim, 2014]</ref>, machine translation <ref type="bibr" target="#b0">[Cho et al., 2014;</ref><ref type="bibr" target="#b0">Bahdanau et al., 2015]</ref>, and semantic matching <ref type="bibr" target="#b1">[Hu et al., 2014]</ref>.</p><p>Perhaps the simplest method in this direction is the continuous Bag-of-Words (cBoW), where the representations of sentences are obtained by global pooling (e.g, averagepooling or max-pooling) over their word-vectors. The wordvectors, also known as word-embedding, can be determined in either supervised or unsupervised fashion. cBoW, although effective at capturing the topics of sentences, does not consider the sequential nature of words, and therefore has difficulty capturing the structure of sentences. There has been a surge of sentence models with the order of words incorporated, mostly based on neural networks of various forms, including recursive neural networks <ref type="bibr" target="#b5">[Socher et al., 2010;</ref><ref type="bibr" target="#b5">Socher et al., 2012;</ref><ref type="bibr" target="#b5">Socher et al., 2013]</ref>, recurrent neural network <ref type="bibr">[Irsoy and Cardie, 2014;</ref><ref type="bibr" target="#b2">Lai et al., 2015]</ref>, and convolution neural network <ref type="bibr">[Kalchbrenner et al., 2014;</ref><ref type="bibr" target="#b2">Kim, 2014]</ref>. These works apply levels of non-linear transformations to model interactions between words and the structure of these interactions can also be learned on the fly through gated networks <ref type="bibr" target="#b0">[Cho et al., 2014]</ref>. However these models output a fixed length continuous vector that does not retain intermediate information obtained during the composition process, which may be valuable depending on the task at hand.</p><p>In this paper, we propose a self-adaptive hierarchical sentence model (AdaSent). Instead of maintaining a fixedlength continuous vectorial representation, our model forms a multi-scale hierarchical representation. AdaSent is inspired from the gated recursive convolutional neural network (grConv) <ref type="bibr" target="#b0">[Cho et al., 2014]</ref> in the sense that the information flow forms a pyramid with a directed acyclic graph structure where local words are gradually composed to form intermediate representations of phrases. Unlike cBoW, recurrent and recursive neural networks with fixed structures, the gated nature of AdaSent allows the information flow to vary with each task (i.e., no need for a pre-defined parse tree). Unlike grConv, which outputs a fixed-length representation of the sentence at the top of the pyramid, AdaSent uses the intermediate representations at each level of the pyramid to form a multiscale summarization. A convex combination of the representations at each level is used to adaptively give more weight to some levels depending on the sentence and the task. <ref type="figure" target="#fig_0">Fig. 1</ref> illustrates the architecture of AdaSent and compares it to cBoW, recurrent neural networks and recursive neural networks.</p><p>Our contributions can be summarized as follows. First, we propose a novel architecture for short sequence modeling which explores a new direction to use a hierarchical multiscale representation rather than a flat, fixed-length representation. Second, we qualitatively show that our model is able to automatically learn the representation which is suitable for the task at hand through proper training. Third, we conduct extensive empirical studies on 5 benchmark data sets to quantitatively show the superiority of our model over previous approaches. . Flows with green and blue colors act as special cases for recurrent neural networks and recursive neural networks respectively (see more details in Sec. 3.2). Each level of the pyramid is pooled and the whole pyramid reduces into a hierarchy H, which is then fed to a gating network and a classifier to form an ensemble.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Background</head><p>Let x 1:T denote the input sequence with length T . Each token x t ∈ x 1:T is a V dimensional one-hot binary vector to encode the ith word, where V is the size of the vocabulary. We use U ∈ R d×V to denote the word embedding matrix, in which the jth column is the d-dimensional distributed representation of the jth word in the vocabulary. Hence the word vectors for the sequence x 1:T is obtained by h 0 1:T = U x 1:T . In the cBoW sentence model, the representation ¯ h for x 1:T is obtained by global pooling, either average pooling (Eq. 1) or max pooling (Eq. 2), over all the word vectors:</p><formula xml:id="formula_0">¯ h = 1 T T t=1 h 0 t = U T T t=1 x t (1) ¯ h j = max t∈1:T h 0 t j , j = 1, . . . , d<label>(2)</label></formula><p>It is clear that cBoW is insensitive to the ordering of words and also the length of a sentence, hence it is likely for two different sentences with different semantic meanings to be embedded into the same vector representation. Recurrent neural networks <ref type="bibr" target="#b0">[Elman, 1990]</ref> are a class of neural networks where recurrent connections between input units and hidden units are formed through time. The sequential nature of recurrent neural networks makes them applicable to various sequential generation tasks, e.g., language modeling <ref type="bibr" target="#b2">[Mikolov et al., 2010]</ref> and machine translation [ <ref type="bibr" target="#b0">Bahdanau et al., 2015;</ref><ref type="bibr" target="#b0">Cho et al., 2014]</ref>.</p><p>Given a sequence of word vectors h 0 1:T , the hidden layer vector h t at time step t is computed from a non-linear transformation of the current input vector h 0 t and the hidden vector at the previous time step h t−1 . Let W be the input-hidden connection matrix, H be the recurrent hidden-hidden connection matrix and b be the bias vector. Let f (·) be the component-wise non-linear transformation function. The dynamics of recurrent neural networks can be described by the following equations:</p><formula xml:id="formula_1">h 0 = 0 h t = f (W h 0 t + Hh t−1 + b)<label>(3)</label></formula><p>The sentence representation ¯ h is then the hidden vector obtained at the last time step, h T , which summarizes all the past words. The composition dynamics in recurrent neural networks can be described by a chain as in <ref type="figure" target="#fig_2">Fig. 2a</ref>.  Recursive neural networks build on the idea of composing along a pre-defined binary parsing tree. The leaves of the parsing tree correspond to words, which are initialized by their word vectors. Non-linear transformations are recursively applied bottom-up to generate the hidden representation of a parent node given the hidden representations of its two children. The composition dynamics in a recursive neural network can be described</p><formula xml:id="formula_2">as h = f (W L h l + W R h r + b),</formula><p>where h is the hidden representation for a parent node in the parsing tree and h l , h r are the hidden representations for the left and right child of the parent node, respectively. W L , W R are left and right recursive connection matrices. Like in recurrent neural networks, all the parameters in recursive neural networks are shared globally. The representation for the whole sentence is then the hidden vector obtained at the root of the binary parsing tree. An example is shown in <ref type="figure" target="#fig_2">Fig. 2b</ref>.</p><p>Although the composition process is nonlinear in recursive neural network, it is pre-defined by a given binary parsing tree. Gated recursive convolutional neural network (grConv) <ref type="bibr" target="#b0">[Cho et al., 2014]</ref> extends recursive neural network through a gating mechanism to allow it to learn the structure of recursive composition on the fly. If we consider the composition structure in a recurrent neural network as a linear chain and the composition structure in a recursive neural network as a binary tree, then the composition structure in a grConv can be described as a pyramid, where word representations are locally combined until we reach the top of the pyramid, which gives us the global representation of a whole sentence. We refer interested readers to <ref type="bibr" target="#b0">[Cho et al., 2014]</ref> for more details about grConv.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Self-Adaptive Hierarchical Sentence Model</head><p>AdaSent is inspired and built based on grConv. AdaSent differs from grConv and other neural sentence models that try to obtain a fixed-length vector representation by forming a hierarchy of abstractions of the input sentence and by feeding the hierarchy as a multi-scale summarization into the following classifier, combined with a gating network to decide the weight of each level in the final consensus, as illustrated in <ref type="figure" target="#fig_0">Fig. 1</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Structure</head><p>The structure of AdaSent is a directed acyclic graph as shown in <ref type="figure" target="#fig_3">Fig. 3</ref>. For an input sequence of length T , AdaSent is a pyramid of T levels. Let the bottom level be the first level and the top level be the T th level. Define the scope of each unit in the first layer to be the corresponding word, i.e., scope(h 1 j ) = {x j }, ∀j ∈ 1 : T and for any t ≥ 2, define scope(h t j ) = scope(h t−1 j ) ∪ scope(h t−1 j+1 ). Then the tth level in AdaSent contains a layer of T − t + 1 units where each unit has a scope of size t. More specifically, the scope of h t j is {x j:j+t−1 }. Intuitively, for the sub-pyramid rooted at h t j , we can interpret h t j as a top level summarization of the phrase x j:j+t−1 in the original sentence. For example, h 3 4 in <ref type="figure" target="#fig_3">Fig. 3</ref> can be viewed as a summarization of the phrase on the mat. In general, units at the tth level are intermediate hidden representations of all the consecutive phrases of length t in the original sentence (see the scopes of units at the 3rd level in <ref type="figure" target="#fig_3">Fig. 3</ref> for an example). There are two extreme cases in AdaSent: the first level contains word vectors and the top level is a global summarization of the whole sentence.</p><p>Before the pre-trained word vectors enter into the first level of the pyramid, we apply a linear transformation to map word vectors from R d to R D with D ≥ d. That way we can allow phrases and sentences to be in a space of higher dimension than words for their richer structures. More specifically, the hidden representation h 1 1:T at the first level of the pyramid is</p><formula xml:id="formula_3">h 1 1:T = U h 0 1:T = U U x 1:T<label>(4)</label></formula><p>where U ∈ R D×d is the linear transformation matrix in AdaSent and U ∈ R d×V is the word-embedding matrix trained with a large unlabeled corpus. Equivalently, one can view U U U ∈ R D×V as a new word-embedding matrix tailored for AdaSent. This factorization of the wordembedding matrix also helps to reduce the effective number of parameters in our model when d D.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Local Composition and Level Pooling</head><p>The recursive local composition in the pyramid works in the following way</p><formula xml:id="formula_4">h t j = ω l h t−1 j + ω r h t−1 j+1 + ω c ˜ h t j<label>(5)</label></formula><formula xml:id="formula_5">˜ h t j = f (W L h t−1 j + W R h t−1 j+1 + b W )<label>(6)</label></formula><p>where j ranges from 1 to T − t + 1 and t ranges from 2 to T . W L , W R ∈ R D×D are the hidden-hidden combination matrices, dubbed recurrent matrices, and b W ∈ R D is a bias vector. ω l , ω r and ω c are the gating coefficients which satisfy ω l , ω r , ω c ≥ 0 and ω l + ω r + ω c = 1. Eq. 6 provides a way to compose the hidden representation of a phrase of length t from the hidden representation of its left t − 1 prefix and its right t − 1 suffix. The composition in Eq. 6 includes a non-linear transformation, which allows a flexible hidden representation to be formed. The fundamental assumption behind the structure of AdaSent is then encoded in Eq. 5: the semantic meaning of a phrase of length t is a convex combination of the semantic meanings of its t − 1 prefix, t − 1 suffix and the composition of these two. For example, we expect the meaning of the phrase the cat to be expressed by the word cat since the is only a definite article, which does not have a direct meaning. On the other hand, we also hope the meaning of the phrase not happy to consider both the functionality of not and also the meaning of happy. We design the local composition in AdaSent to make it flexible enough to catch the above variations in language while letting the gating mechanism (the way to obtain ω l , ω r and ω c ) adaptively decide the most appropriate composition from the current context.</p><p>Technically, when computing h t j , ω l , ω c and ω r are parametrized functions of h t−1 j and h t−1 j+1 such that they can decide whether to compose these two children by a non-linear transformation or simply to forward the children's representations for future composition. For the purpose of illustration, we use the softmax function to implement the gating mechanism during the local composition in Eq. 7. But note that we are not limited to a specific choice of gating mechanism. One can adopt more complex systems, e.g., MLP, to implement the local gating mechanism as long as the output of the system is a multinomial distribution over 3 categories.</p><formula xml:id="formula_6">w l w r w c = softmax(G L h t−1 j + G R h t−1 j+1 + b G ) (7)</formula><p>G L , G R ∈ R 3×D and b G ∈ R 3 are shared globally inside the pyramid. The softmax function over a vector is defined as:</p><formula xml:id="formula_7">softmax(v) = 1 l i=1 exp(v i )    exp(v 1 ) . . . exp(v l )    , v ∈ R l<label>(8)</label></formula><p>Local compositions are recursively applied until we reach the top of the pyramid.</p><p>It is worth noting that the recursive local composition in AdaSent implicitly forms a weighted model average such that each unit at layer t corresponds to a convex combination of all possible sub-structures along which the composition process is applied over the phrase of length t. This implicit weighted model averaging makes AdaSent more robust to local noises and deteriorations than recurrent nets and recursive nets where the composition structure is unique and rigid. <ref type="figure">Fig. 4</ref> shows an example when t = 3. ) =  <ref type="figure">Figure 4</ref>: The hidden vector obtained at the top can be decomposed into a convex combination of all possible hidden vectors composed along the corresponding sub-structures.</p><p>Once the pyramid has been built, we apply a pooling operation, either average pooling or max pooling, to the tth level, t ∈ 1 : T , of the pyramid to obtain a summarization of all consecutive phrases of length t in the original sentence, denoted by ¯ h t (see an example illustrated in <ref type="figure" target="#fig_3">Fig. 3</ref> for the global level pooling applied to the 3rd level in the pyramid). It is straightforward to verify that ¯ h 1 corresponds to the representation returned by applying cBoW to the whole sentence.</p><formula xml:id="formula_8">[( ¯ h 1 ) T , · · · , ( ¯ h T ) T ]</formula><p>T then forms the hierarchy in which lower level summarization in the hierarchy pays more attention to local words or short phrases while higher level summarization focuses more on the global interaction of different parts in the sentence.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Gating Network</head><p>Suppose we are interested in a classification problem, one can easily extend our approach to other problems of interests. Let g(·) be a discriminative classifier that takes ¯ h t ∈ R D as input and outputs the probabilities for different classes. Let w(·) be a gating network that takes ¯ h t ∈ R D , t = 1, . . . , T as input and outputs a belief score 0 ≤ γ t ≤ 1. Intuitively, the belief score γ t depicts how confident the tth level summarization in the hierarchy is suitable to be used as a proper representation of the current input instance for the task at hand. We require γ t ≥ 0, ∀t and T t=1 γ t = 1. Let C denote the categorical random variable corresponding to the class label. The consensus of the whole system is reached by taking a mixture of decisions made by levels of summarizations from the hierarchy:</p><formula xml:id="formula_9">p(C = c|x 1:T ) = T t=1 p(C = c|H x = t) · p(H x = t|x 1:T ) = T t=1 g( ¯ h t ) · w( ¯ h t )<label>(9)</label></formula><p>where each g(·) is the classifier and w(·) corresponds to the gating network in <ref type="figure" target="#fig_0">Fig. 1</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Back Propagation through Structure</head><p>We use back propagation through structure (BPTS) <ref type="bibr" target="#b0">[Goller and Kuchler, 1996]</ref> to compute the partial derivatives of the objective function with respect to the model parameters. Let L(·) be our scalar objective function. The goal is to derive the partial derivative of L with respect to the model parameters in AdaSent, i.e., two recurrent matrices, W L , W R and two local composition matrices G L , G R (and their corresponding bias vectors):  </p><formula xml:id="formula_10">∂L ∂W L = T t=1 T −t+1 j=1 ∂L ∂h t j ∂h t j ∂W L , ∂L ∂W R = T t=1 T −t+1 j=1 ∂L ∂h t j ∂h t j ∂W R<label>(10)</label></formula><formula xml:id="formula_11">∂h t j = ω r I + ω c diag(f )W R (12) ∂h t+1 j ∂h t j = ω l I + ω c diag(f )W L (13)</formula><p>where I is the identity matrix and diag(f ) is a diagonal matrix spanned by the vector f , which is the derivative of f (·) with respect to its input. The identity matrix in Eq. 12 and Eq. 13 plays the same role as the linear unit recurrent connection in the memory block of LSTM <ref type="bibr">[Hochreiter and Schmidhuber, 1997]</ref> to allow the constant error carousel to effectively prevent the gradient vanishing problem that commonly exists in recurrent neural nets and recursive neural nets. Also, the local composition weights ω l , ω r and ω c in Eq. 12 and Eq. 13 have the same effect as the forgetting gate in LSTM <ref type="bibr" target="#b0">[Gers et al., 2000</ref>] by allowing more flexible credit assignments during the back propagation process.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Experimental Setting</head><p>Statistics about the data sets used in this paper are listed in <ref type="table">Table 1</ref>. We describe each data set in detail below: 1. MR. Movie reviews <ref type="bibr" target="#b4">[Pang and Lee, 2005]</ref> 1 data set where each instance is a sentence. The objective is to classify each review by its overall sentiment polarity, either positive or negative. 2. CR. Annotated customer reviews of 14 products obtained from Amazon [Hu and <ref type="bibr" target="#b1">Liu, 2004]</ref> 2 . The task is to classify each customer review into positive and negative categories. 3. SUBJ. Subjectivity data set where the goal is to classify each instance (snippet) as being subjective or objective <ref type="bibr" target="#b4">[Pang and Lee, 2004]</ref>. 4. MPQA. Phrase level opinion polarity detection subtask of the MPQA data set <ref type="bibr" target="#b6">[Wiebe et al., 2005</ref>] 3 . 5. TREC. Question data set, in which the goal is to classify an instance (question) into 6 different types <ref type="bibr" target="#b2">[Li and Roth, 2002]</ref>   <ref type="bibr" target="#b5">[Socher et al., 2011]</ref> and Matrix-vector recursive neural network <ref type="bibr" target="#b5">[Socher et al., 2012]</ref>. In these two models, words are gradually composed into phrases and sentence along a binary parse tree. 3. CNN <ref type="bibr" target="#b2">[Kim, 2014]</ref> and <ref type="bibr">DCNN [Kalchbrenner et al., 2014]</ref>. Convolutional neural network for sentence modeling. In DCNN, the author applies dynamic k-max pooling over time to generalize the original max pooling in traditional CNN. 4. P.V.. Paragraph Vector <ref type="bibr" target="#b2">[Le and Mikolov, 2014]</ref> is an unsupervised model to learn distributed representations of words and paragraphs. We use the public implemen-tation of P.V. <ref type="bibr">5</ref> and use logistic regression on top of the pre-trained paragraph vectors for prediction. 5. cBoW. Continuous Bag-of-Words model. As discussed above, we use average pooling or max pooling as the global pooling mechanism to compose a phrase/sentence vector from a set of word vectors. 6. RNN, BRNN. Recurrent neural networks and bidirectional recurrent neural networks <ref type="bibr">[Schuster and Paliwal, 1997]</ref>. For bidirectional recurrent neural networks, the reader is referred to <ref type="bibr" target="#b2">[Lai et al., 2015]</ref> for more details. 7. GrConv. Gated recursive convolutional neural network <ref type="bibr" target="#b0">[Cho et al., 2014]</ref> shares the pyramid structure with AdaSent and uses the top node in the pyramid as a fixed length vector representation of the whole sentence.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Training</head><p>The difficulty of training recurrent neural networks is largely due to the notorious gradient exploding and gradient vanishing problem <ref type="bibr" target="#b0">[Bengio et al., 1994;</ref><ref type="bibr">Pascanu et al., 2013]</ref>. As analyzed and discussed before, the DAG structure combined with the local gating composition mechanism of AdaSent naturally help to avoid the gradient vanishing problem. However, the gradient exploding problem still exists as we observe in our experiments. In this section, we discuss our implementation details to mitigate the gradient exploding problem and we give some practical tricks to improve the performance in the experiments.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Regularization of Recurrent Matrix</head><p>The root of the gradient exploding problem in recurrent neural networks and other related models lies in the large spectral norm of the recurrent matrix as shown in Eq. 12 and Eq. 13. Suppose the spectral norm of W L and W R 1, then the recursive application of Eq. 12 and Eq. 13 in the back propagation process will cause the norm of the gradient vector to explode. To alleviate this problem, we propose to penalize the Frobenius norm of the recurrent matrix, which acts as a surrogate (upper bound) of the corresponding spectral norm, since 1) it is computationally expensive to compute the exact value of spectral norm and 2) it is hard to establish a direct connection between the spectral norm and the model parameters to incorporate it into our objective function. Let L(·, ·) be our objective function to minimize. For example, when L is the negative log-likelihood in the classification setting, our optimization can be formulated as</p><formula xml:id="formula_12">minimize 1 N N i=1 L(x i , y i ) + λ ||W L || 2 F + ||W R || 2 F (14)</formula><p>where x i is the training sequence and y i is the label. The value of the regularization coefficient λ is problem dependent. In our experiments, typical values of λ range from 0.01 to 5 × 10 −5 . For all our experiments, we use minibatch AdaGrad <ref type="bibr" target="#b0">[Duchi et al., 2011]</ref> with the norm-clipping technique <ref type="bibr">[Pascanu et al., 2013]</ref> to optimize the objective function in Eq. 14.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Implementation Details</head><p>Throughout our experiments, we use a 50-dimensional word embedding trained using word2vec <ref type="bibr" target="#b2">[Mikolov et al., 2013]</ref> on the Wikipedia corpus (∼1B words). The vocabulary size is about 300,000. For all the tasks, we fine-tune the word embeddings during training to improve the performance <ref type="bibr">[Col- lobert et al., 2011]</ref>. We use the hyperbolic tangent function as the activation function in the composition process as the rectified linear units <ref type="bibr" target="#b3">[Nair and Hinton, 2010]</ref> are more prone to the gradient exploding problem in recurrent neural networks and its related variants. We use an MLP to implement the classifier on top of the hierarchy and use a softmax function to implement the gating network. We also tried using MLP to implement the gating network, but this does not improve the performance significantly.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Experiment Results</head><p>Model  The classification accuracy of AdaSent compared with other models is shown in <ref type="table" target="#tab_4">Table 2</ref>. AdaSent consistently outperforms P.V., cBoW, RNN, BRNN and GrConv by a large margin while achieving comparable results to the state-ofthe-art and using much fewer parameters: the number of parameters in our models range from 10K to 100K while in CNN the number of parameters is about 400K 6 . AdaSent outperforms all the other models on the MPQA data set, which consists of short phrases (the average length of each instance in MPQA is 3). We attribute the success of AdaSent on MPQA to its power in modeling short phrases since long range dependencies are hard to detect and represent.</p><p>Compared with BRNN, the level-wise global pooling in AdaSent helps to explicitly model phrases of different lengths while in BRNN the summarization process is more sensitive to a small range of nearby words. Hence, AdaSent consistently outperforms BRNN on all data sets. Also, AdaSent significantly outperforms GrConv on all the data sets, which indicates that the variable length multi-scale representation is key to its success. As a comparison, GrConv does not perform well because it fails to keep the intermediate representations.</p><p>More results on using GrConv as a fixed-length sequence encoder for machine translation and related tasks can be found in <ref type="bibr" target="#b0">[Cho et al., 2014]</ref>. cBoW is quite effective on some tasks (e.g., SUBJ). We think this is due to the language regularities encoded in the word vectors and also the characteristics of the data itself. It is surprising that P.V. performs worse than other methods on the MPQA data set. This may be due to the fact that the average length of instances in MPQA is small, which limits the number of context windows when training P.V..   <ref type="table" target="#tab_6">Table 3</ref> by running each of the models on every data set 10 times using different settings of hyper-parameters and random initializations. We report the mean classification accuracy and also the standard deviation of the 10 runs on each of the data set. Again, AdaSent consistently outperforms all the other competitor models on all the data sets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>To study how the multi-scale hierarchy is combined by AdaSent in the final consensus, for each data set, we sample two sentences with a pre-specified length and compute their corresponding belief scores. We visualize the belief scores of 10 sentences by a matrix shown in <ref type="figure" target="#fig_5">Fig. 5</ref>. As illustrated in <ref type="figure" target="#fig_5">Fig. 5</ref>, the distribution of belief scores varies among different input sentences and also different data sets. The gating network is trained to adaptively select the most appropriate representation in the hierarchy by giving it the largest belief score. We also give a concrete example from MR to show both the predictions computed from each level and their corresponding belief scores given by the gating network in <ref type="figure" target="#fig_6">Fig. 6</ref>. The first row in <ref type="figure" target="#fig_6">Fig. 6</ref> shows the belief scores Pr(H x = t|x 1:T ), ∀t and the second row shows the probability Pr(y = 1|H x = t), ∀t predicted from each level in the hierarchy. In this example, although the classifier predicts incorrectly for higher level representations, the gating network assigns the first level with the largest belief score, leading to a correct final consensus. The flexibility of multiscale representation combined with a gating network allows AdaSent to generalize GrConv in the sense that GrConv corresponds to the case where the belief score at the root node is 1.0.  If the movie were all comedy it might work better but it has an ambition to say something about its subjects but not willingness.</p><p>To show that AdaSent is able to automatically learn the appropriate representation for the task at hand, we visualize the first two principal components (obtained by PCA) of the vector with the largest weight in the hierarchicy for each sentence in the dataset. <ref type="figure" target="#fig_7">Fig. 7</ref> shows the projected features from AdaSent (left column) and cBoW (right column) for SUBJ (1st row), MPQA (2nd row) and TREC (3rd row). During training, the model implicitly learns a data representation that enables better prediction. This property of AdaSent is very interesting since we do not explicitly add any separation constraint into our objective function to achieve this.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Conclusion</head><p>In this paper, we propose AdaSent as a new hierarchical sequence modeling approach. AdaSent explores a new direction to represent a sequence by a multi-scale hierarchy instead of a flat, fixed-length, continuous vector representation. The analysis and the empirical results demonstrate the effectiveness and robustness of AdaSent in short sequence modeling. Qualitative results show that AdaSent can learn to represent input sequences depending on the task at hand. </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: The overall diagram of AdaSent (better viewed in color). Flows with green and blue colors act as special cases for recurrent neural networks and recursive neural networks respectively (see more details in Sec. 3.2). Each level of the pyramid is pooled and the whole pyramid reduces into a hierarchy H, which is then fed to a gating network and a classifier to form an ensemble.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head></head><label></label><figDesc>Composition process in a recursive neural network.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Composition dynamics in recurrent and recursive neural networks. The one-hot binary encoding of word sequences is first multiplied by the word embedding matrix U to obtain the word vectors before entering the network.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Composition dynamics in AdaSent. The jth unit on the tth level is an intermediate hidden representation of the phrase x j:j+t−1 in the original sentence. All the units on the tth level are then pooled to obtain the tth level representation in the hierarchy H.</figDesc><graphic url="image-1.png" coords="3,134.56,386.64,150.00,150.00" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: Each row corresponds to the belief score of a sentence of length 12 sampled from one of the data sets. From top to bottom, the 10 sentences are sampled from MR, CR, SUBJ, MPQA and TREC respectively.</figDesc><graphic url="image-6.png" coords="7,54.00,54.00,243.01,207.18" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 6 :</head><label>6</label><figDesc>Figure 6: Sentence: If the movie were all comedy it might work better but it has an ambition to say something about its subjects but not willingness.</figDesc><graphic url="image-7.png" coords="7,54.00,327.75,243.01,76.66" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 7 :</head><label>7</label><figDesc>Figure 7: Different colors and patterns correspond to different objective classes. The first, second and third rows correspond to SUBJ, MPQA and TREC respectively and the left and right columns correspond to AdaSent and cBoW respectively.</figDesc><graphic url="image-13.png" coords="7,440.24,224.61,106.91,81.47" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head></head><label></label><figDesc>The same analysis can be applied to compute ∂L ∂G L and ∂L ∂G R . Taking into account the DAG structure of AdaSent, we can compute ∂L ∂h t j recursively in the following way:</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>4 .</head><label>4</label><figDesc></figDesc><table>Data 
+N 
+dist(+,-) 
+K |w| test 
+MR 
+10662 
+(0.5, 0.5) 
+2 
+18 CV 
+CR 
+3788 
+(0.64, 0.36) 
+2 
+17 CV 
+SUBJ 
+10000 
+(0.5, 0.5) 
+2 
+21 CV 
+MPQA 10099 
+(0.31, 0.69) 
+2 
+3 
+CV 
+TREC 
+5952 (0.1,0.2,0.2,0.1,0.2,0.2) 6 
+10 500 
+
+Table 1: Statistics of the five data sets used in this paper. N 
+counts the number of instances and dist lists the class dis-
+tribution in the data set. K represents the number of target 
+classes. |w| measures the average number of words in each 
+instance. test is the size of the test set. For datasets which 
+do not provide an explicit split of train/test, we use 10-fold 
+cross-validation (CV) instead. 
+
+We compare AdaSent with different methods listed below on 
+the five data sets. 
+1. NB-SVM and MNB. Naive Bayes SVM and Multino-
+mial Naive Bayes with uni and bigram features [Wang 
+and Manning, 2012]. 
+2. RAE and MV-RecNN. Recursive autoencoder </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Classification accuracy of AdaSent compared with 
+other models. For NB-SVM, MNB, RAE, MV-RecNN, CNN 
+and DCNN, we use the results reported in the corresponding 
+paper. We use the public implementation of P.V. and we im-
+plement other methods. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 3 : Model variance.</head><label>3</label><figDesc></figDesc><table>We also report model variance of P.V., cBoW, RNN, 
+BRNN, GrConv and AdaSent in </table></figure>
+
+			<note place="foot" n="4"> Experiments In this section, we study the empirical performance of AdaSent on 5 benchmark data sets for sentence and short phrase classification and then compare it to other competitor models. We also visualize the representation of the input sequence learned by AdaSent by projecting it in a 2 dimensional space using PCA to qualitatively study why AdaSent works for short sequence modeling.</note>
+
+			<note place="foot" n="1"> https://www.cs.cornell.edu/people/pabo/movie-review-data/ 2 http://www.cs.uic.edu/∼liub/FBS/sentiment-analysis.html 3 http://mpqa.cs.pitt.edu/ 4 http://cogcomp.cs.illinois.edu/Data/QA/QC/</note>
+
+			<note place="foot" n="5"> https://github.com/mesnilgr/iclr15</note>
+
+			<note place="foot" n="6"> The state-of-the-art accuracy on TREC is 95.0 achieved by [Silva et al., 2011] using SVM with 60 hand-coded features.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>This work was done when the first and third authors were respectively an intern and a visiting scholar at Noah's Ark Lab, Huawei Technology, Hong Kong. Han Zhao thanks Tao Cai and Baotian Hu at Noah's Ark Lab for their technical support and helpful discussions. This work is supported in part by China National 973 project 2014CB340301.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Learning task-dependent distributed representations by backpropagation through structure</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">[</forename><surname>References</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bahdanau</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eighth Workshop on Syntax, Semantics and Structure in Statistical Translation</title>
+		<meeting><address><addrLine>Felix A Gers, Jürgen Schmidhuber, and Fred Cummins</addrLine></address></meeting>
+		<imprint>
+			<publisher>Goller and Kuchler</publisher>
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+	<note>Neural Networks. Hochreiter and Schmidhuber, 1997] Sepp Hochreiter and Jürgen Schmidhuber. Long short-term memory. Neural computation</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Ozan Irsoy and Claire Cardie. Deep recursive neural networks for compositionality in language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Liu ; Minqing</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bing</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">;</forename><surname>Hu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ACM SIGKDD int. conference on Knowledge discovery and data mining</title>
+		<meeting>ACM SIGKDD int. conference on Knowledge discovery and data mining</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+	<note>Advances in Neural Information Processing Systems. Kalchbrenner et al., 2014] Nal Kalchbrenner</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Cernock`Cernock`y, and Sanjeev Khudanpur. Recurrent neural network based language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Grefenstette</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom ; Yoon Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">;</forename><surname>Lai</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Conference of the Association for the Advancement of Artificial Intelligence (AAAI)</title>
+		<meeting>Conference of the Association for the Advancement of Artificial Intelligence (AAAI)</meeting>
+		<imprint>
+			<date type="published" when="2002-01" />
+			<biblScope unit="volume">1</biblScope>
+		</imprint>
+	</monogr>
+	<note>Advances in Neural Information Processing Systems</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Rectified linear units improve restricted boltzmann machines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hinton</forename><surname>Nair</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vinod</forename><surname>Nair</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Int. Conference on Machine Learning</title>
+		<meeting>Int. Conference on Machine Learning</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="807" to="814" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Seeing stars: Exploiting class relationships for sentiment categorization with respect to rating scales</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lee ; Bo</forename><surname>Pang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lillian</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bo</forename><surname>Pang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lillian</forename><surname>Lee ; Kuldip</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Paliwal</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+	<note>Bidirectional recurrent neural networks. Signal Processing</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Learning continuous phrase representations and syntactic parsing with recursive neural networks</title>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Joint Conference on Empirical Methods in Natural Language Processing and Computational Natural Language Learning</title>
+		<meeting>Joint Conference on Empirical Methods in Natural Language essing and Computational Natural Language Learning<address><addrLine>Alex Perelygin, Jean Y Wu, Jason Chuang, Christopher D Manning, Andrew Y Ng, and Christopher Potts</addrLine></address></meeting>
+		<imprint>
+			<publisher>Richard Socher</publisher>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+	<note>Proc. Conference on Empirical Methods in Natural Language Processing</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Annotating expressions of opinions and emotions in language. Language resources and evaluation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">; Sida</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher D Manning ;</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Wiebe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Annual Meeting of the Association for Computational Linguistics: Short Papers</title>
+		<meeting>Annual Meeting of the Association for Computational Linguistics: Short Papers</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+	<note>Baselines and bigrams: Simple, good sentiment and topic classification</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

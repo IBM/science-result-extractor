@@ -1,0 +1,1073 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:08+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">SEQ2SQL: GENERATING STRUCTURED QUERIES FROM NATURAL LANGUAGE USING REINFORCEMENT LEARNING</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Zhong</surname></persName>
+							<email>vzhong@salesforce.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Salesforce Research Palo Alto</orgName>
+								<address>
+									<region>CA</region>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+							<email>cxiong@salesforce.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Salesforce Research Palo Alto</orgName>
+								<address>
+									<region>CA</region>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+							<email>rsocher@salesforce.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Salesforce Research Palo Alto</orgName>
+								<address>
+									<region>CA</region>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">SEQ2SQL: GENERATING STRUCTURED QUERIES FROM NATURAL LANGUAGE USING REINFORCEMENT LEARNING</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Relational databases store a significant amount of the worlds data. However, ac-cessing this data currently requires users to understand a query language such as SQL. We propose Seq2SQL, a deep neural network for translating natural language questions to corresponding SQL queries. Our model uses rewards from in-the-loop query execution over the database to learn a policy to generate the query, which contains unordered parts that are less suitable for optimization via cross en-tropy loss. Moreover, Seq2SQL leverages the structure of SQL to prune the space of generated queries and significantly simplify the generation problem. In addition to the model, we release WikiSQL, a dataset of 80654 hand-annotated examples of questions and SQL queries distributed across 24241 tables from Wikipedia that is an order of magnitude larger than comparable datasets. By applying policy-based reinforcement learning with a query execution environment to WikiSQL, Seq2SQL outperforms a state-of-the-art semantic parser, improving execution accuracy from 35.9% to 59.4% and logical form accuracy from 23.4% to 48.3%.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Relational databases store a vast amount of today's information and provide the foundation of applications such as medical records <ref type="bibr" target="#b13">(Hillestad et al., 2005</ref>), financial markets ( <ref type="bibr" target="#b3">Beck et al., 2000</ref>), and customer relations management <ref type="bibr" target="#b23">(Ngai et al., 2009</ref>). However, accessing relational databases requires an understanding of query languages such as SQL, which, while powerful, is difficult to master. Natural language interfaces (NLI), a research area at the intersection of natural language processing and human-computer interactions, seeks to provide means for humans to interact with computers through the use of natural language <ref type="bibr" target="#b0">(Androutsopoulos et al., 1995)</ref>. We investigate one particular aspect of NLI applied to relational databases: translating natural language questions to SQL queries.</p><p>Our main contributions in this work are two-fold. First, we introduce Seq2SQL, a deep neural network for translating natural language questions to corresponding SQL queries. Seq2SQL, shown in <ref type="figure">Figure 1</ref>, consists of three components that leverage the structure of SQL to prune the output space of generated queries. Moreover, it uses policy-based reinforcement learning (RL) to generate the conditions of the query, which are unsuitable for optimization using cross entropy loss due to their unordered nature. We train Seq2SQL using a mixed objective, combining cross entropy losses and RL rewards from in-the-loop query execution on a database. These characteristics allow Seq2SQL to achieve state-of-the-art results on query generation.</p><p>Next, we release WikiSQL, a corpus of 80654 hand-annotated instances of natural language questions, SQL queries, and SQL tables extracted from 24241 HTML tables from Wikipedia. WikiSQL is an order of magnitude larger than previous semantic parsing datasets that provide logical forms along with natural language utterances. We release the tables used in WikiSQL both in raw JSON format as well as in the form of a SQL database. Along with WikiSQL, we release a query execution engine for the database used for in-the-loop query execution to learn the policy. On WikiSQL, Seq2SQL outperforms a previously state-of-the-art semantic parsing model by Dong &amp; Lapata (2016), which obtains 35.9% execution accuracy, as well as an augmented pointer network baseline, which obtains 53.3% execution accuracy. By leveraging the inherent structure of SQL queries and applying policy gradient methods using reward signals from live query execution, Seq2SQL achieves state-of-the-art performance on WikiSQL, obtaining 59.4% execution accuracy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">MODEL</head><p>The WikiSQL task is to generate a SQL query from a natural language question and table schema. Our baseline model is the attentional sequence to sequence neural semantic parser proposed by <ref type="bibr" target="#b8">Dong &amp; Lapata (2016)</ref> that achieves state-of-the-art performance on a host of semantic parsing datasets without using hand-engineered grammar. However, the output space of the softmax in their Seq2Seq model is unnecessarily large for this task. In particular, we can limit the output space of the generated sequence to the union of the table schema, question utterance, and SQL key words. The resulting model is similar to a pointer network ( <ref type="bibr" target="#b35">Vinyals et al., 2015</ref>) with augmented inputs. We first describe the augmented pointer network model, then address its limitations in our definition of Seq2SQL, particularly with respect to generating unordered query conditions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">AUGMENTED POINTER NETWORK</head><p>The augmented pointer network generates the SQL query token-by-token by selecting from an input sequence. In our case, the input sequence is the concatenation of the column names, required for the selection column and the condition columns of the query, the question, required for the conditions of the query, and the limited vocabulary of the SQL language such as SELECT, COUNT etc. In the example shown in <ref type="figure">Figure 2</ref>, the column name tokens consist of "Pick", "#", "CFL", "Team" etc.; the question tokens consist of "How", "many", "CFL", "teams" etc.; the SQL tokens consist of SELECT, WHERE, COUNT, MIN, MAX etc. With this augmented input sequence, the pointer network can produce the SQL query by selecting exclusively from the input.</p><p>Suppose we have a list of N table columns and a question such as in <ref type="figure">Figure 2</ref>, and want to produce the corresponding SQL query. Let</p><formula xml:id="formula_0">x c j = [x c j,1 , x c j,2 , .</formula><p>..x c j,Tj ] denote the sequence of words in the name of the jth column, where x c j,i represents the ith word in the jth column and T j represents the total number of words in the jth column. Similarly, let x q and x s respectively denote the sequence of words in the question and the set of unique words in the SQL vocabulary.</p><p>We define the input sequence x as the concatenation of all the column names, the question, and the SQL vocabulary:</p><formula xml:id="formula_1">x = [&lt;col&gt;; x c 1 ; x c 2 ; ...; x c N ; &lt;sql&gt;; x s ; &lt;question&gt;; x q ]<label>(1)</label></formula><p>where [a; b] denotes the concatenation between the sequences a and b and we add sentinel tokens between neighbouring sequences to demarcate the boundaries.</p><p>The network first encodes x using a two-layer, bidirectional Long Short-Term Memory network <ref type="bibr" target="#b14">(Hochreiter &amp; Schmidhuber, 1997)</ref>. The input to the encoder are the embeddings corresponding to words in the input sequence. We denote the output of the encoder by h enc , where h enc t is the state of the encoder corresponding to the t th word in the input sequence. For brevity, we do not write out the LSTM equations, which are described by <ref type="bibr" target="#b14">Hochreiter &amp; Schmidhuber (1997)</ref>. We then apply a pointer network similar to that proposed by <ref type="bibr" target="#b35">Vinyals et al. (2015)</ref> to the input encodings h enc .</p><p>The decoder network uses a two layer, unidirectional LSTM. During each decoder step s, the decoder LSTM takes as input y s−1 , the query token generated during the previous decoding step, and outputs the state g s . Next, the decoder produces a scalar attention score α ptr s,t for each position t of the input sequence:</p><formula xml:id="formula_2">α ptr s,t = W ptr tanh U ptr g s + V ptr h t<label>(2)</label></formula><p>We choose the input token with the highest score as the next token of the generated SQL query, y s = argmax(α ptr s ). While the augmented pointer network can solve the SQL generation problem, it does not leverage the structure inherent in SQL. Typically, a SQL query such as that shown in <ref type="figure" target="#fig_1">Figure 3</ref> consists of three components. The first component is the aggregation operator, in this case COUNT, which produces a summary of the rows selected by the query. Alternatively the query may request no summary statistics, in which case an aggregation operator is not provided. The second component is the SELECT column(s), in this case Engine, which identifies the column(s) that are to be included in the returned results. The third component is the WHERE clause of the query, in this case WHERE Driver = Val Musetti, which contains conditions by which to filter the rows. Here, we keep rows in which the driver is "Val Musetti".</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">SEQ2SQL</head><p>Seq2SQL, as shown in <ref type="figure" target="#fig_1">Figure 3</ref>, has three parts that correspond to the aggregation operator, the SELECT column, and the WHERE clause. First, the network classifies an aggregation operation for the query, with the addition of a null operation that corresponds to no aggregation. Next, the network points to a column in the input table corresponding to the SELECT column. Finally, the network generates the conditions for the query using a pointer network. The first two components are supervised using cross entropy loss, whereas the third generation component is trained using policy gradient to address the unordered nature of query conditions (we explain this in the subsequent WHERE Clause section). Utilizing the structure of SQL allows Seq2SQL to further prune the output space of queries, which leads to higher performance than Seq2Seq and the augmented pointer network.</p><p>Aggregation Operation. The aggregation operation depends on the question. For the example shown in <ref type="figure" target="#fig_1">Figure 3</ref>, the correct operator is COUNT because the question asks for "How many". To compute the aggregation operation, we first compute the scalar attention score, α inp t = W inp h enc t , for each tth token in the input sequence. We normalize the vector of scores</p><formula xml:id="formula_3">α inp = [α inp 1 , α inp 2 , ...] to</formula><p>produce a distribution over the input encodings, β inp = softmax α inp . The input representation κ agg is the sum over the input encodings h enc weighted by the normalized scores β inp :</p><formula xml:id="formula_4">κ agg = t β inp t h enc t (3)</formula><p>Let α agg denote the scores over the aggregation operations such as COUNT, MIN, MAX, and the noaggregation operation NULL. We compute α agg by applying a multi-layer perceptron to the input representation κ agg :</p><formula xml:id="formula_5">α agg = W agg tanh (V agg κ agg + b agg ) + c agg (4)</formula><p>We apply the softmax function to obtain the distribution over the set of possible aggregation operations β agg = softmax (α agg ). We use cross entropy loss L agg for the aggregation operation.</p><p>SELECT Column. The selection column depends on the table columns as well as the question. Namely, for the example in <ref type="figure" target="#fig_1">Figure 3</ref>, "How many engine types" indicates that we need to retrieve the "Engine" column. SELECT column prediction is then a matching problem, solvable using a pointer: given the list of column representations and a question representation, we select the column that best matches the question.</p><p>In order to produce the representations for the columns, we first encode each column name with a LSTM. The representation of a particular column j, e c j , is given by:</p><formula xml:id="formula_6">h c j,t = LSTM emb x c j,t , h c j,t−1 e c j = h c j,Tj<label>(5)</label></formula><p>Here, h c j,t denotes the tth encoder state of the jth column. We take the last encoder state to be e c j , column j's representation.</p><p>To construct a representation for the question, we compute another input representation κ sel using the same architecture as for κ agg (Equation 3) but with untied weights. Finally, we apply a multi-layer perceptron over the column representations, conditioned on the input representation, to compute the a score for each column j:</p><formula xml:id="formula_7">α sel j = W sel tanh V sel κ sel + V c e c j (6)</formula><p>We normalize the scores with a softmax function to produce a distribution over the possible SELECT columns β sel = softmax α sel . For the example shown in <ref type="figure" target="#fig_1">Figure 3</ref>, the distribution is over the columns "Entrant", "Constructor", "Chassis", "Engine", "No", and the ground truth SELECT column "Driver". We train the SELECT network using cross entropy loss L sel .</p><p>WHERE Clause. We can train the WHERE clause using a pointer decoder similar to that described in Section 2.1. However, there is a limitation in using the cross entropy loss to optimize the network: the WHERE conditions of a query can be swapped and the query yield the same result. Suppose we have the question "which males are older than 18" and the queries SELECT name FROM insurance WHERE age &gt; 18 AND gender = "male" and SELECT name FROM insurance WHERE gender = "male" AND age &gt; 18. Both queries obtain the correct execution result despite not having exact string match. If the former is provided as the ground truth, using cross entropy loss to supervise the generation would then wrongly penalize the latter. To address this problem, we apply reinforcement learning to learn a policy to directly optimize the expected correctness of the execution result (Equation 7).</p><p>Instead of teacher forcing at each step of query generation, we sample from the output distribution to obtain the next token. At the end of the generation procedure, we execute the generated SQL query against the database to obtain a reward. Let y = [y 1 , y 2 , ..., y T ] denote the sequence of generated tokens in the WHERE clause. Let q (y) denote the query generated by the model and q g denote the ground truth query corresponding to the question. We define the reward R (q (y) , q g ) as</p><formula xml:id="formula_8">R (q (y) , q g ) =    −2, if q (y)</formula><p>is not a valid SQL query −1, if q (y) is a valid SQL query and executes to an incorrect result +1, if q (y) is a valid SQL query and executes to the correct result <ref type="formula">(7)</ref> The loss, L whe = −E y [R (q (y) , q g )], is the negative expected reward over possible WHERE clauses. We derive the policy gradient for L whe as shown by <ref type="bibr" target="#b33">Sutton et al. (2000)</ref> and <ref type="bibr" target="#b29">Schulman et al. (2015)</ref>.</p><formula xml:id="formula_9">L whe Θ = −− Θ E y∼py [R (q (y) , q g )] (8) = −E y∼py R (q (y) , q g ) Θ t (log p y (y t ; Θ)) (9) ≈ −R (q (y) , q g ) Θ t (log p y (y t ; Θ))<label>(10)</label></formula><p>Here, p y (y t ) denotes the probability of choosing token y t during time step t. In equation 10, we approximate the expected gradient using a single Monte-Carlo sample y.</p><p>Mixed Objective Function. We train the model using gradient descent to minimize the objective</p><formula xml:id="formula_10">function L = L agg + L sel + L whe .</formula><p>Consequently, the total gradient is the equally weighted sum of the gradients from the cross entropy loss in predicting the SELECT column, from the cross entropy loss in predicting the aggregation operation, and from policy learning.</p><p>3 WIKISQL <ref type="figure">Figure 4</ref>: Distribution of questions in WikiSQL.</p><p>WikiSQL is a collection of questions, corresponding SQL queries, and SQL tables. A single example in WikiSQL, shown in <ref type="figure">Figure 2</ref>, contains a table, a SQL query, and the natural language question corresponding to the SQL query. <ref type="table">Table 1</ref> shows how WikiSQL compares to related datasets. Namely, WikiSQL is the largest hand-annotated semantic parsing dataset to date -it is an order of magnitude larger than other datasets that have logical forms, either in terms of the number of examples or the number of tables. The queries in WikiSQL span over a large number of tables and hence presents an unique challenge: the model must be able to not only generalize to new queries, but to new table schema. Finally, WikiSQL contains realistic data extracted from the web. This is evident in the distributions of the number of columns, the lengths of questions, and the length of queries, respectively shown in <ref type="figure" target="#fig_2">Figure 5</ref>. Another indicator of the variety of questions in the dataset is the distribution of question types, shown in <ref type="figure">Figure 4</ref>.  the generated question. We discard paraphrases that do not show enough variation, as measured by the character edit distance from the generated question, as well as those both workers deemed incorrect during verification. Section A of the Appendix contains more details on the collection of WikiSQL. We make available examples of the interface used during the paraphrase phase and during the verification phase in the supplementary materials. The dataset is available for download at https://github.com/salesforce/WikiSQL. Comparison between WikiSQL and existing datasets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Dataset</head><p>The datasets are GeoQuery880 <ref type="bibr" target="#b34">(Tang &amp; Mooney, 2001</ref>), ATIS (Price, 1990), Free917 <ref type="bibr" target="#b7">(Cai &amp; Yates, 2013</ref>), Overnight ( <ref type="bibr" target="#b36">Wang et al., 2015)</ref>, WebQuestions ( <ref type="bibr" target="#b5">Berant et al., 2013)</ref>, and WikiTableQuestions <ref type="bibr" target="#b24">(Pasupat &amp; Liang, 2015)</ref>. "Size" denotes the number of examples in the dataset. "LF" indicates whether it has annotated logical forms. "Schema" denotes the number of tables. ATIS is presented as a slot filling task. Each Freebase API page is counted as a separate domain.</p><p>The tables, their paraphrases, and SQL queries are randomly slotted into train, dev, and test splits, such that each table is present in exactly one split. In addition to the raw tables, queries, results, and natural utterances, we also release a corresponding SQL database and query execution engine.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">EVALUATION</head><p>Let N denote the total number of examples in the dataset, N ex the number of queries that, when executed, result in the correct result, and N lf the number of queries has exact string match with the ground truth query used to collect the paraphrase.</p><p>We evaluate using the execution accuracy metric Acc ex = Nex N . One downside of Acc ex is that it is possible to construct a SQL query that does not correspond to the question but nevertheless obtains the same result.</p><p>For example, the two queries SELECT COUNT(name) WHERE SSN = 123 and SELECT COUNT(SSN) WHERE SSN = 123 produce the same result if no two people with different names share the SSN 123. Hence, we also use the logical form accuracy Acc lf = N lf N . However, as we showed in Section 2.2, Acc lf incorrectly penalizes queries that achieve the correct result but do not have exact string match with the ground truth query. Due to these observations, we use both metrics to evaluate the models.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">EXPERIMENTS</head><p>We tokenize the dataset using Stanford CoreNLP ( ). We use the normalized tokens for training and revert into original gloss before outputting the query so that generated queries are executable on the database. We use fixed GloVe word embeddings ( <ref type="bibr" target="#b25">Pennington et al., 2014</ref>) and character n-gram embeddings ( <ref type="bibr" target="#b12">Hashimoto et al., 2016)</ref>. Let w g x denote the GloVe embedding and w c x the character embedding for word x. Here, w c x is the mean of the embeddings of all the character ngrams in x. For words that have neither word nor character embeddings, we assign the zero vector. All networks are run for a maximum of 300 epochs with early stopping on dev split execution accuracy. We train using ADAM <ref type="bibr" target="#b16">(Kingma &amp; Ba, 2014</ref>) and regularize using dropout ( <ref type="bibr" target="#b31">Srivastava et al., 2014</ref>). All recurrent layers have a hidden size of 200 units and are followed by a dropout of 0.3. We implement all models using PyTorch <ref type="bibr">1</ref> . To train Seq2SQL, we first train a version in which the WHERE clause is supervised via teacher forcing (i.e. the policy is not learned from scratch) and then continue training using reinforcement learning. In order to obtain the rewards described in Section 2.2, we use the query execution engine described in Section 3.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">RESULT</head><p>We compare results against the attentional sequence to sequence neural semantic parser proposed by <ref type="bibr" target="#b8">Dong &amp; Lapata (2016)</ref>. This model achieves state of the art results on a variety of semantic parsing datasets, outperforming a host of non-neural semantic parsers despite not using hand-engineered grammars. To make this baseline even more competitive on our new dataset, we augment their input    <ref type="table" target="#tab_3">Table 2</ref> compares the performance of the three models.</p><p>Reducing the output space by utilizing the augmented pointer network improves upon the baseline by 17.4%. Leveraging the structure of SQL queries leads to another improvement of 3.8%, as is shown by the performance of Seq2SQL without RL compared to the augmented pointer network. Finally, training using reinforcement learning based on rewards from in-the-loop query executions on a database leads to another performance increase of 2.3%, as is shown by the performance of the full Seq2SQL model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">ANALYSIS</head><p>Limiting the output space via pointer network leads to more accurate conditions. Compared to the baseline, the augmented pointer network generates higher quality WHERE clause. For example, for "in how many districts was a successor seated on march 4, 1850?", the baseline generates the condition successor seated = seated march 4 whereas Seq2SQL generates successor seated = seated march 4 1850. Similarly, for "what's doug battaglia's pick number?", the baseline generates Player = doug whereas Seq2SQL generates Player = doug battaglia. The conditions tend to contain rare words (e.g. "1850"), but the baseline is inclined to produce common words in the training corpus, such as "march" and "4" for date, or "doug" for name. The pointer is less affected since it selects exclusively from the input.  <ref type="table">Table 3</ref>: Performance on the COUNT operator.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>Incorporating structure reduces invalid queries. Seq2SQL without RL directly predicts selection and aggregation and reduces invalid SQL queries generated from 7.9% to 4.8%. A large quantity of invalid queries result from column names -the generated query refers to selection columns that are not present in the table. This is particularly helpful when the column name contain many tokens, such as "Miles (km)", which has 4 tokens. Introducing a classifier for the aggregation also reduces the error rate. <ref type="table">Table 3</ref> shows that adding the aggregation classifier improves the precision, recall, and F1 for predicting the COUNT operator. For more queries produced by the different models, please see Section 3 of the Appendix.</p><p>RL generates higher quality WHERE clause that are ordered differently than ground truth.</p><p>Training with policy-based RL obtains correct results in which the order of conditions is differs from the ground truth query. For example, for "in what district was the democratic candidate first elected in 1992?", the ground truth conditions are First elected = 1992 AND Party = Democratic whereas Seq2SQL generates Party = Democratic AND First elected = 1992. When Seq2SQL is correct and Seq2SQL without RL is not, the latter tends to produce an incorrect WHERE clause. For example, for the rather complex question "what is the race name of the 12th round trenton, new jersey race where a.j. foyt had the pole position?", Seq2SQL trained without RL generates WHERE rnd = 12 and track = a.j. foyt AND pole position = a.j. foyt whereas Seq2SQL trained with RL correctly generates WHERE rnd = 12 AND pole position = a.j. foyt.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">RELATED WORK</head><p>Semantic Parsing. In semantic parsing for question answering (QA), natural language questions are parsed into logical forms that are then executed on a knowledge graph <ref type="bibr" target="#b40">(Zelle &amp; Mooney, 1996;</ref><ref type="bibr" target="#b37">Wong &amp; Mooney, 2007;</ref><ref type="bibr" target="#b41">Zettlemoyer &amp; Collins, 2005;</ref>. Other works in semantic parsing focus on learning parsers without relying on annotated logical forms by leveraging conversational logs <ref type="bibr" target="#b1">(Artzi &amp; Zettlemoyer, 2011</ref>), demonstrations <ref type="bibr" target="#b2">(Artzi &amp; Zettlemoyer, 2013)</ref>, distant supervision <ref type="bibr" target="#b7">(Cai &amp; Yates, 2013;</ref><ref type="bibr" target="#b28">Reddy et al., 2014)</ref>, and question-answer pairs <ref type="bibr" target="#b18">(Liang et al., 2011</ref>). Semantic parsing systems are typically constrained to a single schema and require hand-curated grammars to perform well 2 . <ref type="bibr" target="#b24">Pasupat &amp; Liang (2015)</ref> addresses the single-schema limitation by proposing the floating parser, which generalizes to unseen web tables on the WikiTableQuestions task. Our approach is similar in that it generalizes to new table schema. However, we do not require access to table content, conversion of table to an additional graph, nor hand-engineered features/grammar.</p><p>Semantic parsing datasets. Previous semantic parsing systems were designed to answer complex and compositional questions over closed-domain, fixed-schema datasets such as GeoQuery <ref type="bibr" target="#b34">(Tang &amp; Mooney, 2001</ref>) and ATIS <ref type="bibr" target="#b27">(Price, 1990)</ref>. Researchers also investigated QA over subsets of largescale knowledge graphs such as DBPedia <ref type="bibr" target="#b32">(Starc &amp; Mladenic, 2017)</ref> and Freebase <ref type="bibr" target="#b7">(Cai &amp; Yates, 2013;</ref><ref type="bibr" target="#b5">Berant et al., 2013</ref>). The dataset "Overnight" ( <ref type="bibr" target="#b36">Wang et al., 2015</ref>) uses a similar crowdsourcing process to build a dataset of natural language question, logical form pairs, but has only 8 domains. WikiTableQuestions <ref type="bibr" target="#b24">(Pasupat &amp; Liang, 2015</ref>) is a collection of question and answers, also over a large quantity of tables extracted from Wikipedia. However, it does not provide logical forms whereas WikiSQL does. In addition, WikiSQL focuses on generating SQL queries for questions over relational database tables and only uses table content during evaluation.  <ref type="formula" target="#formula_1">(2017)</ref> proposed a distributed neural executor based on the Neural Enquirer, which efficiently executes queries and incorporates execution rewards in reinforcement learning. Our approach is different in that we do not access table content, which may be unavailable due to privacy concerns. We also do not hand-engineer model architecture for query execution and instead leverage existing database engines to perform efficient query execution. Furthermore, in contrast to <ref type="bibr" target="#b8">Dong &amp; Lapata (2016)</ref> and <ref type="bibr" target="#b22">Neelakantan et al. (2017)</ref>, we use policy-based RL in a fashion similar to , <ref type="bibr" target="#b21">Mou et al. (2017)</ref>, and <ref type="bibr" target="#b11">Guu et al. (2017)</ref>, which helps Seq2SQL achieve state-of-the-art performance. Unlike <ref type="bibr" target="#b21">Mou et al. (2017)</ref> and <ref type="bibr" target="#b39">Yin et al. (2016)</ref>, we generalize across natural language questions and table schemas instead of across synthetic questions on a single schema.</p><p>Natural language interface for databases. One prominent works in natural language interfaces is PRECISE ( <ref type="bibr" target="#b26">Popescu et al., 2003)</ref>, which translates questions to SQL queries and identifies questions that it is not confident about. <ref type="bibr" target="#b9">Giordani &amp; Moschitti (2012)</ref> translate questions to SQL by first generating candidate queries from a grammar then ranking them using tree kernels. Both of these approaches rely on high quality grammar and are not suitable for tasks that require generalization to new schema. <ref type="bibr" target="#b15">Iyer et al. (2017)</ref> also translate to SQL, but with a Seq2Seq model that is further improved with human feedback. Seq2SQL outperforms Seq2Seq and uses reinforcement learning instead of human feedback during training.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">CONCLUSION</head><p>We proposed Seq2SQL, a deep neural network for translating questions to SQL queries. Our model leverages the structure of SQL queries to reduce the output space of the model. To train Seq2SQL, we applied in-the-loop query execution to learn a policy for generating the conditions of the SQL query, which is unordered and unsuitable for optimization via cross entropy loss. We also introduced WikiSQL, a dataset of questions and SQL queries that is an order of magnitude larger than comparable datasets. Finally, we showed that Seq2SQL outperforms a state-of-the-art semantic parser on WikiSQL, improving execution accuracy from 35.9% to 59.4% and logical form accuracy from 23.4% to 48.3%.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A COLLECTION OF WIKISQL</head><p>WikiSQL is collected in a paraphrase phases as well as a verification phase. In the paraphrase phase, we use tables extracted from Wikipedia by <ref type="bibr" target="#b6">Bhagavatula et al. (2013)</ref> and remove small tables according to the following criteria:</p><p>• the number of cells in each row is not the same</p><p>• the content in a cell exceed 50 characters</p><p>• a header cell is empty</p><p>• the table has less than 5 rows or 5 columns</p><p>• over 40% of the cells of a row contain identical content</p><p>We also remove the last row of a table because a large quantity of HTML tables tend to have summary statistics in the last row, and hence the last row does not adhere to the table schema defined by the header row.</p><p>For each of the table that passes the above criteria, we randomly generate 6 SQL queries according to the following rules:</p><p>• the query follows the format SELECT agg op agg col from table where cond1 col cond1 op cond1 AND cond2 col cond2 op cond2 ...</p><p>• the aggregation operator agg op can be empty or COUNT. In the event that the aggregation column agg col is numeric, agg op can additionally be one of MAX and MIN</p><p>• the condition operator cond op is =. In the event that the corresponding condition column cond col is numeric, cond op can additionally be one of &gt; and &lt;</p><p>• the condition cond can be any possible value present in the table under the corresponding cond col. In the event that cond col is numerical, cond can be any numerical value sampled from the range from the minimum value in the column to the maximum value in the column.</p><p>We only generate queries that produce a non-empty result set. To enforce succinct queries, we remove conditions from the generated queries if doing so does not change the execution result.</p><p>For each query, we generate a crude question using a template and obtain a human paraphrase via crowdsourcing on Amazon Mechanical Turk. In each Amazon Mechanical Turk HIT, a worker is shown the first 4 rows of the table as well as its generated questions and asked to paraphrase each question.</p><p>After obtaining natural language utterances from the paraphrase phase, we give each questionparaphrase pair to two other workers in the verification phase to verify that the paraphrase and the original question contain the same meaning.</p><p>We then filter the initial collection of paraphrases using the following criteria:</p><p>• the paraphrase must be deemed correct by at least one worker during the verification phrase</p><p>• the paraphrase must be sufficiently different from the generated question, with a characterlevel edit distance greater than 10 B ATTENTIONAL SEQ2SEQ NEURAL SEMANTIC PARSER BASELINE We employ the attentional sequence to sequence model for the baseline. This model by <ref type="bibr" target="#b8">Dong &amp; Lapata (2016)</ref> achieves state of the art results on a variety of semantic parsing datasets despite not using hand-engineered grammar. We implement a variant using OpenNMT and a global attention encoder-decoder architecture (with input feeding) described by Luong et al.</p><p>We use the same two-layer, bidirectional, stacked LSTM encoder as described previously. The decoder is almost identical to that described by Equation 2 of the paper, with the sole difference coming from input feeding. </p><formula xml:id="formula_11">g s = LSTM emb (y s−1 ) ; κ dec s−1 , g s−1<label>(11</label></formula><p>To produce the output token during the sth decoder step, the concatenation of the decoder state and the attention context is given to a final linear layer to produce a distribution α dec over words in the target vocabulary</p><formula xml:id="formula_13">α dec = softmax U dec [h dec s ; κ dec s ]<label>(14)</label></formula><p>During training, teacher forcing is used. During inference, a beam size of 5 is used and generated unknown words are replaced by the input words with the highest attention weight. SELECT year (km) WHERE date = plymouth 9 AND race time = february 9 S SELECT year (km) WHERE date = plymouth 9 AND race time= february 9 G SELECT year (km) WHERE manufacturer = plymouth AND date = february 9 <ref type="table">Table 4</ref>: Examples predictions by the models on the dev split. Q denotes the natural language question and G denotes the corresponding ground truth query. P, S', and S denote, respectively, the queries produced by the Augmented Pointer Network, Seq2SQL without reinforcement learning, Seq2SQL. We omit the FROM table part of the query for succinctness.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :Figure 2 :</head><label>12</label><figDesc>Figure 1: Seq2SQL takes as input a question and the columns of a table. It generates the corresponding SQL query, which, during training, is executed against a database. The result of the execution is utilized as the reward to train the reinforcement learning algorithm.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: The Seq2SQL model has three components, corresponding to the three parts of a SQL query (right). The input to the model are the question (top left) and the table column names (bottom left).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: Distribution of table, question, query sizes in WikiSQL.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Model</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head></head><label></label><figDesc>Representation learning for sequence generation. Dong &amp; Lapata (2016)'s attentional sequence to sequence neural semantic parser, which we use as the baseline, achieves state-of-the-art results on a variety of semantic parsing datasets despite not utilizing hand-engineered grammar. Unlike their model, Seq2SQL uses pointer based generation akin to Vinyals et al. (2015) to achieve higher performance, especially in generating queries with rare words and column names. Pointer mod- els have also been successfully applied to tasks such as language modeling (Merity et al., 2017), summarization (Gu et al., 2016), combinatorial optimization (Bello et al., 2017), and question an- swering (Seo et al., 2017; Xiong et al., 2017). Other interesting neural semantic parsing models are the Neural Programmer (Neelakantan et al., 2017) and the Neural Enquirer (Yin et al., 2016). Mou et al.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>C</head><label></label><figDesc>PREDICTIONS BY SEQ2SQL Q when connecticut &amp; villanova are the regular season winner how many tournament venues (city) are there? P SELECT COUNT tournament player (city) WHERE regular season winner city ) = connecticut &amp; villanova S' SELECT COUNT tournament venue (city) WHERE tournament winner = connecticut &amp; villanova S SELECT COUNT tournament venue (city) WHERE regular season winner = connecticut &amp; villanova G SELECT COUNT tournament venue (city) WHERE regular season winner = connecticut &amp; villanova Q what are the aggregate scores of those races where the first leg results are 0-1? P SELECT aggregate WHERE 1st . = 0-1 S' SELECT COUNT agg. score WHERE 1st leg = 0-1 S SELECT agg. score WHERE 1st leg = 0-1 G SELECT agg. score WHERE 1st leg = 0-1 Q what is the race name of the 12th round trenton, new jersey race where a.j. foyt had the pole position? P SELECT race name WHERE location = 12th AND round position = a.j. foyt, new jersey AND S' SELECT race name WHERE rnd = 12 AND track = a.j. foyt AND pole position = a.j. foyt S SELECT race name WHERE rnd = 12 AND pole position = a.j. foyt G SELECT race name WHERE rnd = 12 AND pole position = a.j. foyt Q what city is on 89.9? P SELECT city WHERE frequency = 89.9 S' SELECT city of license WHERE frequency = 89.9 S SELECT city of license WHERE frequency = 89.9 G SELECT city of license WHERE frequency = 89.9 Q how many voters from the bronx voted for the socialist party? P SELECT MIN % party = socialist S' SELECT COUNT the bronx where the bronx = socialist S SELECT COUNT the bronx WHERE the bronx = socialist G SELECT the bronx WHERE party = socialist Q in what year did a plymouth vehicle win on february 9 ? P SELECT MIN year (km) WHERE date = february 9 AND race time = plymouth 9 S'</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head>table , question, query sizes in WikiSQL.</head><label>,</label><figDesc></figDesc><table>We collect WikiSQL by crowd-sourcing on Amazon Mechanical Turk in two phases. First, a worker 
+paraphrases a generated question for a table. We form the generated question using a template, 
+filled using a randomly generated SQL query. We ensure the validity and complexity of the tables 
+by keeping only those that are legitimate database tables and sufficiently large in the number of 
+rows and columns. Next, two other workers verify that the paraphrase has the same meaning as </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Dev Acc lf Dev Acc ex Test Acc lf Test Acc ex</head><label></label><figDesc></figDesc><table>Baseline (Dong &amp; Lapata, 2016) 23.3% 
+37.0% 
+23.4% 
+35.9% 
+Aug Ptr Network 
+44.1% 
+53.8% 
+43.3% 
+53.3% 
+
+Seq2SQL (no RL) 
+48.2% 
+58.1% 
+47.4% 
+57.1% 
+Seq2SQL 
+49.5% 
+60.8% 
+48.3% 
+59.4% 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Performance on WikiSQL. Both metrics are defined in Section 3.1. For Seq2SQL (no RL), 
+the WHERE clause is supervised via teacher forcing as opposed to reinforcement learning. 
+with the table schema such that the model can generalize to new tables. We describe this baseline in 
+detail in Section 2 of the Appendix. </table></figure>
+
+			<note place="foot" n="1"> https://pytorch.org</note>
+
+			<note place="foot" n="2"> For simplicity, we define table schema as the names of the columns in the table.</note>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Natural language interfaces to databases -an introduction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Androutsopoulos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">D</forename><surname>Ritchie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Thanisch</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Bootstrapping semantic parsers from conversations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Artzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><forename type="middle">S</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Weakly supervised learning of semantic parsers for mapping instructions to actions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Artzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><forename type="middle">S</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">TACL</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="49" to="62" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">A new database on the structure and development of the financial sector</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thorsten</forename><surname>Beck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Asli</forename><surname>Demirgüç-Kunt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ross</forename><surname>Levine</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The World Bank Economic Review</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="597" to="605" />
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Neural combinatorial optimization with reinforcement learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Irwan</forename><surname>Bello</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hieu</forename><surname>Pham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc</forename><forename type="middle">V</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohammad</forename><surname>Norouzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samy</forename><surname>Bengio</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Semantic parsing on freebase from question-answer pairs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename><surname>Berant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Chou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roy</forename><surname>Frostig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Methods for exploring and mining tables on wikipedia</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chandra</forename><surname>Bhagavatula</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thanapon</forename><surname>Noraset</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Doug</forename><surname>Downey</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IDEA@KDD</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Large-scale semantic parsing via schema matching and lexicon extension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qingqing</forename><surname>Cai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><surname>Yates</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Language to logical form with neural attention</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Dong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mirella</forename><surname>Lapata</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>ACL</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Translating questions to SQL queries with generative parsers discriminatively reranked</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandra</forename><surname>Giordani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Moschitti</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COLING</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Incorporating copying mechanism in sequence-to-sequence learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiatao</forename><surname>Gu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hang</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><forename type="middle">O K</forename><surname>Li</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>ACL</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">From language to programs: Bridging reinforcement learning and maximum marginal likelihood</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kelvin</forename><surname>Guu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Panupong</forename><surname>Pasupat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Evan</forename><forename type="middle">Zheran</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuma</forename><surname>Hashimoto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshimasa</forename><surname>Tsuruoka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno>cs.CL 1611.01587</idno>
+		<title level="m">A Joint Many-Task Model: Growing a Neural Network for Multiple NLP Tasks. arXiv</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Can electronic medical record systems transform health care? potential health benefits, savings, and costs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Hillestad</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bigelow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anthony</forename><surname>Bower</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Federico</forename><surname>Girosi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robin</forename><surname>Meili</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Scoville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roger</forename><surname>Taylor</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+			<publisher>Health affairs</publisher>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="page" from="1103" to="1117" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jurgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Learning a neural semantic parser from user feedback</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Srinivasan</forename><surname>Iyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ioannis</forename><surname>Konstas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alvin</forename><surname>Cheung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jayant</forename><surname>Krishnamurthy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Diederik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ba</surname></persName>
+		</author>
+		<idno>arXiv, abs/1412.6980</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Neural symbolic machines: Learning semantic parsers on freebase with weak supervision</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chen</forename><surname>Liang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename><surname>Berant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc</forename><forename type="middle">V</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ken</forename><surname>Forbus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ni</forename><surname>Lao</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Learning dependency-based compositional semantics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><forename type="middle">I</forename><surname>Jordan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">39</biblScope>
+			<biblScope unit="page" from="389" to="446" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">The Stanford CoreNLP natural language processing toolkit</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mihai</forename><surname>Surdeanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Bauer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jenny</forename><surname>Finkel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><forename type="middle">J</forename><surname>Bethard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Mcclosky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Association for Computational Linguistics (ACL) System Demonstrations</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="55" to="60" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Pointer sentinel mixture models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Coupling distributed and symbolic execution for natural language queries</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lili</forename><surname>Mou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hang</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhi</forename><surname>Jin</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Learning a natural language interface with neural programmer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arvind</forename><surname>Neelakantan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Quoc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martín</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Abadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dario</forename><surname>Mccallum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Amodei</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Application of data mining techniques in customer relationship management: A literature review and classification. Expert systems with applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">T</forename><surname>Eric</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Ngai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dorothy Ck</forename><surname>Xiu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Chau</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="volume">36</biblScope>
+			<biblScope unit="page" from="2592" to="2602" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Compositional semantic parsing on semi-structured tables</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Panupong</forename><surname>Pasupat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Towards a theory of natural language interfaces to databases</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ana-Maria</forename><surname>Popescu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oren</forename><surname>Etzioni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Henry</forename><surname>Kautz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 8th International Conference on Intelligent User Interfaces</title>
+		<meeting>the 8th International Conference on Intelligent User Interfaces</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="149" to="157" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Evaluation of spoken language systems: The ATIS domain</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Patti</forename><forename type="middle">J</forename><surname>Price</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Large-scale semantic parsing without questionanswer pairs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Siva</forename><surname>Reddy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mirella</forename><surname>Lapata</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Steedman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">TACL</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="377" to="392" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Gradient estimation using stochastic computation graphs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Schulman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Heess</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Theophane</forename><surname>Weber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pieter</forename><surname>Abbeel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+		<title level="m" type="main">Bidirectional attention flow for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Min Joon</forename><surname>Seo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aniruddha</forename><surname>Kembhavi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ali</forename><surname>Farhadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hannaneh</forename><surname>Hajishirzi</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Dropout: a simple way to prevent neural networks from overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<title level="m" type="main">Joint learning of ontology and semantic parser from text. Intelligent Data Analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Janez</forename><surname>Starc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dunja</forename><surname>Mladenic</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="page" from="19" to="38" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Policy gradient methods for reinforcement learning with function approximation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><forename type="middle">A</forename><surname>Richard S Sutton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mcallester</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Satinder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yishay</forename><surname>Singh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mansour</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="1057" to="1063" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Using multiple clause constructors in inductive logic programming for semantic parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Lappoon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raymond</forename><forename type="middle">J</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mooney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ECML</title>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Pointer networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Meire</forename><surname>Fortunato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Navdeep</forename><surname>Jaitly</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Building a semantic parser overnight</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yushi</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename><surname>Berant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Learning synchronous grammars for semantic parsing with lambda calculus</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuk</forename><forename type="middle">Wah</forename><surname>Wong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raymond</forename><forename type="middle">J</forename><surname>Mooney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<monogr>
+		<title level="m" type="main">Dynamic coattention networks for question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Neural enquirer: Learning to query tables</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pengcheng</forename><surname>Yin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hang</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ben</forename><surname>Kao</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Learning to parse database queries using inductive logic programming</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>John</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raymond</forename><forename type="middle">J</forename><surname>Zelle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mooney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI/IAAI</title>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="volume">2</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Learning to map sentences to logical form: Structured classification with probabilistic categorial grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><forename type="middle">S</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Uncertainty in Artificial Intelligence</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Online learning of relaxed ccg grammars for parsing to logical form</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><forename type="middle">S</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP-CoNLL</title>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

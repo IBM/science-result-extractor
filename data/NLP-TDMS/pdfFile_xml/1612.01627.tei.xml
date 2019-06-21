@@ -1,0 +1,980 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:58+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Sequential Matching Network: A New Architecture for Multi-turn Response Selection in Retrieval-Based Chatbots</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yu</forename><surname>Wu</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="laboratory">State Key Lab of Software Development Environment</orgName>
+								<orgName type="institution">Beihang University</orgName>
+								<address>
+									<settlement>Beijing</settlement>
+									<country key="CN">China</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Wu</surname></persName>
+							<affiliation key="aff2">
+								<orgName type="institution">Microsoft Research</orgName>
+								<address>
+									<settlement>Beijing</settlement>
+									<country key="CN">China</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chen</forename><surname>Xing</surname></persName>
+							<affiliation key="aff1">
+								<orgName type="department">College of Computer and Control Engineering</orgName>
+								<orgName type="institution">Nankai University</orgName>
+								<address>
+									<settlement>Tianjin</settlement>
+									<country key="CN">China</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhoujun</forename><surname>Li</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="laboratory">State Key Lab of Software Development Environment</orgName>
+								<orgName type="institution">Beihang University</orgName>
+								<address>
+									<settlement>Beijing</settlement>
+									<country key="CN">China</country>
+								</address>
+							</affiliation>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Zhou</surname></persName>
+							<email>mingzhou@microsoft.com</email>
+							<affiliation key="aff2">
+								<orgName type="institution">Microsoft Research</orgName>
+								<address>
+									<settlement>Beijing</settlement>
+									<country key="CN">China</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Sequential Matching Network: A New Architecture for Multi-turn Response Selection in Retrieval-Based Chatbots</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We study response selection for multi-turn conversation in retrieval-based chat-bots. Existing work either concatenates utterances in context or matches a response with a highly abstract context vector finally , which may lose relationships among utterances or important contextual information. We propose a sequential matching network (SMN) to address both problems. SMN first matches a response with each utterance in the context on multiple levels of granularity, and distills important matching information from each pair as a vector with convolution and pooling operations. The vectors are then accumulated in a chronological order through a recurrent neural network (RNN) which models relationships among utterances. The final matching score is calculated with the hidden states of the RNN. An empirical study on two public data sets shows that SMN can significantly outperform state-of-the-art methods for response selection in multi-turn conversation.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Conversational agents include task-oriented dialog systems and non-task-oriented chatbots. Dialog systems focus on helping people complete specific tasks in vertical domains ( <ref type="bibr" target="#b30">Young et al., 2010)</ref>, while chatbots aim to naturally and meaningfully converse with humans on open domain topics ( <ref type="bibr" target="#b11">Ritter et al., 2011</ref>). Existing work on building chatbots includes generation -based methods and retrieval-based methods. Retrieval based chatbots enjoy the advantage of informative and fluent responses, because they select a proper response for * Corresponding Author Context utterance 1 Human: How are you doing? utterance 2 ChatBot: I am going to hold a drum class in Shanghai.</p><p>Anyone wants to join? The location is near Lujiazui. utterance 3 Human: Interesting! Do you have coaches who can help me practice drum? utterance 4 ChatBot: Of course. utterance 5 Human: Can I have a free first lesson?</p><p>Response Candidates response 1</p><p>Sure. Have you ever played drum before? response 2</p><p>What lessons do you want? <ref type="table">Table 1</ref>: An example of multi-turn conversation the current conversation from a repository with response selection algorithms. While most existing work on retrieval-based chatbots studies response selection for single-turn conversation ( <ref type="bibr" target="#b21">Wang et al., 2013</ref>) which only considers the last input message, we consider the problem in a multi-turn scenario.</p><p>In a chatbot, multi-turn response selection takes a message and utterances in its previous turns as input and selects a response that is natural and relevant to the whole context.</p><p>The key to response selection lies in inputresponse matching. Different from single-turn conversation, multi-turn conversation requires matching between a response and a conversation context in which one needs to consider not only the matching between the response and the input message but also matching between responses and utterances in previous turns. The challenges of the task include (1) how to identify important information (words, phrases, and sentences) in context, which is crucial to selecting a proper response and leveraging relevant information in matching; and (2) how to model relationships among the utterances in the context. <ref type="table">Table 1</ref> illustrates the challenges with an example. First, "hold a drum class" and "drum" in context are very important. Without them, one may find responses relevant to the message (i.e., the fifth utterance of the context) but nonsense in the context (e.g., "what lessons do you want?"). Second, the message highly depends on the second utterance in the context, and the order of the utterances matters in response selection: exchanging the third utterance and the fifth utterance may lead to different responses. Existing work, however, either ignores relationships among utterances when concatenating them together ( <ref type="bibr" target="#b9">Lowe et al., 2015)</ref>, or loses important information in context in the process of converting the whole context to a vector without enough supervision from responses (e.g., by a hierarchical RNN ( ).</p><p>We propose a sequential matching network (SMN), a new context based matching model that can tackle both challenges in an end-to-end way. The reason that existing models lose important information in the context is that they first represent the whole context as a vector and then match the context vector with a response vector. Thus, responses in these models connect with the context until the final step in matching. To avoid information loss, SMN matches a response with each utterance in the context at the beginning and encodes important information in each pair into a matching vector. The matching vectors are then accumulated in the utterances' temporal order to model their relationships. The final matching degree is computed with the accumulation of the matching vectors. Specifically, for each utterance-response pair, the model constructs a word-word similarity matrix and a sequence-sequence similarity matrix by the word embeddings and the hidden states of a recurrent neural network with gated recurrent units (GRU) ( <ref type="bibr" target="#b1">Chung et al., 2014</ref>) respectively. The two matrices capture important matching information in the pair on a word level and a segment (word subsequence) level respectively, and the information is distilled and fused as a matching vector through an alternation of convolution and pooling operations on the matrices. By this means, important information from multiple levels of granularity in context is recognized under sufficient supervision from the response and carried into matching with minimal loss. The matching vectors are then uploaded to another GRU to form a matching score for the context and the response. The GRU accumulates the pair matching in its hidden states in the chronological order of the utterances in context. It models relationships and dependencies among the utterances in a matching fashion and has the utterance order supervise the accumulation of pair matching. The matching degree of the context and the response is computed by a logit model with the hidden states of the GRU. SMN extends the powerful "2D" matching paradigm in text pair matching for single-turn conversation to context based matching for multi-turn conversation, and enjoys the advantage of both important information in utterance-response pairs and relationships among utterances being sufficiently preserved and leveraged in matching.</p><p>We test our model on the Ubuntu dialogue corpus ( <ref type="bibr" target="#b9">Lowe et al., 2015)</ref> which is a large scale publicly available English data set for research in multi-turn conversation. The results show that our model can significantly outperform state-ofthe-art methods, and improvement to the best baseline model on R 10 @1 is over 6%. In addition to the Ubuntu corpus, we create a human-labeled Chinese data set, namely the Douban Conversation Corpus, and test our model on it. In contrast to the Ubuntu corpus in which data is collected from a specific domain and negative candidates are randomly sampled, conversations in this data come from the open domain, and response candidates in this data set are collected from a retrieval engine and labeled by three human judges. On this data, our model improves the best baseline model by 3% on R 10 @1 and 4% on P@1. As far as we know, Douban Conversation Corpus is the first human-labeled data set for multi-turn response selection and could be a good complement to the Ubuntu corpus. We have released Douban Conversation Corups and our source code at https://github.com/MarkWuNLP/ MultiTurnResponseSelection Our contributions in this paper are three-folds: (1) the proposal of a new context based matching model for multi-turn response selection in retrieval-based chatbots; (2) the publication of a large human-labeled data set to research communities; (3) empirical verification of the effectiveness of the model on public data sets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>Recently, building a chatbot with data driven approaches ( <ref type="bibr" target="#b11">Ritter et al., 2011;</ref><ref type="bibr" target="#b4">Ji et al., 2014</ref>) has drawn significant attention. Existing work along this line includes retrieval-based methods ( <ref type="bibr" target="#b3">Hu et al., 2014;</ref><ref type="bibr" target="#b4">Ji et al., 2014;</ref><ref type="bibr" target="#b25">Wu et al., 2016b;</ref><ref type="bibr" target="#b24">Wu et al., 2016a</ref>) and generation-based methods <ref type="bibr" target="#b14">(Shang et al., 2015;</ref><ref type="bibr" target="#b18">Vinyals and Le, 2015;</ref><ref type="bibr" target="#b14">Li et al., 2015</ref><ref type="bibr" target="#b8">Li et al., , 2016</ref>   <ref type="bibr" target="#b13">Serban et al., 2016)</ref>. Our work is a retrievalbased method, in which we study context-based response selection.</p><p>Early studies of retrieval-based chatbots focus on response selection for single-turn conversation ( <ref type="bibr" target="#b21">Wang et al., 2013;</ref><ref type="bibr" target="#b4">Ji et al., 2014;</ref><ref type="bibr" target="#b25">Wu et al., 2016b)</ref>. Recently, researchers have begun to pay attention to multi-turn conversation. For example, <ref type="bibr" target="#b9">Lowe et al. (2015)</ref> match a response with the literal concatenation of context utterances.  concatenate context utterances with the input message as reformulated queries and perform matching with a deep neural network architecture.  improve multi-turn response selection with a multi-view model including an utterance view and a word view. Our model is different in that it matches a response with each utterance at first and accumulates matching information instead of sentences by a GRU, thus useful information for matching can be sufficiently retained.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Sequential Matching Network</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Problem Formalization</head><p>Suppose that we have a data set</p><formula xml:id="formula_0">D = {(y i , s i , r i )} N i=1</formula><p>, where s i = {u i,1 , . . . , u i,n i } represents a conversation context with {u i,k } n i k=1 as utterances. r i is a response candidate and y i ∈ {0, 1} denotes a label. y i = 1 means r i is a proper response for s i , otherwise y i = 0. Our goal is to learn a matching model g(·, ·) with D. For any context-response pair (s, r), g(s, r) measures the matching degree between s and r.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Model Overview</head><p>We propose a sequential matching network (SMN) to model g(·, ·). <ref type="figure" target="#fig_0">Figure 1</ref> gives the architecture. SMN first decomposes context-response matching into several utterance-response pair matching and then all pairs matching are accumulated as a context based matching through a recurrent neural network. SMN consists of three layers. The first layer matches a response candidate with each utterance in the context on a word level and a segment level, and important matching information from the two levels is distilled by convolution, pooling and encoded in a matching vector. The matching vectors are then fed into the second layer where they are accumulated in the hidden states of a recurrent neural network with GRU following the chronological order of the utterances in the context. The third layer calculates the final matching score with the hidden states of the second layer. SMN enjoys several advantages over existing models. First, a response candidate can match each utterance in the context at the very beginning, thus matching information in every utteranceresponse pair can be sufficiently extracted and carried to the final matching score with minimal loss. Second, information extraction from each utterance is conducted on different levels of granularity and under sufficient supervision from the response, thus semantic structures that are useful for response selection in each utterance can be well identified and extracted. Third, matching and utterance relationships are coupled rather than separately modeled, thus utterance relationships (e.g., order), as a kind of knowledge, can supervise the formation of the matching score.</p><p>By taking utterance relationships into account, SMN extends the "2D" matching that has proven effective in text pair matching for single-turn response selection to sequential "2D" matching for context based matching in response selection for multi-turn conversation. In the following sections, we will describe details of the three layers.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Utterance-Response Matching</head><p>Given an utterance u in a context s and a response candidate r, the model looks up an embedding table and represents u and r as U = [e u,1 , . . . , e u,nu ] and R = [e r,1 , . . . , e r,nr ] respectively, where e u,i , e r,i ∈ R d are the embeddings of the i-th word of u and r respectively. U ∈ R d×nu and R ∈ R d×nr are then used to construct a word-word similarity matrix M 1 ∈ R nu×nr and a sequence-sequence similarity matrix M 2 ∈ R nu×nr which are two input channels of a convolutional neural network (CNN). The CNN distills important matching information from the matrices and encodes the information into a matching vector v.</p><p>Specifically, ∀i, j, the (i, j)-th element of M 1 is defined by</p><formula xml:id="formula_1">e1,i,j = e u,i · er,j.<label>(1)</label></formula><p>M 1 models the matching between u and r on a word level.</p><p>To construct M 2 , we first employ a GRU to transform U and R to hidden vectors. Suppose that H u = [h u,1 , . . . , h u,nu ] are the hidden vectors of U, then ∀i, h u,i ∈ R m is defined by</p><formula xml:id="formula_2">zi = σ(Wzeu,i + Uzhu,i−1) ri = σ(Wreu,i + Urhu,i−1) hu,i = tanh(W h eu,i + U h (ri hu,i−1)) hu,i = zi hu,i + (1 − zi) hu,i−1,<label>(2)</label></formula><p>where h u,0 = 0, z i and r i are an update gate and a reset gate respectively, σ(·) is a sigmoid function, and</p><formula xml:id="formula_3">W z , W h , W r , U z , U r ,U h are parameters.</formula><p>Similarly, we have H r = [h r,1 , . . . , h r,nr ] as the hidden vectors of R. Then, ∀i, j, the (i, j)-th element of M 2 is defined by</p><formula xml:id="formula_4">e2,i,j = h u,i Ahr,j,<label>(3)</label></formula><p>where A ∈ R m×m is a linear transformation. ∀i, GRU models the sequential relationship and the dependency among words up to position i and encodes the text segment until the i-th word to a hidden vector. Therefore, M 2 models the matching between u and r on a segment level. M 1 and M 2 are then processed by a CNN to form v. ∀f = 1, 2, CNN regards M f as an input channel, and alternates convolution and max-pooling operations. Suppose that z (l,f ) = z</p><formula xml:id="formula_5">(l,f ) i,j I (l,f ) ×J (l,f )</formula><p>denotes the output of feature maps of type-f on layer-l, where z (0,f ) = M f , ∀f = 1, 2. On the convolution layer, we employ a 2D convolution operation with a window size r</p><formula xml:id="formula_6">(l,f ) w × r (l,f ) h</formula><p>, and define z</p><formula xml:id="formula_7">(l,f ) i,j as z (l,f ) i,j = σ( F l−1 f =0 r (l,f ) w s=0 r (l,f ) h t=0 W (l,f ) s,t · z (l−1,f ) i+s,j+t + b l,k ),<label>(4)</label></formula><p>where</p><formula xml:id="formula_8">σ(·) is a ReLU, W (l,f ) ∈ R r (l,f ) w ×r (l,f ) h</formula><p>and b l,k are parameters, and F l−1 is the number of feature maps on the (l − 1)-th layer. A max pooling operation follows a convolution operation and can be formulated as</p><formula xml:id="formula_9">z (l,f ) i,j = max p (l,f ) w &gt;s≥0 max p (l,f ) h &gt;t≥0 zi+s,j+t,<label>(5)</label></formula><p>where p</p><formula xml:id="formula_10">(l,f ) w and p (l,f ) h</formula><p>are the width and the height of the 2D pooling respectively. The output of the final feature maps are concatenated and mapped to a low dimensional space with a linear transformation as the matching vector v ∈ R q .</p><p>According to Equation <ref type="formula" target="#formula_1">(1)</ref>, <ref type="formula" target="#formula_4">(3)</ref>, <ref type="formula" target="#formula_7">(4)</ref>, and (5), we can see that by learning word embedding and parameters of GRU from training data, words or segments in an utterance that are useful for recognizing the appropriateness of a response may have high similarity with some words or segments in the response and result in high value areas in the similarity matrices. These areas will be transformed and selected by convolution and pooling operations and carry important information in the utterance to the matching vector. This is how our model identifies important information in context and leverage it in matching under the supervision of the response. We consider multiple channels because we want to capture important matching information on multiple levels of granularity of text.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Matching Accumulation</head><p>Suppose that [v 1 , . . . , v n ] is the output of the first layer (corresponding to n pairs), at the second layer, a GRU takes [v 1 , . . . , v n ] as an input and encodes the matching sequence into its hidden states H m = [h 1 , . . . , h n ] ∈ R q×n with a detailed parameterization similar to Equation (2). This layer has two functions: (1) it models the dependency and the temporal relationship of utterances in the context; (2) it leverages the temporal relationship to supervise the accumulation of the pair matching as a context based matching. Moreover, from Equation (2), we can see that the reset gate (i.e., r i ) and the update gate (i.e., z i ) control how much information from the previous hidden state and the current input flows to the current hidden state, thus important matching vectors (corresponding to important utterances) can be accumulated while noise in the vectors can be filtered out.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Matching Prediction and Learning</head><p>With [h 1 , . . . , h n ], we define g(s, r) as</p><formula xml:id="formula_11">g(s, r) = sof tmax(W2L[h 1 , . . . , h n ] + b2),<label>(6)</label></formula><p>where W 2 and b 2 are parameters. We consider three parameterizations for <ref type="bibr">et al., 2016)</ref> and employ an attention mechanism to combine the hidden states. Then,</p><formula xml:id="formula_12">L[h 1 , . . . , h n ]: (1) only the last hidden state is used. Then L[h 1 , . . . , h n ] = h n . (2) the hidden states are linearly combined. Then, L[h 1 , . . . , h n ] = n i=1 w i h i , where w i ∈ R. (3) we follow (Yang</formula><formula xml:id="formula_13">L[h 1 , . . . , h n ] is defined as ti = tanh(W1,1hu i ,nu + W1,2h i + b1), αi = exp(t i ts) i (exp(t i ts)) , L[h 1 , . . . , h n ] = n i=1 αih i ,<label>(7)</label></formula><p>where W 1,1 ∈ R q×m , W 1,2 ∈ R q×q and b 1 ∈ R q are parameters. h i and h u i ,nu are the i-th matching vector and the final hidden state of the i-th utterance respectively. t s ∈ R q is a virtual context vector which is randomly initialized and jointly learned in training.</p><p>Both <ref type="formula" target="#formula_2">(2)</ref> and <ref type="formula" target="#formula_4">(3)</ref>   </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Response Candidate Retrieval</head><p>In practice, a retrieval-based chatbot, to apply the matching approach to the response selection, one needs to retrieve a number of response candidates from an index beforehand. While candidate retrieval is not the focus of the paper, it is an important step in a real system. In this work, we exploit a heuristic method to obtain response candidates from the index. Given a message u n with {u 1 , . . . , u n−1 } utterances in its previous turns, we extract the top 5 keywords from {u 1 , . . . , u n−1 } based on their tf-idf scores 1 and expand u n with the keywords. Then we send the expanded message to the index and retrieve response candidates using the inline retrieval algorithm of the index. Finally, we use g(s, r) to rerank the candidates and return the top one as a response to the context.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Experiments</head><p>We tested our model on a publicly available English data set and a Chinese data set published with this paper.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Ubuntu Corpus</head><p>The English data set is the Ubuntu Corpus ( <ref type="bibr" target="#b9">Lowe et al., 2015</ref>) which contains multi-turn dialogues collected from chat logs of the Ubuntu Forum. The data set consists of 1 million context-response pairs for training, 0.5 million pairs for validation, and 0.5 million pairs for testing. Positive responses are true responses from humans, and negative ones are randomly sampled. The ratio of the positive and the negative is 1:1 in training, and 1:9 in validation and testing. We used the copy shared by   <ref type="bibr">2</ref> in which numbers, urls, and paths are replaced by special placeholders. We followed ( <ref type="bibr" target="#b9">Lowe et al., 2015)</ref> and employed recall at position k in n candidates (R n @k) as evaluation metrics.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Douban Conversation Corpus</head><p>The Ubuntu Corpus is a domain specific data set, and response candidates are obtained from negative sampling without human judgment. To further verify the efficacy of our model, we created a new data set with open domain conversations, called the Douban Conversation Corpus. Response candidates in the test set of the Douban Conversation Corpus are collected following the procedure of a retrieval-based chatbot and are labeled by human judges. It simulates the real scenario of a retrievalbased chatbot. We publish it to research communities to facilitate the research of multi-turn response selection.</p><p>Specifically, we crawled 1.1 million dyadic dialogues (conversation between two persons) longer than 2 turns from Douban group 3 which is a popular social networking service in China. We randomly sampled 0.5 million dialogues for creating a training set, 25 thousand dialouges for creating a validation set, and 1, 000 dialogues for creating a test set, and made sure that there is no overlap between the three sets. For each dialogue in training and validation, we took the last turn as a positive response for the previous turns as a context and randomly sampled another response from the 1.1 million data as a negative response. There are 1 million context-response pairs in the training set and 50 thousand pairs in the validation set.</p><p>To create the test set, we first crawled 15 million post-reply pairs from Sina Weibo 4 which is the largest microblogging service in China and indexed the pairs with Lucene <ref type="bibr">5</ref> . We took the last turn of each Douban dyadic dialogue in the test set as a message, retrieved 10 response candidates from the index following the method in Section 4, and finally formed a test set with 10, 000 context-response pairs. We recruited three labelers to judge if a candidate is a proper response to the context. A proper response means the response can naturally reply to the message given the whole context. Each pair received three labels and the majority of the labels were taken as the final decision. <ref type="table" target="#tab_3">Table 2</ref> gives the statistics of the three sets. Note that the Fleiss' kappa <ref type="bibr" target="#b2">(Fleiss, 1971)</ref> of the labeling is 0.41, which indicates that the three labelers reached a relatively high agreement.</p><p>Besides R n @ks, we also followed the conven-   <ref type="bibr">et al., 1999)</ref>, and precision at position 1 (P@1) as evaluation metrics. We did not calculate R 2 @1 because in Douban corpus one context could have more than one correct responses, and we have to randomly sample one for R 2 @1, which may bring bias to evaluation. When using the labeled set, we removed conversations with all negative responses or all positive responses, as models make no difference with them. There are 6, 670 contextresponse pairs left in the test set.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Baseline</head><p>We considered the following baselines:</p><p>Basic models: models in (Lowe et al., 2015) and ( <ref type="bibr" target="#b5">Kadlec et al., 2015)</ref> including TF-IDF, RNN, CNN, LSTM and BiLSTM.</p><p>Multi-view: the model proposed by  that utilizes a hierarchical recurrent neural network to model utterance relationships.</p><p>Deep learning to respond (DL2R): the model proposed by  that reformulates the message with other utterances in the context.</p><p>Advanced single-turn matching models: since BiLSTM does not represent the state-ofthe-art matching model, we concatenated the utterances in a context and matched the long text with a response candidate using more powerful models including MV-LSTM ( <ref type="bibr" target="#b20">Wan et al., 2016</ref>) (2D matching), Match-LSTM ( <ref type="bibr" target="#b23">Wang and Jiang, 2015)</ref>, Attentive-LSTM ( <ref type="bibr" target="#b16">Tan et al., 2015</ref>) (two attention based models), and Multi-Channel which is described in Section 3.3. Multi-Channel is a simple version of our model without considering utterance relationships. We also appended the top 5 tf-idf words in context to the input message, and computed the score between the expanded message and a response with Multi-Channel, denoted as Multi-Channel exp . <ref type="table" target="#tab_3">R2@1 R10@1 R10@2 R10@5 MAP MRR  P@1  R10@1 R10@2 R10@5  TF-IDF  0.</ref>  <ref type="table">Table 3</ref>: Evaluation results on the two data sets. Numbers in bold mean that the improvement is statistically significant compared with the best baseline.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Ubuntu Corpus</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Douban Conversation Corpus</head><note type="other">0.899 0.626 0.783 0.944 0.488 0.527 0.330 0.193 0.342 0.705 MV-LSTM 0.906 0.653 0.804 0.946 0.498 0.538 0.348 0.202 0.351 0.710 Match-LSTM 0.904 0.653 0.799 0.944 0.500 0.537 0.345 0.202 0.348 0.720 Attentive-LSTM 0.903 0.633 0.789 0.943 0.495 0.523 0.331 0.192 0.328 0.718 Multi-Channel 0.904 0.656 0.809 0.942 0.506 0.543 0.349 0.203 0.351 0.709 Multi-Channelexp 0.714 0.368 0.497 0.745 0.476 0.515 0.317 0.179 0.335 0.691 SMN last 0.923 0.723 0.842 0.956 0.526 0.571 0.393 0.236 0.387 0.729 SMNstatic 0.927 0.725 0.838 0.962 0.523 0.572 0.387 0.228 0.387 0.734 SMN dynamic 0.926 0.726 0.847 0.961 0.529 0.569 0.397 0.233 0.396 0.724</note></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Parameter Tuning</head><p>For baseline models, if their results are available in existing literature (e.g., those on the Ubuntu corpus), we just copied the numbers, otherwise we implemented the models following the settings in the literatures. All models were implemented using Theano <ref type="bibr">(Theano Development Team, 2016)</ref>. Word embeddings were initialized by the results of word2vec ( <ref type="bibr" target="#b10">Mikolov et al., 2013</ref>) which ran on the training data, and the dimensionality of word vectors is 200. For Multi-Channel and layer one of our model, we set the dimensionality of the hidden states of GRU as 200. We tuned the window size of convolution and pooling in {(2, 2), (3, 3)(4, 4)} and chose (3, 3) finally. The number of feature maps is 8. In layer two, we set the dimensionality of matching vectors and the hidden states of GRU as 50. The parameters were updated by stochastic gradient descent with Adam algorithm <ref type="bibr" target="#b6">(Kingma and Ba, 2014</ref>) on a single Tesla K80 GPU. The initial learning rate is 0.001, and the parameters of Adam, β 1 and β 2 are 0.9 and 0.999 respectively. We employed early-stopping as a regularization strategy. Models were trained in minibatches with a batch size of 200, and the maximum utterance length is 50. We set the maximum context length (i.e., number of utterances) as 10, because the performance of models does not improve on contexts longer than 10 (details are shown in the Section 5.6). We padded zeros if the number of utterances in a context is less than 10, otherwise we kept the last 10 utterances. <ref type="table">Table 3</ref> shows the evaluation results on the two data sets. Our models outperform baselines greatly in terms of all metrics on both data sets, with the improvements being statistically significant (t-test with p-value ≤ 0.01, except R 10 @5 on Douban Corpus). Even the state-of-the-art singleturn matching models perform much worse than our models. The results demonstrate that one cannot neglect utterance relationships and simply perform multi-turn response selection by concatenating utterances together. Our models achieve significant improvements over Multi-View, which justified our "matching first" strategy. DL2R is worse than our models, indicating that utterance reformulation with heuristic rules is not a good method for utilizing context information. R n @ks are low on the Douban Corpus as there are multiple correct candidates for a context (e.g., if there are 3 correct responses, then the maximum R 10 @1 is 0.33). SMN dynamic is only slightly better than SMN static and SMN last . The reason might be that the GRU can select useful signals from the matching sequence and accumulate them in the final state with its gate mechanism, thus the efficacy of an attention mechanism is not obvious for the task at hand.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.5">Evaluation Results</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.6">Further Analysis</head><p>Visualization: we visualize the similarity matrices and the gates of GRU in layer two using an example from the Ubuntu corpus to further clarify how our model identifies important information in the context and how it selects important matching vectors with the gate mechanism of GRU as described in Section 3.3 and Section 3.   in the same directory? u 5 : yes they all are; r: then the command glebihan should extract them all from/to that directory}. It is from the test set and our model successfully ranked the correct response to the top position. Due to space limitation, we only visualized M 1 , M 2 and the update gate (i.e. z) in <ref type="figure" target="#fig_2">Figure 2</ref>. We can see that in u 1 important words including "unzip", "rar", "files" are recognized and carried to matching by "command", "extract", and "directory" in r, while u 3 is almost useless and thus little information is extracted from it. u 1 is crucial to response selection and nearly all information from u 1 and r flows to the hidden state of GRU, while other utterances are less informative and the corresponding gates are almost "closed" to keep the information from u 1 and r until the final state.</p><p>Model ablation: we investigate the effect of different parts of SMN by removing them one by one from SMN last , shown in <ref type="table" target="#tab_6">Table 4</ref>. First, replacing the multi-channel "2D" matching with a neural tensor network (NTN) <ref type="bibr" target="#b15">(Socher et al., 2013</ref>) (denoted as Replace M ) makes the performance drop dramatically. This is because NTN only matches a pair by an utterance vector and a response vector and loses important information in the pair. Together with the visualization, we can conclude that "2D" matching plays a key role in the "matching first" strategy as it captures the important matching information in each pair with minimal loss. Second, the performance drops slightly when replacing the GRU for matching accumulation with a multi-layer perceptron (denoted as Replace A ). This indicates that utterance relationships are useful. Finally, we left only one channel in matching and found that M 2 is a little more powerful than M 1 and we achieve the best results with both of them (except on R 10 @5 on the Douban Corpus).</p><p>Performance across context length: we study how our model (SMN last ) performs across the length of contexts. <ref type="figure" target="#fig_3">Figure 3</ref> shows the comparison on MAP in different length intervals on the Douban corpus. Our model consistently performs better than the baselines, and when contexts become longer, the gap becomes larger. The results demonstrate that our model can well capture the dependencies, especially long dependencies, among utterances in contexts.  <ref type="figure" target="#fig_4">Figure 4</ref> shows the performance of SMN on Ubuntu Corpus and Douban Corpus with respect to maximum context length. From <ref type="figure" target="#fig_4">Figure 4</ref>, we find that performance improves significantly when the maximum context length is lower than 5, and becomes stable after the context length reaches 10. This indicates that context information is important for multi-turn response selection, and we can set the maximum context length as 10 to balance effectiveness and efficiency.</p><p>Error analysis: although SMN outperforms baseline methods on the two data sets, there are (1) Logical consistency. SMN models the context and response on the semantic level, but pays little attention to logical consistency. This leads to several DSATs in the Douban Corpus. For example, given a context {a: Does anyone know Newton jogging shoes? b: 100 RMB on Taobao. a: I know that. I do not want to buy it because that is a fake which is made in Qingdao ,b: Is it the only reason you do not want to buy it? }, SMN gives a large score to the response { It is not a fake. I just worry about the date of manufacture}. The response is inconsistent with the context on logic, as it claims that the jogging shoes are not fake. In the future, we shall explore the logic consistency problem in retrieval-based chatbots.</p><p>(2) No correct candidates after retrieval. In the experiment, we prepared 1000 contexts for testing, but only 667 contexts have correct candidates after candidate response retrieval. This indicates that there is still room for candidate retrieval components to improve, and only expanding the input message with several keywords in context may not be a perfect approach for candidate retrieval. In the future, we will consider advanced methods for retrieving candidates.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Conclusion and Future Work</head><p>We present a new context based model for multiturn response selection in retrieval-based chatbots.</p><p>Experiment results on open data sets show that the model can significantly outperform the stateof-the-art methods. Besides, we publish the first human-labeled multi-turn response selection data set to research communities. In the future, we shall study how to model logical consistency of responses and improve candidate retrieval.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Architecture of SMN 2016; Serban et al., 2016). Our work is a retrievalbased method, in which we study context-based response selection. Early studies of retrieval-based chatbots focus on response selection for single-turn conversation (Wang et al., 2013; Ji et al., 2014; Wang et al., 2015; Wu et al., 2016b). Recently, researchers have begun to pay attention to multi-turn conversation. For example, Lowe et al. (2015) match a response with the literal concatenation of context utterances. Yan et al. (2016) concatenate context utterances with the input message as reformulated queries and perform matching with a deep neural network architecture. Zhou et al. (2016) improve multi-turn response selection with a multi-view model including an utterance view and a word view. Our model is different in that it matches a response with each utterance at first and accumulates matching information instead of sentences by a GRU, thus useful information for matching can be sufficiently retained.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Model visualization. Darker areas mean larger value.</figDesc><graphic url="image-4.png" coords="8,378.83,159.49,74.26,74.01" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Comparison across context length Maximum context length: we investigate the influence of maximum context length for SMN. Figure 4 shows the performance of SMN on Ubuntu Corpus and Douban Corpus with respect to maximum context length. From Figure 4, we find that performance improves significantly when the maximum context length is lower than 5, and becomes stable after the context length reaches 10. This indicates that context information is important for multi-turn response selection, and we can set the maximum context length as 10 to balance effectiveness and efficiency. Error analysis: although SMN outperforms baseline methods on the two data sets, there are</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Performance of SMN across maximum context length</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head>;1 n u  n u r Word Embedding GRU1 GRU2 .... 1 v 1 n v  n v 1 ' n h </head><label></label><figDesc></figDesc><table>Xing et al., 
+
+.... 
+.... 
+.... 
+
+Score 
+
+1 
+2 
+
+, 
+M M 
+
+Convolution 
+Pooling 
+
+( ) 
+L 
+
+.... 
+.... 
+.... 
+
+1 
+
+u 
+
+Utterance-Response Matching 
+(First Layer) 
+
+Matching Accumulation 
+(Second Layer) 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Statistics of Douban Conversation Corpus 
+
+tion of information retrieval and employed mean 
+average precision (MAP) (Baeza-Yates et al., 
+1999), mean reciprocal rank (MRR) (Voorhees 
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Evaluation results of model ablation. 
+
+th e n 
+th e 
+
+c o m m a n d 
+g le b ih a n 
+s h o u ld 
+e x tr a c t 
+th e m 
+a ll 
+fr o m /t o 
+th a t 
+d ir e c to r y 
+
+how 
+can 
+unzip 
+many 
+rar 
+( 
+_number_ 
+for 
+example 
+) 
+files 
+at 
+once 
+
+0.00 
+0.15 
+0.30 
+0.45 
+0.60 
+0.75 
+0.90 
+1.05 
+1.20 
+1.35 
+1.50 
+
+value 
+
+(a) M1 of u1 and r 
+
+</table></figure>
+
+			<note place="foot" n="1"> Tf is word frequency in the context, while idf is calculated using the entire index. 2 https://www.dropbox.com/s/ 2fdn26rj6h9bpvl/ubuntudata.zip?dl=0</note>
+
+			<note place="foot" n="3"> https://www.douban.com/group 4 http://weibo.com/ 5 https://lucenenet.apache.org/</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Acknowledgment</head><p>We appreciate valuable comments provided by anonymous reviewers and our discussions with Zhao Yan. This work was supported by the National Natural Science Foundation of China </p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Modern information retrieval</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ricardo</forename><surname>Baeza-Yates</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Berthier</forename><surname>Ribeiro-Neto</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1999" />
+			<publisher>ACM press New York</publisher>
+			<biblScope unit="volume">463</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junyoung</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caglar</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.3555</idno>
+		<title level="m">Empirical evaluation of gated recurrent neural networks on sequence modeling</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Measuring nominal scale agreement among many raters</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Joseph L Fleiss</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Psychological bulletin</title>
+		<imprint>
+			<biblScope unit="volume">76</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page">378</biblScope>
+			<date type="published" when="1971" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Convolutional neural network architectures for matching natural language sentences</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Baotian</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hang</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qingcai</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="2042" to="2050" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">An information retrieval approach to short text conversation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zongcheng</forename><surname>Ji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hang</forename><surname>Li</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1408.6988</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rudolf</forename><surname>Kadlec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Schmid</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1510.03753</idno>
+		<title level="m">Improved deep learning baselines for ubuntu corpus dialogs</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diederik</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Ba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6980</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiwei</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michel</forename><surname>Galley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Brockett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bill</forename><surname>Dolan</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1510.03055</idno>
+		<title level="m">A diversity-promoting objective function for neural conversation models</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">A persona-based neural conversation model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiwei</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michel</forename><surname>Galley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Brockett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bill</forename><surname>Dolan</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.06155</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Lowe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nissan</forename><surname>Pow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iulian</forename><surname>Serban</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joelle</forename><surname>Pineau</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1506.08909</idno>
+		<title level="m">The ubuntu dialogue corpus: A large dataset for research in unstructured multi-turn dialogue systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Distributed representations of words and phrases and their compositionality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="3111" to="3119" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Data-driven response generation in social media</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alan</forename><surname>Ritter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Colin</forename><surname>Cherry</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William B</forename><surname>Dolan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="583" to="593" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Building end-to-end dialogue systems using generative hierarchical neural network models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Iulian V Serban</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Sordoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joelle</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Pineau</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1507.04808</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Multiresolution recurrent neural networks: An application to dialogue response generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Iulian Vlad Serban</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gerald</forename><surname>Klinger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kartik</forename><surname>Tesauro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Talamadupula</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Courville</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.00776</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Neural responding machine for short-text conversation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lifeng</forename><surname>Shang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hang</forename><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL 2015</title>
+		<meeting><address><addrLine>Beijing, China</addrLine></address></meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2015-07-26" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1577" to="1586" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Reasoning with neural tensor networks for knowledge base completion</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Christopher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="926" to="934" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Lstmbased deep learning models for non-factoid answer selection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Tan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bing</forename><surname>Xiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Zhou</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.04108</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Theano: A Python framework for fast computation of mathematical expressions</title>
+		<idno>abs/1605.02688</idno>
+		<ptr target="http://arxiv.org/abs/1605.02688" />
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note>Theano Development Team</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc</forename><surname>Le</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1506.05869</idno>
+		<title level="m">A neural conversational model</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">The trec-8 question answering track report</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ellen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Voorhees</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Trec. volume</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="volume">99</biblScope>
+			<biblScope unit="page" from="77" to="82" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yanyan</forename><surname>Shengxian Wan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Lan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiafeng</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Liang</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xueqi</forename><surname>Pang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Cheng</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1604.04378</idno>
+		<title level="m">Match-srnn: Modeling the recursive matching structure with spatial rnn</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">A dataset for research on short-text conversations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hang</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Enhong</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="935" to="945" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mingxuan</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hang</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qun</forename><surname>Liu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1503.02427</idno>
+		<title level="m">Syntax-based deep matching of short texts</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shuohang</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jing</forename><surname>Jiang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1512.08849</idno>
+		<title level="m">Learning natural language inference with lstm</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">Ranking responses oriented to conversational relevance in chat-bots</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Baoxun</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hui</forename><surname>Xue</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">16</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Topic augmented neural network for short text conversation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yu</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhoujun</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Zhou</surname></persName>
+		</author>
+		<idno>CoRR abs/1605.00090</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Topic augmented neural response generation with a joint attention mechanism</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chen</forename><surname>Xing</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yu</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jie</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yalou</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei-Ying</forename><surname>Ma</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.08340</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Incorporating loose-structured knowledge into lstm with recall gate for conversation modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhen</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bingquan</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Baoxun</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chengjie</forename><surname>Sun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaolong</forename><surname>Wang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1605.05110</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Learning to respond with deep neural networks for retrievalbased human-computer conversation system</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rui</forename><surname>Yan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yiping</forename><surname>Song</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hua</forename><surname>Wu</surname></persName>
+		</author>
+		<idno type="doi">10.1145/2911451.2911542</idno>
+		<ptr target="https://doi.org/10.1145/2911451.2911542" />
+	</analytic>
+	<monogr>
+		<title level="m">SI-GIR 2016</title>
+		<meeting><address><addrLine>Pisa, Italy</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2016-07-17" />
+			<biblScope unit="page" from="55" to="64" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Hierarchical attention networks for document classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zichao</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diyi</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2016 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 2016 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note>Xiaodong He, Alex Smola, and Eduard Hovy</note>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">The hidden information state model: A practical framework for pomdp-based spoken dialogue management</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Young</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milica</forename><surname>Gaši´gaši´c</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Simon</forename><surname>Keizer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">François</forename><surname>Mairesse</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jost</forename><surname>Schatzmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Blaise</forename><surname>Thomson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Yu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Speech &amp; Language</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="150" to="174" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">Multiview response selection for human-computer conversation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiangyang</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daxiang</forename><surname>Dong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hua</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shiqi</forename><surname>Zhao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Yan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuan</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tian</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">16</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

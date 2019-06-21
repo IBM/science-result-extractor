@@ -1,0 +1,846 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:49+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">DYNAMIC EVALUATION OF NEURAL SEQUENCE MODELS</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ben</forename><surname>Krause</surname></persName>
+							<email>ben.krause@ed.ac.uk</email>
+							<affiliation key="aff0">
+								<orgName type="department">School of Informatics</orgName>
+								<orgName type="institution">University of Edinburgh Edinburgh</orgName>
+								<address>
+									<country key="GB">Scotland, UK</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emmanuel</forename><surname>Kahembwe</surname></persName>
+							<email>e.kahembwe@ed.ac.uk</email>
+							<affiliation key="aff0">
+								<orgName type="department">School of Informatics</orgName>
+								<orgName type="institution">University of Edinburgh Edinburgh</orgName>
+								<address>
+									<country key="GB">Scotland, UK</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iain</forename><surname>Murray</surname></persName>
+							<email>i.murray@ed.ac.uk</email>
+							<affiliation key="aff0">
+								<orgName type="department">School of Informatics</orgName>
+								<orgName type="institution">University of Edinburgh Edinburgh</orgName>
+								<address>
+									<country key="GB">Scotland, UK</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Renals</surname></persName>
+							<email>s.renals@ed.ac.uk</email>
+							<affiliation key="aff0">
+								<orgName type="department">School of Informatics</orgName>
+								<orgName type="institution">University of Edinburgh Edinburgh</orgName>
+								<address>
+									<country key="GB">Scotland, UK</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">DYNAMIC EVALUATION OF NEURAL SEQUENCE MODELS</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We present methodology for using dynamic evaluation to improve neural sequence models. Models are adapted to recent history via a gradient descent based mechanism , causing them to assign higher probabilities to re-occurring sequential patterns. Dynamic evaluation outperforms existing adaptation approaches in our comparisons. Dynamic evaluation improves the state-of-the-art word-level perplexities on the Penn Treebank and WikiText-2 datasets to 51.1 and 44.3 respectively, and the state-of-the-art character-level cross-entropies on the text8 and Hutter Prize datasets to 1.19 bits/char and 1.08 bits/char respectively.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Sequence generation and prediction tasks span many modes of data, ranging from audio and language modelling, to more general timeseries prediction tasks. Applications of such models include speech recognition, machine translation, dialogue generation, speech synthesis, forecasting, and music generation, among others. Neural networks can be applied to these tasks by predicting sequence elements one-by-one, conditioning on the history of sequence elements, forming an autoregressive model. Convolutional neural networks (CNNs) and recurrent neural networks (RNNs), including long-short term memory (LSTM) networks <ref type="bibr" target="#b6">(Hochreiter &amp; Schmidhuber, 1997</ref>) in particular, have achieved many successes at these tasks. However, in their basic form, these models have a limited ability to adapt to recently observed parts of a sequence.</p><p>Many sequences contain repetition; a pattern that occurs once is more likely to occur again. For instance, a word that occurs once in a document is much more likely to occur again. A sequence of handwriting will generally stay in the same handwriting style. A sequence of speech will generally stay in the same voice. Although RNNs have a hidden state that can summarize the recent past, they are often unable to exploit new patterns that occur repeatedly in a test sequence. This paper concerns dynamic evaluation, which we investigate as a candidate solution to this problem. Our approach adapts models to recent sequences using gradient descent based mechanisms. We show several ways to improve on past dynamic evaluation approaches in Section 5, and use our improved methodology to achieve state-of-the-art results in Section 7.1 and Section 7.2. In Section 6 we design a method to dramatically to reduce the number of adaptation parameters in dynamic evaluation, making it practical in a wider range of situations. In Section 7.3 we analyse dynamic evaluation's performance over varying time-scales and distribution shifts, and demonstrate that dynamically evaluated models can generate conditional samples that repeat many patterns from the conditioning data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">MOTIVATION</head><p>Generative models can assign probabilities to sequences by modelling each term in the factorization given by the product rule. The probability of a sequence x 1:T = {x 1 , . . . , x T } factorizes as</p><formula xml:id="formula_0">P (x 1:T ) = P (x 1 )P (x 2 |x 1 )P (x 3 |x 2 , x 1 ) · · · P (x T |x 1 . . . x T −1 ).<label>(1)</label></formula><p>Methods that apply this factorization either use a fixed context when predicting P (x t |x 1:t−1 ), for instance as in N-grams or CNNs, or use a recurrent hidden state to summarize the context, as in an RNN. However, for longer sequences, the history x 1:t−1 often contains re-occurring patterns that are difficult to capture using models with fixed parameters (static models).</p><p>In many domains, in a dataset of sequences {x 1 1:T , x 2 1:T , ..., x n 1:T }, each sequence x i 1:T is generated from a slightly different distribution P (x i 1:T ). At any point in time t, the history of a sequence x i 1:t−1 contains useful information about the generating distribution for that specific sequence P (x i 1:T ). Therefore adapting the model parameters learned during training θ g is justified. We aim to infer a set of model parameters θ l from x i 1:t−1 that will better approximate P (x i t |x i 1:t−1 ) within sequence i. Many sequence modelling tasks are characterised by sequences generated from slightly different distributions as in the scenario described above. The generating distribution may also change continuously across a single sequence; for instance, a text excerpt may change topic. Furthermore, many machine learning benchmarks do not distinguish between sequence boundaries, and concatenate all sequences into one continuous sequence. Thus, many sequence modelling tasks could be seen as having a local distribution P l (x) as well as a global distribution P g (x) := P (l)P l (x) dl. During training time, the goal is to find the best fixed model possible for P g (x). However, during evaluation time, a model that can infer the current P l (x) from the recent history has an advantage.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">DYNAMIC EVALUATION</head><p>Dynamic evaluation methods continuously adapt the model parameters θ g , learned at training time, to parts of a sequence during evaluation. The goal is to learn adapted parameters θ l that provide a better model of the local sequence distribution, P l (x). When dynamic evaluation is applied in the present work, a long test sequence x 1:T is divided up into shorter sequences of length n. We define s 1:M to be a sequence of shorter sequence segments s i</p><formula xml:id="formula_1">s 1:M = {s 1 = x 1:n , s 2 = x n+1:2n , s 3 = x 2n+1:3n , ..., s M }.<label>(2)</label></formula><p>The initial adapted parameters θ 0 l are set to θ g , and used to compute the probability of the first segment, P (s 1 |θ 0 l ). This probability gives a cross entropy loss L(s 1 ), with gradient L(s 1 ), which is computed using truncated back-propagation through time <ref type="bibr" target="#b26">(Werbos, 1990)</ref>. The gradient L(s 1 ) is used to update the model, resulting in adapted parameters θ 1 l , before evaluating P (s 2 |θ 1 l ). The same procedure is then repeated for s 2 , and for each s i in the sequence as shown in <ref type="figure" target="#fig_0">Figure 1</ref>. Gradients for each loss L(s i ) are only backpropagated to the beginning of s i , so computation is linear in the sequence length. Each update applies one maximum likelihood training step to approximate the current local distribution P l (x). The computational cost of dynamic evaluation is one forward pass and one gradient computation through the data, with some slight overhead to apply the update rule for every sequence segment.</p><p>As in all autoregressive models, dynamic evaluation only conditions on sequence elements that it has already predicted, and so evaluates a valid log-probability for each sequence. Dynamic evaluation can also be used while generating sequences. In this case, the model generates each sequence segment s i using fixed weights, and performs a gradient descent based update step on L(s i ). Applying dynamic evaluation for sequence generation could result in generated sequences with more consistent regularities, meaning that patterns that occur in the generated sequence are more likely to occur again.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">BACKGROUND</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">RELATED APPROACHES</head><p>Adaptive language modelling was first considered for n-grams, adapting to recent history via caching <ref type="bibr" target="#b8">(Jelinek et al., 1991;</ref><ref type="bibr" target="#b14">Kuhn, 1988)</ref>, and other methods <ref type="bibr" target="#b1">Bellegarda (2004)</ref>. More recently, the neural cache approach ( <ref type="bibr" target="#b5">Grave et al., 2017</ref>) and the closely related pointer sentinel-LSTM ( <ref type="bibr" target="#b18">Merity et al., 2017b</ref>) have been used to for adaptive neural language modelling. Neural caching has recently been used to improve the state-of-the-art at word-level language modelling ( <ref type="bibr" target="#b17">Merity et al., 2017a</ref>).</p><p>The neural cache model learns a type of non-parametric output layer on the fly at test time, which allows the network to adapt to recent observations. Each past hidden state h i is paired with the next input x i+1 , and is stored as a tuple (h i , x i+1 ). When a new hidden state h t is observed, the output probabilities are adjusted to give a higher weight to output words that coincided with past hidden states with a large inner product (h T t h i ).</p><formula xml:id="formula_2">P cache (x t+1 |x 1:t , h 1:t ) ∝ t−1 i=1 e (xi+1) exp(ωh T t h i ),<label>(3)</label></formula><p>where e (xi+1) is a one hot encoding of x i+1 , and ω is a scaling parameter. The cache probabilities are interpolated with the base network probabilities to adapt the base network at test time.</p><p>The neural cache closely relates to dynamic evaluation, as both methods can be added on top of a base model for adaptation at test time. The main difference is the mechanism used to fit to recent history: the neural cache approach uses a non-parametric, nearest neighbours-like method, whereas dynamic evaluation uses a gradient descent based method to change model parameters dynamically. Both methods rely on an autoregressive factorisation, as they depend on observing sequence elements after they are predicted in order to perform adaptation. Dynamic evaluation and neural caching methods are therefore both applicable to sequence prediction and generation tasks, but not directly to more general supervised learning tasks.</p><p>One drawback of the neural cache method is that it cannot adjust the recurrent hidden state dynamics. As a result, the neural cache's ability to capture information that occurs jointly between successive sequence elements is limited. This capability is critical for adapting to sequences where each element has very little independent meaning, e.g. character level language modelling.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">DYNAMIC EVALUATION IN NEURAL NETWORKS</head><p>Dynamic evaluation of neural language models was proposed by <ref type="bibr" target="#b18">Mikolov et al. (2010)</ref>. Their approach simply used stochastic gradient descent (SGD) updates at every time step, computing the gradient with fully truncated backpropagation through time, which is equivalent to setting n = 1 in equation <ref type="formula" target="#formula_1">(2)</ref>. Dynamic evaluation has since been applied to character and word-level language models <ref type="bibr">(Graves, 2013;</ref><ref type="bibr">Krause et al., 2017;</ref><ref type="bibr" target="#b21">Ororbia II et al., 2017;</ref><ref type="bibr" target="#b3">Fortunato et al., 2017)</ref>. Previous work using dynamic evaluation considered it as an aside, and did not explore it in depth.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">UPDATE RULE METHODOLOGY FOR DYNAMIC EVALUATION</head><p>We propose several changes to <ref type="bibr" target="#b18">Mikolov et al. (2010)</ref>'s dynamic evaluation method with SGD and fully truncated backpropagation, which we refer to as traditional dynamic evaluation. The first modification reduces the update frequency, so that gradients are backpropagated over more timesteps.</p><p>This change provides more accurate gradient information, and also improves the computational efficiency of dynamic evaluation, since the update rule is applied much less often. We use sequence segments of length 5 for word-level tasks and 20 for character-level tasks.</p><p>Next, we add a global decay prior to bias the model towards the parameters θ g learned during training. Our motivation for dynamic evaluation assumes that the local generating distribution P l (x) is constantly changing, so it is potentially desirable to weight recent sequence history higher in adaptation. Adding a global decay prior accomplishes this by causing previous adaptation updates to decay exponentially over time. For SGD with a global prior, learning rate η and decay rate λ; we form the update rule</p><formula xml:id="formula_3">θ i ← θ i−1 − ηL(s i ) + λ(θ g − θ i−1 l ).<label>(4)</label></formula><p>We then consider using an RMSprop <ref type="bibr" target="#b24">(Tieleman &amp; Hinton, 2012</ref>) derived update rule for the learning rule in place of SGD. RMSprop uses a moving average of recent squared gradients to scale learning rates for each weight. In dynamic evaluation, near the start of a test sequence, RMSprop has had very few gradients to average, and therefore may not be able to leverage its updates as effectively. For this reason, we collect mean squared gradients, MS g , on the training data rather than on recent test data (which is what RMSprop would do). MS g is given by</p><formula xml:id="formula_4">MS g = 1 N b N b k=1 (L k ) 2 ,<label>(5)</label></formula><p>where N b is the number of training batches and L k is the gradient on the kth training batch. The mini-batch size for this computation becomes a hyper-parameter, as larger mini-batches will result in smaller mean squared gradients. The update rule, which we call RMS with a global prior in our experiments, is then</p><formula xml:id="formula_5">θ i l ← θ i−1 l − η L(s i ) MS g + + λ(θ g − θ i−1 l ),<label>(6)</label></formula><p>where is a stabilization parameter. For the decay step of our update rule, we also consider scaling the decay rate for each parameter proportionally to MS g . Parameters with a high RMS gradient affect the dynamics of the network more, so it makes sense to decay them faster. RMS norm is MS g divided by its mean, resulting in a normalized version of MS g with a mean of 1:</p><formula xml:id="formula_6">RMS norm = MS g avg( MS g ) .<label>(7)</label></formula><p>We clip the values of RMS norm to be no greater than 1 /λ to be sure that the decay rate does not exceed 1 for any parameter. Combining the learning component and the regularization component results in the final update equation, which we refer to as RMS with an RMS global prior</p><formula xml:id="formula_7">θ i l ← θ i−1 l − η L(s i ) MS g + + λ(θ g − θ i−1 l ) RMS norm .<label>(8)</label></formula><p>6 SPARSE DYNAMIC EVALUATION Mini-batching over sequences is desirable for some test-time sequence modelling applications because it allows faster processing of multiple sequences in parallel. Dynamic evaluation has a high memory cost for mini-batching because it is necessary to store a different set of parameters for each sequence in the mini-batch. Therefore, we consider a sparse dynamic evaluation variant that updates a smaller number of parameters. We introduce a new adaptation matrix M which is initialized to zeros. M multiplies hidden state vector h t of an RNN at every time-step to get a new hidden state h t , via</p><formula xml:id="formula_8">h t = h t + Mh t .<label>(9)</label></formula><p>h t then replaces h t and is propagated throughout the network via both recurrent and feed-forward connections. Applying dynamic evaluation to M avoids the need to apply dynamic evaluation to the original parameters of the network, reduces the number of adaptation parameters, and makes mini-batching less memory intensive. We reduce the number of adaptation parameters further by only using M to transform an arbitrary subset of H hidden units. This results in M being an H ×H matrix with d = H 2 adaptation parameters. If H is chosen to be much less than the number of hidden units, this reduces the number of adaptation parameters dramatically. In Section 7.2 we experiment with sparse dynamic evaluation for character-level language models.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">EXPERIMENTS</head><p>We applied dynamic evaluation to word-level and character-level language modelling. In all tasks, we evaluate dynamic evaluation on top of a base model. After training the base model, we tune hyper-parameters for dynamic evaluation on the validation set, and evaluate both the static and dynamic versions of the model on the test set. We also consider follow up experiments that analyse the sequence lengths for which dynamic evaluation is useful. Code for our dynamic evaluation methodology is available 1 .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.1">WORD-LEVEL LANGUAGE MODELLING</head><p>We train base models on the Penn Treebank (PTB, Marcus et al., 1993) and WikiText-2 (Merity et al., 2017b) datasets, and compare the performance of static and dynamic evaluation. These experiments compare dynamic evaluation against past approaches such as the neural cache and measure dynamic evaluation's general performance across different models and datasets.</p><p>PTB is derived from articles of the Wall Street Journal. It contains 929k training tokens and a vocab size limited to 10k words. It is one of the most commonly used benchmarks in language modelling. We consider two baseline models on PTB, a standard LSTM implementation with recurrent dropout ( <ref type="bibr" target="#b28">Zaremba et al., 2014)</ref>, and the recent state-of-the-art AWD-LSTM ( <ref type="bibr" target="#b17">Merity et al., 2017a</ref>).</p><p>Our standard LSTM was taken from the Chainer tutorial on language modelling 2 , and used two LSTM layers with 650 units each, trained with SGD and regularized with recurrent dropout. On our standard LSTM, we experiment with traditional dynamic evaluation as applied by <ref type="bibr" target="#b18">Mikolov et al. (2010)</ref>, as well as each modification we make building up to our final update rule as described in Section 5. As our final update rule (RMS + RMS global prior) worked best, we use this for all other experiments and use "dynamic eval" by default to refer to this update rule in tables.</p><p>We applied dynamic evaluation on a more powerful model, the ASGD weight-dropped LSTM (AWD-LSTM, <ref type="bibr" target="#b17">Merity et al., 2017a</ref>). The AWD-LSTM is a vanilla LSTM that combines the use of drop-connect ( <ref type="bibr" target="#b25">Wan et al., 2013</ref>) on recurrent weights for regularization, and a variant of averaged stochastic gradient descent <ref type="bibr" target="#b22">(Polyak &amp; Juditsky, 1992)</ref> for optimisation. Our model, which used 3 layers and tied input and output embeddings <ref type="bibr" target="#b23">(Press &amp; Wolf, 2017;</ref><ref type="bibr" target="#b7">Inan et al., 2017)</ref>, was intended to be a direct replication of AWD-LSTM, using code from their implementation <ref type="bibr">3</ref> . Results are given in <ref type="table">Table 1</ref>.</p><p>Dynamic evaluation gives significant overall improvements to both models on this dataset. Dynamic evaluation also achieves better final results than the neural cache on both a standard LSTM and the AWD-LSTM reimplementation, and improves the state-of-the-art on PTB.</p><p>WikiText-2 is roughly twice the size of PTB, with 2 million training tokens and a vocab size of 33k. It features articles in a non-shuffled order, with dependencies across articles that adaptive methods model parameters valid test <ref type="bibr">RNN+LDA+kN-5+cache (Mikolov &amp; Zweig, 2012)</ref> 92.0 CharCNN ( <ref type="bibr" target="#b10">Kim et al., 2016</ref>  should be able to exploit. For this dataset, we use the same baseline LSTM implementation and AWD-LSTM re-implementation as on PTB. Results are given in <ref type="table" target="#tab_1">Table 2</ref>.</p><p>Dynamic evaluation improves the state-of-the-art perplexity on WikiText-2, and provides a significantly greater improvement than neural caching to both base models. This suggests that dynamic evaluation is effective at exploiting regularities that co-occur across non-shuffled documents.    <ref type="bibr" target="#b23">&amp; Kingma, 2016)</ref>, variational dropout ( <ref type="bibr" target="#b4">Gal &amp; Ghahramani, 2016)</ref>, and ADAM <ref type="bibr" target="#b11">(Kingma &amp; Ba, 2014</ref>) for training.</p><p>We also consider sparse dynamic evaluation, as described in Section 6, on the Hutter Prize dataset. For sparse dynamic evaluation, we adapted a subset of 500 hidden units, resulting in a 500×500 adaptation matrix and 250k adaptation parameters. All of our dynamic evaluation results in this section use the final update rule given in Section 5. Results for Hutter Prize are given in <ref type="table" target="#tab_3">Table 3</ref>, and results for text8 are given in <ref type="table" target="#tab_4">Table 4</ref>.</p><p>Dynamic evaluation achieves large improvements to our base models and state-of-the-art results on both datasets. Sparse dynamic evaluation also achieves significant improvements on Hutter Prize using only 0.5% of the adaptation parameters of regular dynamic evaluation.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.3">TIME-SCALES OF DYNAMIC EVALUATION</head><p>We measure time-scales at which dynamic evaluation gains an advantage over static evaluation. Starting from the model trained on Hutter Prize, we plot the performance of static and dynamic evaluation against the number of characters processed on sequences from the Hutter Prize test set, and sequences in Spanish from the European Parliament dataset ( <ref type="bibr" target="#b11">Koehn, 2005</ref>).</p><p>The Hutter Prize data experiments show the timescales at which dynamic evaluation gained the advantage observed in <ref type="table" target="#tab_3">Table 3</ref>. We divided the Hutter Prize test set into 500 sequences of length 10000, and applied static and dynamic evaluation to these sequences using the same model and methodology used to obtain results in <ref type="table" target="#tab_3">Table 3</ref>. Losses were averaged across these 500 sequences to obtain average losses at each time step. Plots of the average cross-entropy errors against the number of Hutter characters sequenced are given in <ref type="figure" target="#fig_1">Figure 2a</ref>.</p><p>The Spanish experiments measure how dynamic evaluation handles large distribution shifts between training and test time, as Hutter Prize contains very little Spanish. We used the first 5 million characters of the Spanish European Parliament data in place of the Hutter Prize test set. The Spanish experiments used the same base model and dynamic evaluation settings as Hutter Prize. Plots of the average cross-entropy errors against the number of Spanish characters sequenced are given in <ref type="figure" target="#fig_1">Figure 2b</ref>.</p><p>On both datasets, dynamic evaluation gave a very noticeable advantage after a few hundred characters. For Spanish this advantage continued to grow as more of the sequence was processed, whereas for Hutter, this advantage was maximized after viewing around 2-3k characters. The advantage of dynamic evaluation was also much greater on Spanish sequences than Hutter sequences.</p><p>We also drew 300 character conditional samples from the static and dynamic versions of our model after viewing 10k characters of Spanish. For the dynamic model, we continued to apply dynamic evaluation during sampling as well, by the process described in Section 3. The conditional samples are given in the appendix. The static samples quickly switched to English that resembled Hutter Prize data. The dynamic model generated data with some Spanish words and a number of made up words with characteristics of Spanish words for the entirety of the sample. This is an example of the kinds of features that dynamic evaluation was able to learn to model on the fly.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">CONCLUSION</head><p>This work explores and develops methodology for applying dynamic evaluation to sequence modelling tasks. Experiments show that the proposed dynamic evaluation methodology gives large test time improvements across character and word level language modelling. Our improvements to language modelling have applications to speech recognition and machine translation over longer contexts, including broadcast speech recognition and paragraph level machine translation. Overall, dynamic evaluation is shown to be an effective method for exploiting pattern re-occurrence in sequences.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Illustration of dynamic evaluation. The model evaluates the probability of sequence segments s i . The gradient L(s i ) with respect to the log probability of s i is used to update the model parameters θ i−1 l to θ i l before the model progresses to the next sequence segment. Dashed edges are what distinguish dynamic evaluation from static (normal) evaluation.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Average losses in bits/char of dynamic evaluation and static evaluation plotted against number of characters processed; on sequences from the Hutter Prize test set (left) and European Parliament dataset in Spanish (right), averaged over 500 trials for each. Losses at each data point are averaged over sequence segments of length 100, and are not cumulative. Note the different y-axis scales in the two plots.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>WikiText-2 perplexities. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Hutter Prize test set error in bits/char. 
+
+model 
+parameters test 
+
+Multiplicative RNN (Mikolov et al., 2012) 
+5M 
+1.54 
+Multiplicative integration LSTM (Wu et al., 2016) 
+4M 
+1.44 
+LSTM (Cooijmans et al., 2017) 
+1.43 
+Batch normalised LSTM (Cooijmans et al., 2017) 
+1.36 
+Hierarchical multiscale LSTM (Chung et al., 2017) 
+1.29 
+Recurrent highway networks (Zilly et al., 2017) 
+45M 
+1.27 
+
+mLSTM (Krause et al., 2016) 
+45M 
+1.27 
+mLSTM + dynamic eval 
+45M 
+1.19 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>text8 test set error in bits/char. 
+
+</table></figure>
+
+			<note place="foot" n="1"> https://github.com/benkrause/dynamic-evaluation 2 https://github.com/chainer/chainer/tree/master/examples/ptb 3 https://github.com/salesforce/awd-lstm-lm</note>
+
+			<note place="foot" n="4"> http://mattmahoney.net/dc/textdata 5 https://github.com/benkrause/mLSTM</note>
+		</body>
+		<back>
+			<div type="annex">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A APPENDIX</head><p>A.1 DYNAMIC SAMPLES CONDITIONED ON SPANISH 300 character samples generated from the dynamic version of the model trained on Hutter Prize, conditioned on 10k of Spanish characters. The final sentence fragment of the 10k conditioning characters is given to the reader, with the generated text given in bold:</p><p>Tiene importancia este compromiso en la medida en que la Comisión es un organismo que tiene el montembre tas procedíns la conscriptione se ha Tesalo del Pómienda que et hanemos que Pe la Siemina. De la Pedrera Orden es Señora Presidente civil, Orden de siemin presente relevante frónmida que esculdad pludiore e formidad President de la Presidenta Antidorne Adamirmidad i ciemano de el 200'. Fo</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.2 STATIC SAMPLES CONDITIONED ON SPANISH</head><p>300 character samples generated from the static version of the model trained on Hutter Prize, conditioned on 10k of Spanish characters. The final sentence fragment of the 10k conditioning characters is given to the reader, with the generated text given in bold:</p><p>Tiene importancia este compromiso en la medida en que la Comisión es un organismo que tiene el monde, &amp;lt;br&amp;gt;There is a secret act in the world except Cape Town, seen in now flat comalo and ball market and has seen the closure of the eagle as imprints in a dallas within the country.&amp;quot; Is a topic for an increasingly small contract saying Allan Roth acquired the government in <ref type="bibr">[[1916]</ref>].</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>===</head></div>			</div>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Aharoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Rattner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Permuter</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1708.08863</idno>
+		<title level="m">Gradual learning of deep recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Statistical language model adaptation: review and perspectives</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">R</forename><surname>Bellegarda</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Speech Communication</title>
+		<imprint>
+			<biblScope unit="volume">42</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="93" to="108" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Ahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bengio</surname></persName>
+		</author>
+		<title level="m">Hierarchical multiscale recurrent neural networks. ICLR, 2017. T. Cooijmans, N. Ballas, C. Laurent, and A. Courville. Recurrent batch normalization. ICLR</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Fortunato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Blundell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Vinyals</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.02798</idno>
+		<title level="m">Bayesian recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">A theoretically grounded application of dropout in recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Gal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Ghahramani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1019" to="1027" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Improving neural language models with a continuous cache</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Usunier</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1308.0850</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Generating sequences with recurrent neural networks</title>
+		<editor>D. Ha, A. Dai, and Q. Lee. Hypernetworks. ICLR</editor>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">The human knowledge compression prize</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">; M</forename><surname>Hutter</surname></persName>
+		</author>
+		<ptr target="http://prize.hutter1.net" />
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+	<note>Long short-term memory</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Tying word vectors and word classifiers: A loss framework for language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Inan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Khosravi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">A dynamic language model for speech recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Jelinek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Merialdo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Roukos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Strauss</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">HLT</title>
+		<imprint>
+			<date type="published" when="1991" />
+			<biblScope unit="volume">91</biblScope>
+			<biblScope unit="page" from="293" to="295" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Simonyan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Oord</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1610.10099</idno>
+		<title level="m">Neural machine translation in linear time</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Character-aware neural language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jernite</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">M</forename><surname>Sontag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Rush</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Thirtieth AAAI Conference on Artificial Intelligence</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Europarl: A parallel corpus for statistical machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">; P</forename><surname>Koehn</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6980</idno>
+	</analytic>
+	<monogr>
+		<title level="m">MT Summit</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="page" from="79" to="86" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+	<note>Adam: A method for stochastic optimization</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Multiplicative LSTM for sequence modelling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Krause</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Murray</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Renals</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.07959</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Multiplicative LSTM for sequence modelling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Krause</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Murray</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Renals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Lu</surname></persName>
+		</author>
+		<ptr target="https://openreview.net/forum?id=SJCS5rXFl" />
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Speech recognition and the frequency of recently used words: A modified Markov model for natural language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Kuhn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 12th conference on Computational linguistics</title>
+		<meeting>the 12th conference on Computational linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="1988" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="348" to="350" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Building a large annotated corpus of English: The Penn Treebank</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">P</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Marcinkiewicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Santorini</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational linguistics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="313" to="330" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">On the state of the art of evaluation in neural language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Melis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Blunsom</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.05589</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">S</forename><surname>Keskar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1708.02182</idno>
+		<title level="m">Regularizing and optimizing LSTM language models</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Context dependent recurrent neural network language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">.</forename><forename type="middle">T</forename><surname>Iclr</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">; T</forename><surname>Zweig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Karafiát</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Burget</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Cernock`cernock`y</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Khudanpur</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In Interspeech</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page">3</biblScope>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+	<note>SLT</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Subword language modeling with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Deoras</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kombrink</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cernocky</surname></persName>
+		</author>
+		<ptr target="http://www.fit.vutbr.cz/imikolov/rnnlm/char.pdf" />
+		<imprint>
+			<biblScope unit="page">2012</biblScope>
+		</imprint>
+	</monogr>
+	<note>preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mujika</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Meier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Steger</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.08639</idno>
+		<title level="m">Fast-slow recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Learning simpler language models with the differential state framework</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">G</forename><surname>Ororbia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><forename type="middle">I</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Reitter</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Acceleration of stochastic approximation by averaging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Polyak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">B</forename><surname>Juditsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIAM Journal on Control and Optimization</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="838" to="855" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Weight normalization: A simple reparameterization to accelerate training of deep neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Press</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">P</forename><surname>Wolf ; D</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kingma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="901" to="909" />
+		</imprint>
+	</monogr>
+	<note>Using the output embedding to improve language models</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Lecture 6.5-rmsprop: Divide the gradient by a running average of its recent magnitude</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Tieleman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COURSERA: Neural Networks for Machine Learning</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="volume">4</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Regularization of neural networks using dropconnect</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Wan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zeiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yann</forename><forename type="middle">L</forename><surname>Cun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Fergus</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 30th international conference on machine learning (ICML-13)</title>
+		<meeting>the 30th international conference on machine learning (ICML-13)</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1058" to="1066" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Backpropagation through time: what it does and how to do it</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">J</forename><surname>Werbos</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings of the IEEE</title>
+		<imprint>
+			<biblScope unit="volume">78</biblScope>
+			<biblScope unit="page" from="1550" to="1560" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">On multiplicative integration with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Zaremba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Vinyals</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.2329</idno>
+		<title level="m">Recurrent neural network regularization</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+		<title level="m" type="main">Recurrent highway networks. ICLR, 2017. B. Zoph and Quoc V Le. Neural architecture search with reinforcement learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">G</forename><surname>Zilly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">K</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Koutník</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

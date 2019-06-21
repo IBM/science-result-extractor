@@ -1,0 +1,1231 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:06+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Morphosyntactic Tagging with a Meta-BiLSTM Model over Context Sensitive Token Encodings</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bernd</forename><surname>Bohnet</surname></persName>
+							<email>bohnetbd@google.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Google Inc</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Mcdonald</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Google Inc</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gonçalo</forename><surname>Simões</surname></persName>
+							<email>gsimoes@google.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Google Inc</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Andor</surname></persName>
+							<email>andor@google.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Google Inc</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emily</forename><surname>Pitler</surname></persName>
+							<email>epitler@google.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Google Inc</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joshua</forename><surname>Maynez</surname></persName>
+							<email>joshuahm@google.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Google Inc</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Morphosyntactic Tagging with a Meta-BiLSTM Model over Context Sensitive Token Encodings</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>The rise of neural networks, and particularly recurrent neural networks, has produced significant advances in part-of-speech tagging accuracy (Zeman et al., 2017). One characteristic common among these models is the presence of rich initial word encodings. These encod-ings typically are composed of a recurrent character-based representation with learned and pre-trained word embeddings. However, these encodings do not consider a context wider than a single word and it is only through subsequent recurrent layers that word or sub-word information interacts. In this paper, we investigate models that use recurrent neural networks with sentence-level context for initial character and word-based representations. In particular we show that optimal results are obtained by integrating these context sensitive representations through synchronized training with a meta-model that learns to combine their states. We present results on part-of-speech and morphological tagging with state-of-the-art performance on a number of languages.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Morphosyntactic tagging accuracy has seen dramatic improvements through the adoption of recurrent neural networks-specifically BiLSTMs ( <ref type="bibr" target="#b19">Schuster and Paliwal, 1997;</ref><ref type="bibr">Graves and Schmid- huber, 2005</ref>) to create sentence-level context sensitive encodings of words. A successful recipe is to first create an initial context insensitive word representation, which usually has three main parts: 1) A dynamically trained word embedding; 2) a fixed pre-trained word-embedding, induced from a large corpus; and 3) a sub-word character model, which itself is usually the final state of a recurrent model that ingests one character at a time. Such word/sub-word models originated with <ref type="bibr" target="#b17">Plank et al. (2016)</ref>. Recently, <ref type="bibr" target="#b11">Dozat et al. (2017)</ref> used precisely such a context insensitive word representation as input to a BiLSTM in order to obtain context sensitive word encodings used to predict partof-speech tags. The Dozat et al. model had the highest accuracy of all participating systems in the CoNLL 2017 shared task ( <ref type="bibr" target="#b22">Zeman et al., 2017)</ref>.</p><p>In such a model, sub-word character-based representations only interact indirectly via subsequent recurrent layers. For example, consider the sentence I had shingles, which is a painful disease. Context insensitive character and word representations may have learned that for unknown or infrequent words like 'shingles', 's' and more so 'es' is a common way to end a plural noun. It is up to the subsequent BiLSTM layer to override this once it sees the singular verb is to the right. Note that this differs from traditional linear models where word and sub-word representations are directly concatenated with similar features in the surrounding context ( <ref type="bibr" target="#b12">Giménez and Marquez, 2004)</ref>.</p><p>In this paper we aim to investigate to what extent having initial sub-word and word context insensitive representations affects performance. We propose a novel model where we learn context sensitive initial character and word representations through two separate sentence-level recurrent models. These are then combined via a metaBiLSTM model that builds a unified representation of each word that is then used for syntactic tagging. Critically, while each of these three models-character, word and meta-are trained synchronously, they are ultimately separate models using different network configurations, training hyperparameters and loss functions. Empirically, we found this optimal as it allowed control over the fact that each representation has a different learning capacity.</p><p>We tested the system on the 2017 CoNLL shared task data sets and gain improvements compared to the top performing systems for the majority of languages for part-of-speech and morphological tagging. As we will see, a pattern emerged where gains were largest for morphologically rich languages, especially those in the Slavic family group. We also applied the approach to the benchmark English PTB data, where our model achieved 97.9 using the standard train/dev/test split, which constitutes a relative reduction in error of 12% over the previous best system.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>While sub-word representations are often attributed to the advent of deep learning in NLP, it was, in fact, commonplace for linear featurized machine learning methods to incorporate such representations. While the literature is too large to enumerate, <ref type="bibr" target="#b12">Giménez and Marquez (2004)</ref> is a good example of an accurate linear model that uses both word and sub-word features. Specifically, like most systems of the time, they use ngram affix features, which were made context sensitive via manually constructed conjunctions with features from other words in a fixed window. <ref type="bibr" target="#b9">Collobert and Weston (2008)</ref> was perhaps the first modern neural network for tagging. While this first study used only word embeddings, a subsequent model extended the representation to include suffix embeddings <ref type="bibr" target="#b10">(Collobert et al., 2011</ref>).</p><p>The seminal dependency parsing paper of <ref type="bibr" target="#b7">Chen and Manning (2014)</ref> led to a number of tagging papers that used their basic architecture of highly featurized (and embedded) feed-forward neural networks. <ref type="bibr" target="#b5">Botha et al. (2017)</ref>, for example, studied this architecture in a low resource setting using word, sub-word (prefix/suffix) and induced cluster features to obtain competitive accuracy with the state-of-the-art. <ref type="bibr" target="#b24">Zhou et al. (2015)</ref>, <ref type="bibr" target="#b1">Alberti et al. (2015)</ref> and <ref type="bibr" target="#b2">Andor et al. (2016)</ref> extended the work of Chen et al. to a structured prediction setting, the later two use again a mix of word and sub-word features.</p><p>The idea of using a recurrent layer over characters to induce a complementary view of a word has occurred in numerous papers. Perhaps the earliest is <ref type="bibr" target="#b18">Santos and Zadrozny (2014)</ref> who compare character-based LSTM encodings to traditional word-based embeddings. <ref type="bibr" target="#b15">Ling et al. (2015)</ref> take this a step further and combine the word embeddings with a recurrent character encoding of the word-instead of just relying on one or the other. <ref type="bibr" target="#b0">Alberti et al. (2017)</ref> use a sentencelevel character LSTM encoding for parsing. <ref type="bibr">Pe- ters et al. (2018)</ref> show that contextual embeddings using character convolutions improve accuracy for number of NLP tasks. <ref type="bibr" target="#b17">Plank et al. (2016)</ref> is probably the jumping-off point for most current architectures for tagging models with recurrent neural networks. Specifically, they used a combined word embedding and recurrent character encoding as the initial input to a BiLSTM that generated context sensitive word encodings. Though, like most previous studies, these initial encodings were context insensitive and relied on subsequent layers to encode sentence-level interactions.</p><p>Finally, <ref type="bibr" target="#b11">Dozat et al. (2017)</ref> showed that subword/word combination representations lead to state-of-the-art morphosyntactic tagging accuracy across a number of languages in the CoNLL 2017 shared task ( <ref type="bibr" target="#b22">Zeman et al., 2017)</ref>. Their word representation consisted of three parts: 1) A dynamically trained word embedding; 2) a fixed pretrained word embedding; 3) a character LSTM encoding that summed the final state of the recurrent model with vector constructed using an attention mechanism over all character states. Again, the initial representations are all context insensitive. As this model is currently the state-of-the-art in morphosyntactic tagging, it will serve as a baseline during our discussion and experiments.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Models</head><p>In this section, we introduce models that we investigate and experiment with in §4.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Sentence-based Character Model</head><p>The feature that distinguishes our model most from previous work is that we apply a bidirectional recurrent layer (LSTM) on all characters of a sentence to induce fully context sensitive initial word encodings. That is, we do not restrict the context of this layer to the words themselves (as in <ref type="figure" target="#fig_1">Figure  1b</ref>). <ref type="figure" target="#fig_1">Figure 1a</ref> shows the sentence-based character model applied to an example token in context.</p><p>The character model uses, as input, sentences split into UTF8 characters. We include the spaces between the tokens 1 in the input and map each  character to a dynamically learned embedding.</p><p>Next, a forward LSTM reads the characters from left to right and a backward LSTM reads sentences from right to left, in standard BiLSTM fashion.</p><p>More formally, for an n-character sentence, we apply for each character embedding (e char 1 , ..., e char n ) a BiLSTM:</p><formula xml:id="formula_0">f 0 c,i , b 0 c,i = BiLSTM(r 0 , (e char 1 , ..., e char n )) i</formula><p>As is also typical, we can have multiple such layers (l) that feed into each other through the concatenation of previous layer encodings.</p><p>The last layer l has both forward (f l c,1 , ..., f l c,n ) and backward (b l c,1 , ..., b l c,n ) output vectors for each character.</p><p>To create word encodings, we need to combine a relevant subset of these context sensitive character encodings. These word encodings can then be used in a model that assigns morphosyntactic tags to each word directly or via subsequent layers. To accomplish this, the model concatenates up to four character output vectors: the {forward, backward} output of the {first, last} character in the token (</p><formula xml:id="formula_1">F 1st (w), F last (w), B 1st (w), B last (w)).</formula><p>In <ref type="figure" target="#fig_1">Figure 1a</ref>, the four shaded boxes indicate these four outputs for the example token.</p><p>Thus, the proposed model concatenates all four of these and passes it as input to an multilayer perceptron (MLP):</p><formula xml:id="formula_2">g i = concat(F 1st (w), F last (w), B 1st (w), B last (w)) (1) m chars i = MLP(g i )</formula><p>A tag can then be predicted with a linear classifier that takes as input the output of the MLP enized/segmented.</p><formula xml:id="formula_3">m chars i</formula><p>, applies a softmax function and chooses for each word the tag with highest probability. Table 8 investigates the empirical impact of alternative definitions of g i that concatenate only subsets</p><formula xml:id="formula_4">of {F 1st (w), F last (w), B 1st (w), B last (w)}.</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Word-based Character Model</head><p>To investigate whether a sentence sensitive character model is better than a character model where the context is restricted to the characters of a word, we reimplemented the word-based character model of <ref type="bibr" target="#b11">Dozat et al. (2017)</ref>   <ref type="formula">(2016)</ref> over all characters. We refer the reader to those works for more details. Critically, however, all the information fed to this representation comes from the word itself, and not a wider sentence-level context.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Sentence-based Word Model</head><p>We used a similar setup for our context sensitive word encodings as the character encodings. There are a few differences. Obviously, the inputs are the words of the sentence. For each of the words, we use pretrained word embeddings (p word The summed embeddings in i are passed as input to one or more BiLSTM layers whose output f l w,i , b l w,i is concatenated and used as the final encoding, which is then passed to an MLP</p><formula xml:id="formula_5">o word i = concat(f l w,i , b l w,i ) m word i = MLP(o word i )</formula><p>It should be noted, that the output of this BiL-STM is essentially the Dozat et al. model before tag prediction, with the exception that the wordbased character encodings are excluded.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Meta-BiLSTM: Model Combination</head><p>Given initial word encodings, both character and word-based, a common strategy is to pass these through a sentence-level BiLSTM to create context sensitive encodings, e.g., this is precisely what <ref type="bibr" target="#b17">Plank et al. (2016)</ref> and <ref type="bibr" target="#b11">Dozat et al. (2017)</ref> do. However, we found that if we trained each of the character-based and word-based encodings with their own loss, and combined them using an additional meta-BiLSTM model, we obtained optimal performance. In the meta-BiLSTM model, we concatenate the output, for each word, of its context sensitive character and word-based encodings, and put this through another BiLSTM to create an additional combined context sensitive encoding. This is followed by a final MLP whose output is passed to a linear layer for tag prediction.</p><formula xml:id="formula_6">cw i = concat(m char i , m word i ) f l m,i , b l m,i = BiLSTM(r 0 , (cw 0 , ..., cw n )) i m comb i = MLP(concat(f l m,i , b l m,i ))</formula><p>With this setup, each of the models can be optimized independently which we describe in more detail in §3.5. <ref type="figure" target="#fig_6">Figure 2b</ref> depicts the architecture of the combined system and contrasts it with that of the Dozat et al. model <ref type="figure" target="#fig_6">(Figure 2a</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Training Schema</head><p>As mentioned in the previous section, the character and word-based encoding models have their own tagging loss functions, which are trained independently and joined via the meta-BiLSTM. I.e., the loss of each model is minimized independently by separate optimizers with their own hyperparameters. Thus, it is in some sense a multitask learning model and we must define a schedule in which individual models are updated. We opted for a simple synchronous schedule outline in Algorithm 1. Here, during each epoch, we update each of the models in sequence-character, word and meta-using the entire training data.</p><p>Data: train-corpus, dev-corpus / * The following models are defined in §3. * / Input: char-model, word-model, meta-model / * Model optimizers * / Input: char-opt, word-opt, meta-opt / * Results are parameter sets for each model. * / Result: best-char, best-word, best-meta / * Initialize parameter sets (cf. <ref type="table">Table 1</ref>) * / Initialize(pac, paw, pam) / * Iteration on over training corpus.</p><p>* / for epoch = 1 to MAX do / * Update character model. * / char-logits, char-preds = char-model(train-corpus, pac) pac = char-opt.update(char-preds, train-data) / * Update word model. * / word-logits, word-preds = word-model(train-corpus, paw) paw = word-opt.update(char-preds, train-data) / * Update Meta-BiLSTM * / meta-preds = meta-model(train-corpus, pac, paw, pam) pam = meta-opt.update(train-corpus, meta-preds) / * Evaluate model due to dev set accuracy. * / F1 = DevEval(parc, parw, parm) / * Keep the best model. * / if F1 &gt; best-F1 then best-char = pac; best-word = paw best-meta = pam; best-F1 = F1 end end Algorithm 1: Training procedure for learning initial character and word-based context sensitive encodings synchronously with meta-BiLSTM.</p><p>In terms of model selection, after each epoch, the algorithm evaluates the tagging accuracy of the development set and keeps the parameters of the best model. Accuracy is measured using the meta-BiLSTM tagging layer, which requires a forward pass through all three models. Though we use all three losses to update the models, only the meta-BiLSTM layer is used for model selection and test-time prediction.</p><p>While each of the three models-character, word and meta-are trained with their own loss functions, it should be emphasized that training is synchronous in the sense that the meta-BiLSTM model is trained in tandem with the two encoding models, and not after those models have converged. Since accuracy from the meta-BiLSTM model on the development set determines the best parameters, training is not completely independent. We found this to improve accuracy overall. Crucially, when we allowed the meta-BiLSTM to back-propagate through the whole network, per-   formance degraded regardless of whether one or multiple loss functions were used. Each language could in theory use separate hyperparameters, optimized for highest accuracy. However, for our main experiments we use identical settings for each language which worked well for large corpora and simplified things. We provide an overview of the selected hyperparameters in §4.1. We explored more settings for selected individual languages with a grid search and ablation experiments and present the results in §5.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Experiments and Results</head><p>In this section, we present the experimental setup and the selected hyperparameter for the main experiments where we use the CoNLL Shared Task 2017 treebanks and compare with the best systems of the shared task.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Experimental Setup</head><p>For our main results, we selected one network configuration and set of the hyperparameters. These settings are not optimal for all languages. However, since hyperparameter exploration is computationally demanding due to the number of languages we optimized these hyperparameters on initial development data experiments over a few languages. <ref type="table">Table 1</ref>   </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Data Sets</head><p>For the experiments, we use the data sets as provided by the CoNLL Shared Task <ref type="bibr" target="#b22">(Zeman et al., 2017</ref>. For training, we use the training sets which were denoted as big treebanks 2 . We followed the same methodology used in the CoNLL Shared Task. We use the training treebank for training only and the development sets for hyperparameter tuning and early stopping. To keep our results comparable with the Shared Task, we use the provided precomputed word embeddings. We excluded Gothic from our experiments as the available downloadable content did not include embeddings for this language.</p><p>As input to our system-for both part-ofspeech tagging and morphological tagging-we use the output of the UDPipe-base baseline system <ref type="bibr" target="#b21">(Straka and Straková, 2017</ref>) which provides segmentation. The segmentation differs from the gold segmentation and impacts accuracy negatively for a number of languages. Most of the top performing systems for part-of-speech tagging used as input UDPipe to obtain the segmentation for the input data. For morphology, the top system for most languages (IMS) used its own segmentation <ref type="bibr" target="#b3">(Björkelund et al., 2017)</ref>. For the evaluation, we used the official evaluation script ( <ref type="bibr" target="#b22">Zeman et al., 2017</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Part-of-Speech Tagging Results</head><p>In this section, we present the results of the application of our model to part-of-speech tagging. In our first experiment, we used our model in the setting of the CoNLL 2017 Shared Task to annotate words with XPOS 3 tags ( <ref type="bibr" target="#b22">Zeman et al., 2017)</ref>. We compare our results against the top systems of the CoNLL 2017 Shared Task. <ref type="table" target="#tab_1">Table 2</ref> contains the results of this task for the large treebanks.</p><p>Because <ref type="bibr" target="#b11">Dozat et al. (2017)</ref> won the challenge for the majority of the languages, we first compare our results with the performance of their system. Our model outperforms <ref type="bibr" target="#b11">Dozat et al. (2017)</ref> in 32 of the 54 treebanks with 13 ties. These ties correspond mostly to languages where XPOS tagging anyhow obtains accuracies above 99%. Our model tends to produce better results, especially for morphologically rich languages (e.g. Slavic</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>System</head><p>Accuracy Søgaard <ref type="formula">(2011)</ref> 97.50 <ref type="bibr">) 97.55 Choi (2016</ref> 97.64 <ref type="bibr" target="#b2">Andor et al. (2016)</ref>. <ref type="bibr">97.44 Dozat et al. (2017)</ref> 97.41 ours 97.96 <ref type="table">Table 3</ref>: Results on WSJ test set. languages), whereas <ref type="bibr" target="#b11">Dozat et al. (2017)</ref> showed higher performance in 10 languages in particular English, Greek, Brazilian Portuguese and Estonian.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Part-of-Speech Tagging on WSJ</head><p>We also performed experiments on the Penn Treebank with the usual split in train, development and test set. <ref type="table">Table 3</ref> shows the results of our model in comparison to the results reported in state-ofthe-art literature. Our model significantly outperforms these systems, with an absolute difference of 0.32% in accuracy, which corresponds to a RRIE of 12%.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5">Morphological Tagging Results</head><p>In addition to the XPOS tagging experiments, we performed experiments with morphological tagging. This annotation was part of the CONLL 2017 Shared Task and the objective was to predict a bundle of morphological features for each token in the text. Our model treats the morphological bundle as one tag making the problem equivalent to a sequential tagging problem. <ref type="table">Table 4</ref> shows the results. Our models tend to produce significantly better results than the winners of the CoNLL 2017 Shared Task (i.e., 1.8% absolute improvement on average, corresponding to a RRIE of 21.20%). The only cases for which this is not true are again languages that require significant segmentation efforts (i.e., Hebrew, Chinese, Vietnamese and Japanese) or when the task was trivial.</p><p>Given the fact that <ref type="bibr" target="#b11">Dozat et al. (2017)</ref> obtained the best results in part-of-speech tagging by a significant margin in the CoNLL 2017 Shared Task, it would be expected that their model would also perform significantly well in morphological tagging since the tasks are very similar. Since they did not participate in this particular challenge, we decided to reimplement their system to serve   <ref type="table">Table 4</ref>: Results for morphological features. The column CoNLL Winner shows the top system of the ST 17, the DQM Reimpl. shows our reimplementation of <ref type="bibr" target="#b11">Dozat et al. (2017)</ref>, the column ours shows our system with a sentence-based character model; RRIE gives the relative reduction in error between the Reimpl. DQM and sentencebased character system. Our system outperforms the CoNLL Winner by 48 out of 54 treebanks and the reimplementation of DQM, by 43 of 54 treebanks, with 6 ties.</p><note type="other">fi ftb 93.43 95.96 96.42 11.4 no bok. 95.56 96.95 97.26 10.2 grc proiel 90.24 91.35 92.22 10.1 fr sequoia 96.10 96.62 97.62 10.1 la proiel 89.22 91.52 92.35 9.8 es ancora 97.72 98.15 98.32 9.7 da 94.83 96.62 96.94 9.5 fi 92.43 94.29 94.83 9.5 sv 95.15 96.52 96.84 9.2 pt 94.62 95.89 96.27 9.2 grc 88.00 90.39 91.13 9.0 no nyn. 95.25 96.79 97.08 9.0 de 83.11 89.78 90.70 9.0 ru 87.27 91.99 92.69 8.7 hi 91.03 90.72 91.78 8.1 cu 88.90 88.93 89.82 8.0 fa 96.34 97.23 97.45 7.9 tr 87.03 89.39 90.21 7.7 en partut 92.69 93.93 94.40 7.7 sk 81.23 87.54 88.48 7.5 eu 89.57 92.48 93.04 7.4 pt br 99.73 99.73 99.75 7.4 es 96.34 96.42 96.68 7.</note><p>as a strong baseline. As expected, our reimplementation of <ref type="bibr" target="#b11">Dozat et al. (2017)</ref> tends to significantly outperform the winners of the CONLL 2017 Shared Task. However, in general, our models still obtain better results, outperforming Dozat et al. on 43 of the 54 treebanks, with an absolute difference of 0.42% on average.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Ablation Study</head><p>The model proposed in this paper of a MetaBiLSTM with a sentence-based character model differs from prior work in multiple aspects. In this section, we perform ablations to determine the relative impact of each modeling decision.</p><p>For the experimental setup of the ablation experiments, we report accuracy scores for the development sets. We split off 5% of the sentences from each training corpus and we use this part for early stopping. Ablation experiments are either performed on a few selected treebanks to show individual language results or averaged across all treebanks for which tagging is non-trivial.</p><p>Impact of the Training Schema We first compare jointly training the three model components (Meta-BiLSTM, character model, word model) to training each separately. <ref type="table" target="#tab_5">Table 5</ref> shows that separately optimized models are significantly more accurate on average than jointly optimized models. Separate optimization leads to better accuracy for 34 out of 40 treebanks for the morphological features task and for 30 out of 39 treebanks for xpos tagging. Separate optimization outperformed joint optimization by up to 2.1 percent absolute, while joint never out-performed separate by more than 0.5% absolute. We hypothesize that separately training the models forces each submodel (word and character) to be strong enough to make high accuracy predictions and in some sense serves as a regularizer in the same way that dropout does for individual neurons.</p><p>optimization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Impact of the Sentence-based Character Model</head><p>We compared the setup with sentence-based character context <ref type="figure" target="#fig_1">(Figure 1a</ref>) to word-based character context ( <ref type="figure" target="#fig_1">Figure 1b)</ref>. We selected for these experiments a number of morphological rich languages.</p><p>The results are shown in <ref type="table">Table 6</ref>. The accuracy of the word-based character model joint with a word-based model were significantly lower than a sentence-based character model. We conclude   <ref type="table">Table 6</ref>: F1 score for selected languages on sentence vs. word level character models for the prediction of morphology using late integration.</p><p>also from these results and comparing with results of the reimplementation of DQM that early integration of the word-based character model performs much better as late integration via MetaBiLSTM for a word-based character model.</p><p>Impact of the Meta-BiLSTM Model Combination The proposed model trains word and character models independently while training a joint model on top. Here we investigate the part-ofspeech tagging performance of the joint model compared with the word and character models on their own (using hyperparameters from in 4.1). <ref type="table" target="#tab_7">Table 7</ref> shows, for selected languages, the results averaged over 10 runs in order to measure standard deviation. The examples show that the combined model has significantly higher accuracy compared with either the character and word models individually.</p><p>Concatenation Strategies for the ContextSensitive Character Encodings The proposed model bases a token encoding on both the forward and the backward character representations of both the first and last character in the token (see Equation 1). <ref type="table" target="#tab_8">Table 8</ref> reports, for a few morphological rich languages, the part-of-speech tagging performance of different strategies to gather the characters when creating initial word encodings. The strategies were defined in §3.1. The   reimplementation of <ref type="bibr" target="#b11">Dozat et al. (2017)</ref>. We removed, for all systems, the word model in order to assess each strategy in isolation. The performance is quite different per language. E.g., for Latin, the outputs of the forward and backward LSTMs of the last character scored highest.</p><p>Sensitivity to Hyperparameter Search We picked Vietnamese for a more in-depth analysis since it did not perform well and investigated the influence of the sizes of LSTMs for the word and character model on the accuracy of development set. With larger network sizes, the capacity of the network increases, however, on the other hand it is prune to overfitting. We fixed all the hyperparameters except those for the network size of the character model and the word model, and ran a grid search over dimension sizes from 200 to 500 in steps of 50. The surface plot in 3 shows that the grid peaks with more moderate settings around 350 LSTM cells which might lead to a higher accuracy. For all of the network sizes in the grid search, we still observed during training that the accuracy reach a high value and degrades with more iterations for the character and word model. This suggests that future variants of this model might benefit from higher regularization.</p><p>Discussion Generally, the fact that different techniques for creating word encodings from character encodings and different network sizes can lead to different accuracies per language suggests that it should be possible to increase the accuracy of our model on a per language basis via a grid search over all possibilities. In fact, there are many variations on the models we presented in this work (e.g., how the character and word models are combined with the meta-BiLSTM). Since we are using separate losses, we could also change our training schema. For example, one could use methods like stack-propagation ( <ref type="bibr" target="#b23">Zhang and Weiss, 2016)</ref> where we burn-in the character and word models and then train the meta-BiLSTM backpropagating throughout the entire network.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Conclusions</head><p>We presented an approach to morphosyntactic tagging that combines context-sensitive initial character and word encodings with a meta-BiLSTM layer to obtain state-of-the art accuracies for a wide variety of languages.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>(</head><label></label><figDesc>a) Sentence-based Character Model. The representation for the token shingles is the concatenation of the four shaded boxes. Note the surrounding sentence context affects the representation. (b) Token-based Character Model a . The token is repre- sented by the concatenation of attention over the lightly shaded boxes with the final cell (dark shaded box). The rest of the sentence has no impact on the representation. a This is specifically the model of Dozat et al. (2017).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Token representations are sensitive to the context in the sentence-based character model ( §3.1) and are context-independent in the token-based character model ( §3.2).</figDesc><graphic url="image-1.png" coords="3,78.63,62.81,213.17,90.60" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head></head><label></label><figDesc>as shown in Fig- ure 1a. This model uses the final state of a unidi- rectional LSTM over the characters of the word, combined with the attention mechanism of Cao and Rei</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>(</head><label></label><figDesc>b) The overall architecture of the system. The data flows along the arrows. The optimizers minimizes the loss of the classifiers independently and backpropagates along the bold arrows.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Tagging architectures. (a) Dozat et al. (2017); (b) Meta-BiLSTM architecture of this work.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: 3D surface plot for development set accuracy for XPOS (y-axis) depending on LSTM size of the character and word model for the Vietnamese treebank. The snapshot is take after 195 training epochs and we average the values of neighboring epochs.</figDesc><graphic url="image-3.png" coords="9,307.28,42.97,232.20,186.84" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head></head><label></label><figDesc>shows an overview of the ar- chitecture, hyperparameters and the initialization settings of the network. The word embeddings are initialized with zero values and the pre-trained embeddings are not updated during training. The dropout used on the embeddings is achieved by a</figDesc><table>Architecture 
+Model 
+Parameter 
+Value 
+Chr, Wrd 
+BiLSTM layers 
+3 
+Mt 
+BiLSTM layers 
+1 
+Chr, Wrd, Mt BiLSTM size 
+400 
+Chr, Wrd, Mt Dropout LSTMs 
+0.33 
+Chr, Wrd, Mt Dropout MLP 
+0.33 
+Wrd 
+Dropout embeddings 
+0.33 
+Chr 
+Dropout embeddings 
+0.05 
+Chr, Wrd, Mt Nonlinear act. (MLP) ELU 
+Initialization 
+Model 
+Parameter 
+Value 
+Wrd 
+embeddings 
+Zero 
+Chr 
+embeddings 
+Gaussian 
+Chr, Wrd, Mt MLP 
+Gaussian 
+Training 
+Model 
+Parameter 
+Value 
+Chr, Wrd, Mt Optimizer 
+Adam 
+Chr, Wrd, Mt Loss 
+Cross entropy 
+Chr, Wrd, Mt Learning rate 
+0.002 
+Chr, Wrd, Mt Decay 
+0.999994 
+Chr, Wrd, Mt Adam epsilon 
+1e-08 
+Chr, Wrd, Mt beta1 
+0.9 
+Chr, Wrd, Mt beta2 
+0.999 
+
+Table 1: Selected hyperparameters and initializa-
+tion of parameters for our models. Chr, Wrd, and 
+Mt are used to indicate the character, word, and 
+meta models respectively. The Gaussian distribu-
+tion is used with a mean of 0 and variance of 1 to 
+generate the random values. 
+
+single dropout mask and we use dropout on the in-
+put and the states of the LSTM. 
+As is standard, model selection was done mea-
+suring development accuracy/F1 score after each 
+epoch and taking the model with maximum value 
+on the development set. 
+
+CONLL 
+
+DQM 
+ours RRIE 
+lang. 
+Winner 
+cs cac 
+95.16 
+95.16 96.91 
+36.2 
+cs 
+95.86 
+95.86 97.28 
+35.5 
+fi 
+97.37 
+97.37 97.81 
+16.7 
+sl 
+94.74 
+94.74 95.54 
+15.2 
+la ittb 
+94.79 
+94.79 95.56 
+14.8 
+grc 
+84.47 
+84.47 86.51 
+13.1 
+bg 
+96.71 
+96.71 97.05 
+10.3 
+ca 
+98.58 
+98.58 98.72 
+9.9 
+grc proiel 
+97.51 
+97.51 97.72 
+8.4 
+pt 
+83.04 
+83.04 84.39 
+8.0 
+cu 
+96.20 
+96.20 96.49 
+7.6 
+it 
+97.93 
+97.93 98.08 
+7.2 
+fa 
+97.12 
+97.12 97.32 
+6.9 
+ru 
+96.73 
+96.73 96.95 
+6.7 
+sv 
+96.40 
+96.40 96.64 
+6.7 
+ko 
+93.02 
+93.02 93.45 
+6.2 
+sk 
+85.00 
+85.00 85.88 
+5.9 
+nl 
+90.61 
+90.61 91.10 
+5.4 
+fi ftb 
+95.31 
+95.31 95.56 
+5.3 
+de 
+97.29 
+97.29 97.39 
+4.7 
+tr 
+93.11 
+93.11 93.43 
+4.6 
+hi 
+97.01 
+97.01 97.13 
+4.0 
+es ancora 
+98.73 
+98.73 98.78 
+3.9 
+ro 
+96.98 
+96.98 97.08 
+3.6 
+la proiel 
+96.93 
+96.93 97.00 
+2.3 
+pl 
+91.97 
+91.97 92.12 
+1.9 
+ar 
+87.66 
+87.66 87.82 
+1.3 
+gl 
+97.50 
+97.50 97.53 
+1.2 
+sv lines 
+94.84 
+94.84 94.90 
+1.2 
+cs clt 
+89.98 
+89.98 90.09 
+1.1 
+lv 
+80.05 
+80.05 80.20 
+0.8 
+zh 
+88.40 
+85.07 85.10 
+0.2 
+da 
+100.00 
+99.96 99.96 
+0.0 
+es 
+99.81 
+99.69 99.69 
+0.0 
+eu 
+99.98 
+99.96 99.96 
+0.0 
+fr sequoia 
+99.49 
+99.06 99.06 
+0.0 
+fr 
+99.50 
+98.87 98.87 
+0.0 
+hr 
+99.93 
+99.93 99.93 
+0.0 
+hu 
+99.85 
+99.82 99.82 
+0.0 
+id 
+100.00 
+99.99 99.99 
+0.0 
+ja 
+98.59 
+89.68 89.68 
+0.0 
+nl lassy 
+99.99 
+99.93 99.93 
+0.0 
+no bok. 
+99.88 
+99.75 99.75 
+0.0 
+no nyn. 
+99.93 
+99.85 99.85 
+0.0 
+ru syn. 
+99.58 
+99.57 99.57 
+0.0 
+en lines 
+95.41 
+95.41 95.39 
+-0.4 
+ur 
+92.30 
+92.30 92.21 
+-1.2 
+he 
+83.24 
+82.45 82.16 
+-1.7 
+vi 
+75.42 
+73.56 73.12 
+-1.7 
+gl treegal 
+91.65 
+91.65 91.40 
+-3.0 
+en 
+94.82 
+94.82 94.66 
+-3.1 
+en partut 
+95.08 
+95.08 94.81 
+-5.5 
+pt br 
+98.22 
+98.22 98.11 
+-6.2 
+et 
+95.05 
+95.05 94.72 
+-6.7 
+el 
+97.76 
+97.76 97.53 
+-10.3 
+macro-avg 
+93.18 
+93.11 93.40 
+-
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Results for XPOS tags. The first column 
+shows the language acronym, the column named 
+DQM shows the results of Dozat et al. (2017). Our 
+system outperforms Dozat et al. (2017) on 32 out 
+of 54 treebanks and Dozat et al. outperforms our 
+model on 10 of 54 treebanks, with 13 ties. RRIE 
+is the relative reduction in error. We excluded ties 
+in the calculation of macro-avg since these tree-
+banks do not contain meaningful xpos tags. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Comparison of optimization methods: 
+Separate optimization of the word, character and 
+meta model is more accurate on average than full 
+back-propagation using a single loss function.The 
+results are statistically significant with two-tailed 
+paired t-test for xpos with p&lt;0.001 and for mor-
+phology with p &lt;0.0001. 
+
+dev. set word char model sentence char model 
+el 
+89.05 
+93.41 
+la ittb 
+93.22 
+95.69 
+ru 
+88.94 
+92.31 
+tr 
+87.78 
+90.77 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table also contains a column with results for our</head><label>also</label><figDesc></figDesc><table>dev. set num. mean mean mean stdev stdev stdev 
+lang. 
+exp. char word meta char word meta 
+el 
+10 96.43 95.36 97.01 0.13 0.11 0.09 
+grc 
+10 88.28 73.52 88.85 0.21 0.29 0.22 
+la ittb 
+10 91.45 87.98 91.94 0.14 0.30 0.05 
+ru 
+10 95.98 93.50 96.61 0.06 0.17 0.07 
+tr 
+10 93.77 90.48 94.67 0.11 0.33 0.14 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head>Table 7 :</head><label>7</label><figDesc></figDesc><table>F1 score for the character, word and 
+meta models. The standard deviation of 10 ran-
+dom restarts of each model is show in the last three 
+columns. The differences in means are all statisti-
+cally significant at p &lt; 0.001 (paired t-test). 
+
+dev. set. F last F1st F last F1st 
+lang. 
+B1st B last B last B1st DQM |xpos| 
+el 
+96.6 96.6 96.2 96.1 95.9 
+16 
+grc 
+87.3 87.1 87.1 86.8 86.7 
+3130 
+la ittb 
+91.1 91.5 91.9 91.3 91.0 
+811 
+ru 
+95.6 95.4 95.6 95.3 95.8 
+49 
+tr 
+93.5 93.3 93.2 92.5 93.9 
+37 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="false"><head>Table 8 :</head><label>8</label><figDesc></figDesc><table>F1 score of char models and their per-
+formance on the dev. set for selected languages 
+with different gather strategies, concatenate to g i 
+(Equation 1). DQM shows results for our reimple-
+mentation of Dozat et al. (2017) (cf.  §3.2), where 
+we feed in only the characters. The final column 
+shows the number of xpos tags in the training set. 
+
+</table></figure>
+
+			<note place="foot" n="1"> As input, we assume the sentence has been tok-</note>
+
+			<note place="foot" n="2"> In the CONLL 2017 Shared Task, a big treebank is one that contains a development set. In total, there are 55 out of the 64 UD treebanks which are considered big treebanks. 3 These are the language specific fine-grained part-ofspeech tags from the Universal Dependency Treebanks.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We would like to thank the anonymous reviewers as well as Terry Koo, Slav Petrov, Vera Axelrod, Kellie Websterk, Jan Botha, Kuzman Ganchev, Zhuoran Yu, Yuan Zhang, Eva Schlinger, Ji Ma, and John Alex for their helpful suggestions, comments and discussions.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Syntaxnet models for the CoNLL</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Andor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ivan</forename><surname>Bogatyy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Gillick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lingpeng</forename><surname>Kong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Terry</forename><surname>Koo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ji</forename><surname>Ma</surname></persName>
+		</author>
+		<ptr target="http://arxiv.org/abs/1703.04929" />
+		<imprint>
+			<date type="published" when="2017" />
+			<pubPlace>Mark Omernick, Slav Petrov, Chayut Thanapirom, Zora Tung, and David Weiss</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Improved transition-based parsing and tagging with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Coppola</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1354" to="1359" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Globally normalized transition-based neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Andor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aliaksei</forename><surname>Severyn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Presta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kuzman</forename><surname>Ganchev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Berlin, Germany</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="2442" to="2452" />
+		</imprint>
+	</monogr>
+	<note>Long Papers)</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Ims at the CoNLL 2017 UD shared task: CRFs and perceptrons meet neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Björkelund</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Agnieszka</forename><surname>Falenska</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiang</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonas</forename><surname>Kuhn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the CoNLL</title>
+		<meeting>the CoNLL</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+				<title level="m">Multilingual Parsing from Raw Text to Universal Dependencies. Association for Computational Linguistics</title>
+		<meeting><address><addrLine>Vancouver, Canada</addrLine></address></meeting>
+		<imprint>
+			<biblScope unit="page" from="40" to="51" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Natural language processing with small feed-forward networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><forename type="middle">A</forename><surname>Botha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emily</forename><surname>Pitler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ji</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anton</forename><surname>Bakalov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Salcianu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Mcdonald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing. Association for Computational Linguistics</title>
+		<meeting>the 2017 Conference on Empirical Methods in Natural Language Processing. Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="2879" to="2885" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">A joint model for word embedding and word morphology</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kris</forename><surname>Cao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marek</forename><surname>Rei</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 1st Workshop on Representation Learning for NLP</title>
+		<meeting>the 1st Workshop on Representation Learning for NLP</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="18" to="26" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">A fast and accurate dependency parser using neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 conference on empirical methods in natural language processing (EMNLP)</title>
+		<meeting>the 2014 conference on empirical methods in natural language processing (EMNLP)</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="740" to="750" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Dynamic Feature Induction: The Last Gist to the State-of-the-Art</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jinho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Choi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 15th Annual Conference of the North American Chapter of the Association for Computational Linguistics</title>
+		<meeting>the 15th Annual Conference of the North American Chapter of the Association for Computational Linguistics<address><addrLine>San Diego, CA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="271" to="281" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">A unified architecture for natural language processing: Deep neural networks with multitask learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronan</forename><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 25th international conference on Machine learning</title>
+		<meeting>the 25th international conference on Machine learning</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="160" to="167" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Natural language processing (almost) from scratch</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronan</forename><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Léon</forename><surname>Bottou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Karlen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pavel</forename><surname>Kuksa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="2493" to="2537" />
+			<date type="published" when="2011-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Stanford&apos;s graph-based neural dependency parser at the CoNLL 2017 shared task</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Dozat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peng</forename><surname>Qi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the CoNLL 2017 Shared Task: Multilingual Parsing from Raw Text to Universal Dependencies</title>
+		<meeting>the CoNLL 2017 Shared Task: Multilingual Parsing from Raw Text to Universal Dependencies<address><addrLine>Vancouver, Canada</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2017-08-03" />
+			<biblScope unit="page" from="20" to="30" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Fast and accurate part-of-speech tagging: The svm approach revisited. Recent Advances in Natural Language Processing III</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jesús</forename><surname>Giménez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lluis</forename><surname>Marquez</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="153" to="162" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Framewise phoneme classification with bidirectional lstm and other neural network architectures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Networks</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="602" to="610" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Bidirectional LSTM-CRF models for sequence tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiheng</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Yu</surname></persName>
+		</author>
+		<ptr target="http://arxiv.org/abs/1508.01991" />
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Finding function in form: Compositional character models for open vocabulary word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alan</forename><forename type="middle">W</forename><surname>Black</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Isabel</forename><surname>Trancoso</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ramon</forename><surname>Fermandez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Silvio</forename><surname>Amir</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luis</forename><surname>Marujo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tiago</forename><surname>Luis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing<address><addrLine>Lisbon, Portugal</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1520" to="1530" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><forename type="middle">E</forename><surname>Peters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Neumann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohit</forename><surname>Iyyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matt</forename><surname>Gardner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+		<ptr target="http://arxiv.org/abs/1802.05365" />
+		<title level="m">Deep contextualized word representations</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Multilingual part-of-speech tagging with bidirectional long short-term memory models and auxiliary loss</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barbara</forename><surname>Plank</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Berlin, Germany</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="412" to="418" />
+		</imprint>
+	</monogr>
+	<note>Short Papers)</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Learning character-level representations for part-of-speech tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cicero</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bianca</forename><surname>Santos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zadrozny</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 31st International Conference on Machine Learning (ICML-14)</title>
+		<meeting>the 31st International Conference on Machine Learning (ICML-14)</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1818" to="1826" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Bidirectional recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kuldip</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Paliwal</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Signal Processing</title>
+		<imprint>
+			<biblScope unit="volume">45</biblScope>
+			<biblScope unit="issue">11</biblScope>
+			<biblScope unit="page" from="2673" to="2681" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Semisupervised condensed nearest neighbor for part-of-speech tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 49th Annual Meeting of the Association for Computational Linguistics: Human Language Technologies: Short Papers</title>
+		<meeting>the 49th Annual Meeting of the Association for Computational Linguistics: Human Language Technologies: Short Papers<address><addrLine>Stroudsburg, PA, USA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="48" to="52" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Tokenizing, pos tagging, lemmatizing and parsing ud 2.0 with udpipe</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milan</forename><surname>Straka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jana</forename><surname>Straková</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the CoNLL 2017 Shared Task: Multilingual Parsing from Raw Text to Universal Dependencies</title>
+		<meeting>the CoNLL 2017 Shared Task: Multilingual Parsing from Raw Text to Universal Dependencies<address><addrLine>Vancouver, Canada</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="88" to="99" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">CoNLL 2017 shared task: Multilingual parsing from raw text to universal dependencies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Zeman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Popel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milan</forename><surname>Straka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Hajic</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joakim</forename><surname>Nivre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Filip</forename><surname>Ginter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Juhani</forename><surname>Luotolahti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sampo</forename><surname>Pyysalo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Potthast</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Francis</forename><surname>Tyers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Elena</forename><surname>Badmaeva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Memduh</forename><surname>Gokirmak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anna</forename><surname>Nedoluzhko</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Silvie</forename><surname>Cinkova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Hajic Jr</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jaroslava</forename><surname>Hlavacova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Václava</forename><surname>Kettnerová</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zdenka</forename><surname>Uresova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jenna</forename><surname>Kanerva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stina</forename><surname>Ojala</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anna</forename><surname>Missilä</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Siva</forename><surname>Reddy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dima</forename><surname>Taji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nizar</forename><surname>Habash</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Herman</forename><surname>Leung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marie-Catherine</forename><surname>De Marneffe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Manuela</forename><surname>Sanguinetti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maria</forename><surname>Simi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hiroshi</forename><surname>Kanayama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Valeria</forename><surname>Depaiva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kira</forename><surname>Droganova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Héctor Martínez Alonso</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Gr C ¸ ¨ Oltekin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the CoNLL 2017 Shared Task: Multilingual Parsing from Raw Text to Universal Dependencies</title>
+		<editor>Kayadelen, Mohammed Attia, Ali Elkahky, Zhuoran Yu, Emily Pitler, Saran Lertpradit, Michael Mandl, Jesse Kirchner, Hector Fernandez Alcalde, Jana Strnadová, Esha Banerjee, Ruli Manurung, Antonio Stella, Atsuko Shimada, Sookyoung Kwak, Gustavo Mendonca, Tatiana Lando, Rattima Nitisaroj, and Josie Li</editor>
+		<meeting>the CoNLL 2017 Shared Task: Multilingual Parsing from Raw Text to Universal Dependencies<address><addrLine>Umut Sulubacak, Hans Uszkoreit, Vivien Macketanz, Aljoscha Burchardt, Kim Harris, Katrin Marheinecke, Georg Rehm, Tolga; Vancouver, Canada</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="1" to="19" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Stackpropagation: Improved representation learning for syntax</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuan</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Berlin, Germany</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1557" to="1566" />
+		</imprint>
+	</monogr>
+	<note>Long Papers). Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">A neural probabilistic structuredprediction model for transition-based dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yue</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shujian</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiajun</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing. Association for Computational Linguistics</title>
+		<meeting>the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing. Association for Computational Linguistics<address><addrLine>Beijing, China</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1213" to="1222" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

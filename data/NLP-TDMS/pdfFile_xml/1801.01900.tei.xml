@@ -1,0 +1,782 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:07+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Knowledge-based Word Sense Disambiguation using Topic Models</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Singh</forename><surname>Devendra</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">Machine Learning Department School of Computer Science</orgName>
+								<orgName type="institution">Carnegie Mellon University</orgName>
+							</affiliation>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Chaplot</surname></persName>
+							<email>chaplot@cs.cmu.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Machine Learning Department School of Computer Science</orgName>
+								<orgName type="institution">Carnegie Mellon University</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Salakhutdinov</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">Machine Learning Department School of Computer Science</orgName>
+								<orgName type="institution">Carnegie Mellon University</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Knowledge-based Word Sense Disambiguation using Topic Models</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Word Sense Disambiguation is an open problem in Natural Language Processing which is particularly challenging and useful in the unsupervised setting where all the words in any given text need to be disambiguated without using any labeled data. Typically WSD systems use the sentence or a small window of words around the target word as the context for disambiguation because their computational complexity scales exponentially with the size of the context. In this paper, we leverage the formalism of topic model to design a WSD system that scales linearly with the number of words in the context. As a result, our system is able to utilize the whole document as the context for a word to be disam-biguated. The proposed method is a variant of Latent Dirich-let Allocation in which the topic proportions for a document are replaced by synset proportions. We further utilize the information in the WordNet by assigning a non-uniform prior to synset distribution over words and a logistic-normal prior for document distribution over synsets. We evaluate the proposed method on Senseval-2, Senseval-3, SemEval-2007, SemEval-2013 and SemEval-2015 English All-Word WSD datasets and show that it outperforms the state-of-the-art unsupervised knowledge-based WSD system by a significant margin.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Word Sense Disambiguation (WSD) is the task of mapping an ambiguous word in a given context to its correct meaning. WSD is an important problem in natural language processing (NLP), both in its own right and as a stepping stone to more advanced tasks such as machine translation <ref type="bibr" target="#b7">(Chan, Ng, and Chiang 2007)</ref>, information extraction and retrieval <ref type="bibr" target="#b24">(Zhong and Ng 2012)</ref>, and question answering <ref type="bibr">(Ra- makrishnan et al. 2003</ref>). WSD, being AI-complete <ref type="bibr">(Nav- igli 2009)</ref>, is still an open problem after over two decades of research. Following <ref type="bibr" target="#b18">Navigli (2009)</ref>, we can roughly distinguish between supervised and knowledge-based (unsupervised) approaches. Supervised methods require senseannotated training data and are suitable for lexical sample WSD tasks where systems are required to disambiguate a restricted set of target words. However, the performance of supervised systems is limited in the all-word WSD tasks as labeled data for the full lexicon is sparse and difficult to obtain. As the all-word WSD task is more challenging and has <ref type="bibr">Copyright © 2018</ref>, Association for the Advancement of Artificial Intelligence (www.aaai.org). All rights reserved. more practical applications, there has been significant interest in developing unsupervised knowledge-based systems. These systems only require an external knowledge source (such as WordNet) but no labeled training data.</p><p>In this paper, we propose a novel knowledge-based WSD algorithm for the all-word WSD task, which utilizes the whole document as the context for a word, rather than just the current sentence used by most WSD systems. In order to model the whole document for WSD, we leverage the formalism of topic models, especially Latent Dirichlet Allocation (LDA). Our method is a variant of LDA in which the topic proportions for a document are replaced by synset proportions for a document. We use a non-uniform prior for the synset distribution over words to model the frequency of words within a synset. Furthermore, we also model the relationships between synsets by using a logisticnormal prior for drawing the synset proportions of the document. This makes our model similar to the correlated topic model , with the difference that our priors are not learned but fixed. In particular, the values of these priors are determined using the knowledge from WordNet. We evaluate our system on a set of five benchmark datasets, Senseval-2, <ref type="bibr">Senseval-3, SemEval-2007</ref><ref type="bibr">, SemEval-2013</ref><ref type="bibr">and SenEval- 2015</ref> show that the proposed model outperforms stateof-the-art knowledge-based WSD system.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>Lesk <ref type="bibr" target="#b8">(Lesk 1986</ref>) is a classical knowledge-based WSD algorithm which disambiguates a word by selecting a sense whose definition overlaps the most with the words in its context. Many subsequent knowledge-based systems are based on the Lesk algorithm. <ref type="bibr" target="#b1">Banerjee and Pedersen (2003)</ref> extended Lesk by utilizing the definitions of words in the context and weighing the words by term frequency-inverse document frequency (tf-idf). <ref type="bibr" target="#b2">Basile, Caputo, and Semeraro (2014)</ref> further enhanced Lesk by using word embeddings to calculate the similarity between sense definitions and words in the context.</p><p>The above methods only use the words in the context for disambiguating the target word. However, Chaplot, Bhattacharyya, and <ref type="bibr" target="#b7">Paranjape (2015)</ref> show that sense of a word depends on not just the words in the context but also on their senses. Since the senses of the words in the context are also unknown, they need to be optimized jointly. In the past decade, many graph-based unsupervised WSD methods have been developed which typically leverage the underlying structure of Lexical Knowledge Base such as WordNet and apply well-known graph-based techniques to efficiently select the best possible combination of senses in the context. <ref type="bibr" target="#b14">Navigli and Lapata (2007)</ref> and <ref type="bibr">Navigli and Lap- ata (2010)</ref> build a subgraph of the entire lexicon containing vertices useful for disambiguation and then use graph connectivity measures to determine the most appropriate senses. <ref type="bibr" target="#b10">Mihalcea (2005)</ref> and <ref type="bibr" target="#b22">Sinha and Mihalcea (2007)</ref> construct a sentence-wise graph, where, for each word every possible sense forms a vertex. Then graph-based iterative ranking and centrality algorithms are applied to find most probable sense. More recently, Agirre, López <ref type="bibr" target="#b0">de Lacalle, and Soroa (2014)</ref> presented an unsupervised WSD approach based on personalized page rank over the graphs generated using WordNet. The graph is created by adding content words to the WordNet graph and connecting them to the synsets in which they appear in as strings. Then, the Personalized PageRank (PPR) algorithm is used to compute relative weights of the synsets according to their relative structural importance and consequently, for each content word, the synset with the highest PPR weight is chosen as the correct sense. Chaplot, Bhattacharyya, and Paranjape (2015) present a graph-based unsupervised WSD system which maximizes the total joint probability of all the senses in the context by modeling the WSD problem as a Markov Random Field constructed using the WordNet and a dependency parser and using a Maximum A Posteriori (MAP) Query for inference. Babelfy <ref type="bibr" target="#b13">(Moro, Raganato, and Navigli 2014</ref>) is another graph-based approach which unifies WSD and Entity Linking (Rao, McNamee, and Dredze 2013). It performs WSD by performing random walks with restart over BabelNet ( <ref type="bibr" target="#b16">Navigli and Ponzetto 2012)</ref>, which is a semantic network integrating WordNet with various knowledge resources.</p><p>The WSD systems which try to jointly optimize the sense of all words in the context have a common limitation that their computational complexity scales exponentially with the number of content words in the context due to pairwise comparisons between the content words. Consequently, practical implementations of these methods either use approximate or sub-optimal algorithms or reduce the size of context. Chaplot, Bhattacharyya, and Paranjape (2015) limit the context to a sentence and reduce the number of pairwise comparisons by using a dependency parser to extract important relations. Agirre, López de Lacalle, and <ref type="bibr" target="#b0">Soroa (2014)</ref> limit the size of context to a window of 20 words around the target word. Moro, Raganato, and Navigli (2014) employ a densest subgraph heuristic for selecting high-coherence semantic interpretations of the input text. In contrast, the proposed approach scales linearly with the number of words in the context while optimizing sense of all the words in the context jointly. As a result, the whole document is utilized as the context for disambiguation.</p><p>Our work is also related to Boyd-Graber, Blei, and Zhu (2007) who were the first to apply LDA techniques to WSD. In their approach, words senses that share similar paths in the WordNet hierarchy are typically grouped in the same topic. However, they observe that WordNet is perhaps not the most optimal structure for WSD. Highly common, polysemous words such as man and time could potentially be associated with many different topics making decipherment of sense difficult. Even rare words that differ only subtly in their sense (e.g., quarterback -the position and quarterback -the player himself) could potentially only share the root node in WordNet and hence never have a chance of being on the same topic. <ref type="bibr" target="#b6">Cai, Lee, and Teh (2007)</ref> also employ the idea of global context for the task of WSD using topic models, but rather than using topic models in an unsupervised fashion, they embed topic features in a supervised WSD model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">WordNet</head><p>Most WSD systems use a sense repository to obtain a set of possible senses for each word. WordNet is a comprehensive lexical database for the English language <ref type="bibr" target="#b11">(Miller 1995)</ref>, and is commonly used as the sense repository in WSD systems.</p><p>It provides a set of possible senses for each content word (nouns, verbs, adjectives and adverbs) in the language and classifies this set of senses by the POS tags. For example, the word "cricket" can have 2 possible noun senses: 'cricket#n#1: leaping insect' and 'cricket#n#2: a game played with a ball and bat', and a single possible verb sense, 'cricket#v#1: (play cricket)'. Furthermore, WordNet also groups words which share the same sense into an entity called synset (set of synonyms). Each synset also contains a gloss and example usage of the words present in it. For example, 'aim#n#2', 'object#n#2, 'objective#n#1', 'target#n#5' share a common synset having gloss "the goal intended to be attained". WordNet also contains information about different types of semantic relationships between synsets. These relations include hypernymy, meronymy, hyponymy, holonymy, etc. <ref type="figure" target="#fig_0">Figure 1</ref> shows a graph of a subset of the WordNet where nodes denote the synset and edges denote different semantic relationship between synsets. For instance, 'plan of action#n#1' is a meronym of 'goal#n#1', and 'purpose#n#1', 'aim#n#1' and 'destination#n#1' are hyponyms of 'goal#n#1', as shown in the figure. These semantic relationships in the WordNet can be used to compute the similarity between different synsets using various standard relatedness measures <ref type="bibr" target="#b18">(Pedersen, Patwardhan, and Michelizzi 2004)</ref>. Note that although WordNet is the most widely used sense repository, the sense distinctions can be too fine-grained in many scenarios. This makes it difficult for expert annotators to agree on a correct sense, resulting in a very low interannotator agreement ( 72%) in standard WSD datasets. Nevertheless, we will use WordNet for our experiments for a fair comparison with previous work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Methods</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Problem Definition</head><p>First, we formally define the task of all-word Word Sense Disambiguation by illustrating an example. Consider a sentence, where we want to disambiguate all the content words (nouns, verbs, adjectives and adverbs):</p><p>They were troubled by insects while playing cricket. The sense x i of each content word (given its part-of-speech tag) w i can take k i possible values from the set y i = {y 1 i , y 2 i , . . . , y ki i } (see <ref type="figure" target="#fig_1">Figure 2</ref>). In particular, the word w 5 = "cricket" can either mean y 1 5 = "a leaping insect" or y 2 5 = "a game played with a ball and bat played by two teams of 11 players." In this example, the second sense is more appropriate. The problem of mapping each content word in any given text to its correct sense is called the all-word WSD task. The set of possible senses for each word is given by a sense repository like WordNet.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Semantics</head><p>In this subsection, we describe the semantic ideas underlying the proposed method and how they are incorporated in the proposed model:</p><p>• using the whole document as the context for WSD: modeled using Latent Dirichlet Allocation.</p><p>• some words in each synset are more frequent than others: modeled using non-uniform priors for the synset distribution over words.</p><p>• some synsets tend to co-occur more than others: modeled using logistic normal distribution for synset proportions in a document.</p><p>Wherever possible, we give examples to motivate the semantic ideas and illustrate their importance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Document context</head><p>The sense of a word depends on other words in its context. In the WordNet, the context of a word is defined to be the discourse that surrounds a language unit and helps to determine its interpretation. It is very difficult to determine the context of any given word. Most WSD systems use the sentence in which the word occurs as its context and each sentence is considered independent of others. However, we know that a document or an article is about Here, the word 'chips' could refer to potato chips, micro chips or poker chips. It is not possible to disambiguate this word without looking at other words in the document. The presence of other words like 'casino', 'gambler', etc. in the document would indicate the sense of poker chips, while words like 'electronic' and 'silicon' indicate the sense of micro chip. Gale, Church, and Yarowsky (1992) also observed that words strongly tend to exhibit only one sense in a given discourse or document. Thus, we hypothesize that the meaning of the word depends on words outside the sentence in which it occurs -as a result, we use the whole document containing the word as its context.</p><p>Topic Models In order to use the whole document as the context for a word, we would like to model the concepts involved in the document. Topic models are suitable for this purpose, which aim to uncover the latent thematic structure in collections of documents (Blei 2012). The most basic example of a topic model is Latent Dirichlet Allocation (LDA) <ref type="bibr" target="#b3">(Blei, Ng, and Jordan 2003)</ref>. It is based on the key assumption that documents exhibit multiple topics (which are nothing but distributions over some fixed vocabulary).</p><p>LDA has an implicit notion of word senses as words with several distinct meanings can appear in distinct topics (e.g., cricket the game in a "sports" topic and cricket the insect in a "zoology" topic). However, since the sense notion is only implicit (rather than a set of explicit senses for each word in WSD), it is not possible to directly apply LDA to the WSD task. Therefore, we modify the basic LDA by representing documents by synset probabilities rather than topic probabilities and consequently, the words are generated by synsets rather than topics. We further modify this graphical model to incorporate the information in the WordNet as described in the following subsections.</p><p>Synset distribution over words Due to sparsity problems in large vocabulary size, the LDA model was extended to a "smoothed" LDA model by placing an exchangeable Dirichlet prior on topic distribution over words. In an exchangeable Dirichlet distribution, each component of the parameter vector is equal to the same scalar. However, such a uniform prior is not ideal for synset distribution over words since each synset contains only a fixed set of words. For example, the synset defined as "the place designated as the end (as of a race or journey)" contains only 'goal','destination' and 'finish'. Furthermore, some words in each synset are more frequent than others. For example, in the synset defined as "a person who participates in or is skilled at some game", the word 'player' is more frequent than word 'participant', while in the synset defined as "a theatrical performer", word 'actor' is more frequent than word 'player'. Thus, we decide to have non-uniform priors for synset distribution over words. Document distribution over synsets The LDA model uses a Dirichlet distribution for the topic proportions of a document. Under a Dirichlet, the components of the topic proportions vector are approximately independent; this leads to the strong and unrealistic modeling assumption that the presence of one topic is not correlated with the presence of other topics. Similarly, in our case, the presence of one synset is correlated with the presence of others. For example, the synset representing the 'sloping land' sense of the word 'bank' is more likely to cooccur with the synset of 'river' (a large natural stream of water) than the synset representing 'financial institution' sense of the word 'bank'. Hence, we model the correlations between synsets using a logistic normal distribution for synset proportions in a document.</p><formula xml:id="formula_0">µ Σ θ m z mn w mn β s η s S N m M</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Proposed Model</head><p>Following the ideas described in the previous subsection, we propose a probabilistic graphical model, which assumes that a corpus is generated according to the following process: where f (α) = exp(α) i exp(αi) is the softmax function. Note that the prior for drawing word proportions for each sense is not symmetric: η s is a vector of length equal to word vocabulary size, having non-zero equal entries only for the words contained in synset s in WordNet. The graphical model corresponding to the generative process is shown in <ref type="figure" target="#fig_3">Figure 4</ref>. <ref type="figure" target="#fig_2">Figure 3</ref> illustrates a toy example of a possible word distribution in synsets and synset proportions in a document learned using the proposed model. Colors highlighting some of the words in the document denote the corresponding synsets they were sampled from.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Priors</head><p>We utilize the information in the WordNet for deciding the priors for drawing the word proportions for each synset and the synset proportions for each document. The prior for distribution of synset s over words is chosen as the frequency of the words in the synset s, i.e., η sv = Frequency of word v in synset s. The logistic normal distribution for drawing synset proportions has two priors, µ and Σ. The parameter µ s gives the probability of choosing a synset s. The frequency of the synset s would be the natural choice for µ s but since our method is unsupervised, we use a uniform µ for all synsets instead. The Σ parameter is used to model the relationship between synsets. Since, the inverse of covariance matrix will be used in inference, we directly choose (i, j)th element of inverse of covariance matrix as follows: Σ −1 ij = Negative of similarity between synset i and synset j The similarity between any two synsets in the WordNet can be calculated using a variety of relatedness measures given in WordNet::Similarity library <ref type="bibr">(Pedersen, Patward- han, and Michelizzi 2004)</ref>. In this paper, we use the Lesk similarity measure as it is used in prior WSD systems. Lesk algorithm calculates the similarity between two synsets using the overlap between their definitions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5">Inference</head><p>We use a Gibbs Sampler for sampling latent synsets z mn given the values of rest of the variables. Given a corpus of M documents, the posterior over latent variables, i.e. the synset assignments z, logistic normal parameter α, is as follows:</p><formula xml:id="formula_1">p(z, α|w, η, µ, Σ) ∝ p(w|z, β) p(β|η) p(z|α) p(α|µ, Σ)</formula><p>The word distribution p(w mn |z mn , β) is multinomial in β zmn and the conjugate distribution p(β s |η s ) is Dirichlet in η s . Thus, p(w|z, β) p(β|η) can be collapsed to p(w|z, η) by integrating out β s for all senses s to obtain:</p><formula xml:id="formula_2">p(w|z, η) = S s=1 v Γ(n SV sv + η sv ) Γ(n S s + ||η s || 1 ) Γ(||η s || 1 ) s Γ(η sv ) The sense distribution p(z mn |α m ) is a multinomial distri- bution with parameters f (α m ) = θ m : p(z|α) = M m=1 Nm n=1 exp(α zmn m ) S s=1 exp(α s m ) System</formula><p>Senseval-2 Senseval-3 SemEval-07 SemEval-13 SemEval-15 All   α m follows a normal distribution which is not conjugate of the multinomial distribution:</p><formula xml:id="formula_3">p(α m |µ, Σ) ∼ N (α m |µ, Σ)</formula><p>Thus, p(z|α)p(α|µ, Σ) can't be collapsed. In typical logistic-normal topic models, a block-wise Gibbs sampling algorithm is used for alternatively sampling topic assignments and logistic-normal parameters. However, since in our case the logistic-normal priors are fixed, we can sample synset assignments directly using the following equation:</p><formula xml:id="formula_4">p(z mn = k|rest) = p(z, w|α, η) p(z −mn , w|α, η) ∝ p(z, w|α, η) ∝ (η sv + n SV sv−mn ) n S s−mn + ||η s || 1 exp(α k m )</formula><p>Here, n SV sv , n SM sm and n S s correspond to standard counts:</p><formula xml:id="formula_5">n SV sv = m,n {z mn = s, w mn = v} n SM sm = n {z mn = s} n S s = m n SM sm</formula><p>The subscript · −mn denotes the corresponding count without considering the word n in document m. The value of z mn at the end of Gibbs sampling is the labelled sense of word n in document m. The computational complexity of Gibbs sampling for this graphical model is linear with respect to number of words in the document ( <ref type="bibr" target="#b19">Qiu et al. 2014</ref>). In <ref type="table">Table 1</ref> we compare our overall F1 scores with different unsupervised systems described in Section 2 which include Banerjee03 (Banerjee and Pedersen 2003), Basile14 (Basile, Caputo, and Semeraro 2014), Agirre14 (Agirre, López de Lacalle, and Soroa 2014) and Moro14 <ref type="bibr" target="#b13">(Moro, Raganato, and Navigli 2014)</ref>. In addition to knowledge-based systems which do not require any labeled training corpora, we also report F1 scores of the state-of-the-art supervised systems trained on SemCor ( <ref type="bibr" target="#b10">Miller et al. 1994)</ref> and OMSTI (Taghipour and Ng 2015) for comparison. Zhong10 (Zhong and Ng 2010) use a Support Vector Machine over a set of features which include surrounding words in the context, their PoS tags, and local collocations. Melmaud16 (Melamud, Goldberger, and Dagan 2016) learn context embeddings of a word and classify a test word instance with the sense of the training set word whose context embedding is the most similar to the context embedding of the test instance. We also provide the F1 scores of MFS baseline, i.e. labeling each word with its most frequent sense (MFS) in labeled datasets, <ref type="bibr">SemCor (Miller et al. 1994)</ref> and OM-STI ( <ref type="bibr" target="#b22">Taghipour and Ng 2015)</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Experiments &amp; Results</head><p>The proposed method, denoted by WSD-TM in the tables referring to WSD using topic models, outperforms the state-of-the-art WSD system by a significant margin (pvalue &lt;0.01) by achieving an overall F1-score of 66.9 as compared to Moro14's score of 65.5. We also observe that the performance of the proposed model is not much worse than the best supervised system, Melamud16 (69.4). In Table 2 we report the F1 scores on different parts of speech. The proposed system outperforms all previous knowledgebased systems over all parts of speech. This indicates that using document context helps in disambiguating words of all PoS tags.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Discussions</head><p>In this section, we illustrate the benefit of using the whole document as the context for disambiguation by illustrat-   ing an example. Consider an excerpt from the SensEval 2 dataset shown in <ref type="figure" target="#fig_2">Figure 3</ref>. Highlighted words clearly indicate that the domain of the document is Biology. While most of these words are monosemous, let's consider disambiguating the word 'cell', which is highly polysemous, having 7 possible senses as shown in <ref type="figure" target="#fig_7">Figure 5</ref>. As shown in <ref type="table" target="#tab_4">Table 3</ref>, the correct sense of cell ('cell#2') has the highest similarity with senses of three monosemous words 'scientist', 'researcher' and 'protein'. The word 'cell' occurs 21 times in the document, and several times, the other words in the sentence are not adequate to disambiguate it. Since our method uses the whole document as the context, words such as 'scientists', 'researchers' and 'protein' help in disambiguating 'cell', which is not possible otherwise. The proposed model also overcomes several limitations of topic models based on Latent Dirichlet Allocation and its variants. Firstly, LDA requires the specification of the number of topics as a hyper-parameter which is difficult to tune. The proposed model doesn't require the total number of synsets to be specified as the total number of synsets are equal to the number of synsets in the sense repository which is fixed. Secondly, topics learned using LDA are often not meaningful as the words inside some topics are unrelated. However, synsets are always meaningful as they contain only synonymous words. This is ensured in the proposed by using a non-uniform prior for word distribution in synsets. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Conclusion</head><p>In this paper, we propose a novel knowledge-based WSD system based on a logistic normal topic model which incorporates semantic information about synsets as its priors. The proposed model scales linearly with the number of words in the context, which allows our system to use the whole document as the context for disambiguation and outperform state-of-the-art knowledge-based WSD system on a set of benchmark datasets.</p><p>One possible avenue for future research is to use this model for supervised WSD. This could be done by using sense tags from the SemCor corpus as training data in a supervised topic model similar to the one presented by <ref type="bibr" target="#b8">(Mcauliffe and Blei 2008)</ref>. Another possibility would be to add another level to the hierarchy of the document generating process. This would allow us to bring back the notion of topics and then to define topic-specific sense distributions. The same model can also be extended to other problems such named-entity disambiguation.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: WordNet example showing several synsets and the relations between them.</figDesc><graphic url="image-1.png" coords="2,319.50,54.00,238.50,183.43" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: An example of the all-word WSD task. Content words and their possible senses are labeled wi and y j i , respectively.</figDesc><graphic url="image-2.png" coords="3,79.20,54.00,453.61,278.33" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: A toy example of word distribution in synsets and synset proportions in a document learned using the proposed model. Colors highlighting some of the words in the document denote the corresponding synsets they were sampled from.</figDesc><graphic url="image-3.png" coords="4,56.52,54.00,498.98,267.82" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Graphical model for the proposed method.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>1 .</head><label>1</label><figDesc>For each synset, s ∈ {1, . . . , S} (a) Draw word proportions β s ∼ Dir(η s ) 2. For each document, m ∈ {1, . . . , M } (a) Draw α m ∼ N (µ, Σ) (b) Transform α m to synset proportions θ m = f (α m ) (c) For each word in the document, n {1, . . . , N m } i. Draw synset assignment z mn ∼ Mult(θ m ) ii. Draw word from assigned synset w mn ∼ Mult(β zmn )</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>1 :</head><label>1</label><figDesc>Comparison of F1 scores with various WSD systems on English all-words datasets of Senseval-2, Senseval-3, SemEval-2007, SemEval-2013, SemEval-2015. WSD-TM corresponds to the proposed method. The best results in each column among knowledge-based systems are marked in bold.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head></head><label></label><figDesc>For evaluating our system, we use the English all-word WSD task benchmarks of the SensEval-2 (Palmer et al. 2001), SensEval-3 (Snyder and Palmer 2004), SemEval- 2007 (Pradhan et al. 2007), SemEval-2013 (Navigli, Jur- gens, and Vannella 2013) and SemEval-2015 (Moro and Navigli 2015). (Raganato, Camacho-Collados, and Navigli 2017) standardized all the above datasets into a unified for- mat with gold standard keys in WordNet 3.0. We use the standardized version of all the datasets and use the same experimental setting as (Raganato, Camacho-Collados, and Navigli 2017) for fair comparison with prior methods.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: The different senses of the word 'cell' in the WordNet.</figDesc><graphic url="image-4.png" coords="7,319.50,223.35,238.50,94.29" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table</head><label></label><figDesc></figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Comparison of F1 scores on different POS tags over all datasets. WSD-TM corresponds to the proposed method. The best results in 
+each column among knowledge-based systems are marked in bold. 
+
+Sense of 
+Similarity with 
+
+'cell' 
+scientist#1 researcher#1 protein#1 
+
+cell#1 
+0.100 
+0.091 
+0.077 
+cell#2 
+0.200 
+0.167 
+0.100 
+cell#3 
+0.100 
+0.091 
+0.077 
+cell#4 
+0.100 
+0.062 
+0.071 
+cell#5 
+0.100 
+0.077 
+0.067 
+cell#6 
+0.100 
+0.091 
+0.077 
+cell#7 
+0.100 
+0.091 
+0.077 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>The similarity of different senses of the word 'cell' with 
+senses of three monosemous words 'scientist', 'researcher' and 
+'protein'. The correct sense of cell, 'cell#2', has the highest simi-
+larity with all the three synsets. 
+
+</table></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Acknowledgments</head><p>We would like to thank Prof. Eduard Hovy, Prof. Teruko Mitamura, Prof. Matthew Gormley, Zhengzhong Liu and Jakob Bauer for their extremely valuable comments and suggestions throughout the course of this project.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Random walks for knowledgebased word sense disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">López</forename><surname>Agirre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>De Lacalle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Soroa ; Agirre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>López De Lacalle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Soroa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comput. Linguist</title>
+		<imprint>
+			<biblScope unit="volume">40</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="57" to="84" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Extended gloss overlaps as a measure of semantic relatedness</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Banerjee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Pedersen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Ijcai</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="805" to="810" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">An enhanced lesk word sense disambiguation algorithm through a distributional semantic model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caputo</forename><surname>Basile</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Semeraro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Basile</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Caputo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Semeraro</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COLING</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1591" to="1600" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ng</forename><surname>Blei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jordan</forename><forename type="middle">;</forename><surname>Blei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">M</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">Y</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jordan</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">I</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Latent dirichlet allocation. the Journal of machine Learning research</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="993" to="1022" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Probabilistic topic models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">M</forename><surname>Blei</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications of the ACM</title>
+		<imprint>
+			<biblScope unit="volume">55</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="77" to="84" />
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">A topic model for word sense disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">-</forename><surname>Graber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhu ;</forename><surname>Blei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">L</forename><surname>Boyd-Graber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">M</forename><surname>Blei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Zhu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP-CoNLL</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="1024" to="1033" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Improving word sense disambiguation using topic features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lee</forename><surname>Cai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Teh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">S</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><forename type="middle">W</forename><surname>Teh</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP-CoNLL</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="1015" to="1023" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Unsupervised word sense disambiguation using markov random field and dependency parser</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ng</forename><surname>Chan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><forename type="middle">S</forename><surname>Chiang ; Chan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">T</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Chiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Chaplot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Bhattacharyya</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Paranjape</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">A</forename><surname>Gale</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">W</forename><surname>Church</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Yarowsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 45th Annual Meeting of the Association of Computational Linguistics</title>
+		<meeting>the 45th Annual Meeting of the Association of Computational Linguistics<address><addrLine>Prague, Czech Republic</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="233" to="237" />
+		</imprint>
+	</monogr>
+	<note>Proceedings of the workshop on Speech and Natural Language</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Automatic sense disambiguation using machine readable dictionaries: how to tell a pine cone from an ice cream cone</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Lesk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">D</forename><surname>Mcauliffe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">M</forename><surname>Blei</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 5th annual international conference on Systems documentation</title>
+		<meeting>the 5th annual international conference on Systems documentation</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1986" />
+			<biblScope unit="page" from="121" to="128" />
+		</imprint>
+	</monogr>
+	<note>Advances in neural information processing systems</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">context2vec: Learning generic context embedding with bidirectional lstm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Goldberger</forename><surname>Melamud</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Melamud</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Goldberger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Dagan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CoNLL</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="51" to="61" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Unsupervised largevocabulary word sense disambiguation with graph-based algorithms for sequence data labeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Mihalcea</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">A</forename><surname>Miller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Chodorow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Landes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Leacock</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">G</forename><surname>Thomas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on Human Language Technology and Empirical Methods in Natural Language Processing</title>
+		<meeting>the conference on Human Language Technology and Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="240" to="243" />
+		</imprint>
+	</monogr>
+	<note>Proceedings of the workshop on Human Language Technology</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Wordnet: a lexical database for english</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">A</forename><surname>Miller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications of the ACM</title>
+		<imprint>
+			<biblScope unit="volume">38</biblScope>
+			<biblScope unit="issue">11</biblScope>
+			<biblScope unit="page" from="39" to="41" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Semeval-2015 task 13: Multilingual all-words sense disambiguation and entity linking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Moro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Navigli</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SemEval@ NAACL-HLT</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="288" to="297" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Entity linking meets word sense disambiguation: a unified approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raganato</forename><surname>Moro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Moro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Raganato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Navigli</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Transactions of the Association for Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="231" to="244" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Graph connectivity measures for unsupervised word sense disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Navigli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Lapata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 20th International Joint Conference on Artifical Intelligence</title>
+		<meeting>the 20th International Joint Conference on Artifical Intelligence<address><addrLine>San Francisco, CA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Morgan Kaufmann Publishers Inc</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="1683" to="1688" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">An study of graph connectivity for unsupervised word sense disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">[</forename><surname>Navigli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Lapata ; Navigli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Lapata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE transactions on pattern analysis and machine intelligence</title>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="volume">32</biblScope>
+			<biblScope unit="page" from="678" to="692" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">BabelNet: The automatic construction, evaluation and application of a wide-coverage multilingual semantic network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Navigli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">P</forename><surname>Ponzetto</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Artificial Intelligence</title>
+		<imprint>
+			<biblScope unit="volume">193</biblScope>
+			<biblScope unit="page" from="217" to="250" />
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Semeval-2013 task 12: Multilingual word sense disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jurgens</forename><surname>Navigli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Vannella</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Navigli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jurgens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Vannella</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SemEval@ NAACL-HLT</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="222" to="231" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Wordnet::similarity: Measuring the relatedness of concepts</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Navigli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Palmer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of SENSEVAL-2 Second International Workshop on Evaluating Word Sense Disambiguation Systems</title>
+		<meeting>SENSEVAL-2 Second International Workshop on Evaluating Word Sense Disambiguation Systems<address><addrLine>Toulouse, France; Stroudsburg, PA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2001" />
+			<biblScope unit="volume">41</biblScope>
+			<biblScope unit="page" from="38" to="41" />
+		</imprint>
+	</monogr>
+	<note>Demonstration Papers at HLT-NAACL 2004</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Word sense disambiguation: A unified evaluation framework and empirical comparison</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Pradhan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 3rd International Conference on Big Data, Streams and Heterogeneous Source Mining: Algorithms, Systems</title>
+		<meeting>the 3rd International Conference on Big Data, Streams and Heterogeneous Source Mining: Algorithms, Systems</meeting>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="volume">36</biblScope>
+			<biblScope unit="page" from="99" to="110" />
+		</imprint>
+	</monogr>
+	<note>Proc. of EACL</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Question answering via bayesian inference on lexical relations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ramakrishnan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL 2003 Workshop on Multilingual Summarization and Question Answering</title>
+		<meeting>the ACL 2003 Workshop on Multilingual Summarization and Question Answering<address><addrLine>Stroudsburg, PA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="1" to="10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Entity linking: Finding extracted entities in a knowledge base. In Multi-source, multilingual information extraction and summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mcnamee</forename><surname>Rao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Mcnamee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Dredze</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2013" />
+			<publisher>Springer</publisher>
+			<biblScope unit="page" from="93" to="115" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Senseval-3: Third International Workshop on the Evaluation of Systems for the Semantic Analysis of Text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Sinha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Mihalcea</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Snyder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Palmer</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Taghipour</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">T</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference on Semantic Computing</title>
+		<editor>Mihalcea, R., and Edmonds, P.</editor>
+		<meeting>the International Conference on Semantic Computing<address><addrLine>Washington, DC, USA; Barcelona, Spain</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2004" />
+			<biblScope unit="page">338</biblScope>
+		</imprint>
+	</monogr>
+	<note>One million sense-tagged instances for word sense disambiguation and induction</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">It makes sense: A wide-coverage word sense disambiguation system for free text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">T</forename><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL 2010 System Demonstrations</title>
+		<meeting>the ACL 2010 System Demonstrations</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="78" to="83" />
+		</imprint>
+	</monogr>
+	<note>and Ng</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Word sense disambiguation improves information retrieval</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">T</forename><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 50th Annual Meeting of the Association for Computational Linguistics: Long Papers</title>
+		<meeting>the 50th Annual Meeting of the Association for Computational Linguistics: Long Papers<address><addrLine>Stroudsburg, PA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2012" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="273" to="282" />
+		</imprint>
+	</monogr>
+	<note>and Ng 2012</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

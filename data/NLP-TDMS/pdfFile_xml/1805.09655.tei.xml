@@ -1,0 +1,1158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:11+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Global-Locally Self-Attentive Dialogue State Tracker</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Zhong</surname></persName>
+							<email>vzhong@salesforce.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Salesforce Research Palo Alto</orgName>
+								<address>
+									<region>CA</region>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+							<email>cxiong@salesforce.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Salesforce Research Palo Alto</orgName>
+								<address>
+									<region>CA</region>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+							<email>rsocher@salesforce.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Salesforce Research Palo Alto</orgName>
+								<address>
+									<region>CA</region>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Global-Locally Self-Attentive Dialogue State Tracker</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Dialogue state tracking, which estimates user goals and requests given the dialogue context, is an essential part of task-oriented dialogue systems. In this paper , we propose the Global-Locally Self-Attentive Dialogue State Tracker (GLAD), which learns representations of the user utterance and previous system actions with global-local modules. Our model uses global modules to share parameters between estimators for different types (called slots) of dialogue states, and uses local modules to learn slot-specific features. We show that this improves tracking of rare states and achieves state-of-the-art performance on the WoZ and DSTC2 state tracking tasks. GLAD obtains 88.1% joint goal accuracy and 97.1% request accuracy on WoZ, outperforming prior work by 3.7% and 5.5%. On DSTC2, our model obtains 74.5% joint goal accuracy and 97.5% request accuracy, outperforming prior work by 1.1% and 1.0%.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Task oriented dialogue systems can reduce operating costs by automating processes such as call center dispatch and online customer support. Moreover, when combined with automatic speech recognition systems, task-oriented dialogue systems provide the foundation of intelligent assistants such as Amazon Alexa, Apple Siri, and Google Assistant. In turn, these assistants allow for natural, personalized interactions with users by tailoring natural language system responses to the dialogue context. Dialogue state tracking (DST) is a crucial part of dialogue systems <ref type="bibr" target="#b38">(Young et al., 2013)</ref>. In DST, a dialogue state tracker estimates the state of the conversation using the current user utterance and the conversation history. The dialogue system then uses this estimated state to plan the next action and respond to the user. A state in DST typically consists of a set of requests and joint goals. Consider the task of restaurant reservation as an example. During each turn, the user informs the system of particular goals the they would like to achieve (e.g. inform(food=french)), or request for more information from the system (e.g. request(address)). The set of goal and request slot-value pairs (e.g. (food, french), (request, address)) given during a turn are referred to as the turn goal and turn request. The joint goal is the set of accumulated turn goals up to the current turn. <ref type="figure">Figure 1</ref> shows an example dialogue with annotated turn states, in which the user reserves a restaurant.</p><p>Traditional dialogue state trackers rely on Spoken Language Understanding (SLU) systems ( <ref type="bibr" target="#b7">Henderson et al., 2012</ref>) in order to understand user utterances. These trackers accumulate errors from the SLU, which sometimes do not have the necessary dialogue context to interpret the user utterances. Subsequent DST research forgo the SLU and directly infer the state using the conversation history and the user utterance <ref type="bibr">(Hen- derson et al., 2014b;</ref><ref type="bibr" target="#b40">Zilka and Jurcicek, 2015;</ref><ref type="bibr" target="#b18">Mrkši´Mrkši´c et al., 2015</ref>). These trackers rely on handcrafted semantic dictionaries and delexicalization -the anonymization of slots and values using generic tags -to achieve generalization. Recent work by Mrkši´  apply representation learning using convolutional neural networks to learn features relevant for each state as opposed to hand-crafting features.</p><p>A key problem in DST that is not addressed by existing methods is the extraction of rare slotvalue pairs that compose the state during each  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>User System</head><p>User utterance</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Turn goals and requests</head><p>System actions System response <ref type="figure">Figure 1</ref>: An example dialogue from the WoZ restaurant reservation corpus. Dashed lines divide turns in the dialogue. A turn contains an user utterance (purple), followed by corresponding turnlevel goals and requests (blue). The system then executes actions (yellow), and formulates the result into a natural language response (yellow).</p><p>turn. Because task oriented dialogues cover large state spaces, many slot-value pairs that compose the state rarely occur in the training data. Although the chance that the user specifies a particular rare slot-value in a turn is small, the chance that they specify at least one rare slot-value pair is large. Failure to predict these rare slot-value pairs results in incorrect turn-level goal and request tracking. Accumulated errors in turn-level goal tracking significantly degrade joint goal-tracking. For example, in the WoZ state tracking dataset, slot-value pairs have 214.9 training examples on average, while 38.6% of turns have a joint goal that contains a rare slot-value pair with less than 20 training examples.</p><p>In this work, we propose the Global-Locally Self-Attentive Dialogue State Tracker (GLAD), a new state-of-the-art model for dialogue state tracking. In contrast to previous work that estimate each slot-value pair independently, GLAD uses global modules to share parameters between estimators for each slot and local modules to learn slot-specific feature representations. We show that by doing so, GLAD generalizes on rare slot-value pairs with few training examples. GLAD achieves state-of-the-art results of 88.1% goal accuracy and 97.1% request accuracy on the WoZ dialogue state tracking task ), outperforming prior best by 3.7% and 5.5%. On DSTC2 <ref type="figure" target="#fig_4">(Henderson et al., 2014a)</ref>, we achieve 74.5% goal accuracy and 97.5% request accuracy, outperforming prior best by 1.1% and 1.0%. We release an implementation of our model along with a Docker image of our experiment setup for reproducibility 1 .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Global-Locally Self-Attentive Dialogue State Tracker</head><p>One formulation of state tracking is to predict the turn state given an user utterance and previous system actions <ref type="bibr" target="#b35">(Williams and Young, 2007)</ref>. Like previous methods <ref type="bibr" target="#b9">(Henderson et al., 2014b;</ref>, GLAD decomposes the multi-label state prediction problem into a collection of binary prediction problems by using a distinct estimator for each slot-value pair that make up the state. Hence, we describe GLAD with respect to a slot-value pair that is being predicted by the model. Shown in <ref type="figure">Figure 2</ref>, GLAD is comprised of an encoder module and a scoring module. The encoder module consists of separate global-locally self-attentive encoders for the user utterance, the previous system actions, and the slot-value pair under consideration. The scoring module consists of two scorers. One scorer considers the contribution from the utterance while the other considers the contribution from previous system actions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Global-Locally Self-Attentive Encoder</head><p>We begin by describing the global-locally selfattentive encoder, which makes up the encoder module. DST datasets tend to be small relative to their state space in that many slot-value pairs rarely occur in the dataset. Because each state is comprised of a set of slot-value pairs, many of   them rare, poor inference of rare slot-value pairs subsequently results in poor turn-level tracking. This problem is amplified in joint tracking, due to the accumulation of turn-level errors. In developing this encoder, we seek to better model rare slot-value pairs by sharing parameters between each slot through global modules and learning slot-specific features through local modules. The global-locally self-attentive encoder consists of a bidirectional LSTM <ref type="bibr" target="#b10">(Hochreiter and Schmidhuber, 1997)</ref>, which captures temporal relationships within the sequence, followed by a self-attention layer to compute the summary of the sequence. <ref type="figure">Figure 3</ref> illustrates the global-locally self-attentive encoder.</p><p>Consider the process of encoding a sequence with respect to a particular slot s. Let n denote the number of words in the sequence, d emb the dimension of the embeddings, and X ∈ R n×d emb the word embeddings corresponding to words in the sequence. We produce a global encoding H g of X using a global bidirectional LSTM.</p><formula xml:id="formula_0">H g = biLSTM g (X) ∈ R n×drnn (1)</formula><p>where d rnn is the dimension of the LSTM state. We similarly produce a local encoding H s of X, taking into account the slot s, using a local bidirectional LSTM.</p><formula xml:id="formula_1">H s = biLSTM s (X) ∈ R n×drnn (2)</formula><p>The outputs of the two LSTMs are combined through a mixture function to yield a global-local encoding H of X.</p><formula xml:id="formula_2">H = β s H s + (1 − β s ) H g ∈ R n×drnn (3)</formula><p>Here, the scalar β s is a learned parameter between 0 and 1 that is specific to the slot s. Next, we compute a global-local self-attention context c over H. Self-attention, or intra-attention, is an effective method to compute summary context over variable-length sequences for natural language processing tasks ( <ref type="bibr" target="#b3">Cheng et al., 2016;</ref>. In our case, we use a global self-attention module to compute an attention context useful for general-purpose state tracking, as well as a local self-attention module to compute a slot-specific attention context. For each ith element H i , we compute a scalar global self-attention score a g i which is subsequently normalized across all elements using a softmax function.</p><formula xml:id="formula_3">a g i = W g H i + b g ∈ R (4) p g = softmax (a g ) ∈ R n<label>(5)</label></formula><p>The global self-attention context c g is then the sum of each element H i , weighted by the corresponding normalized global self-attention score p g i .</p><formula xml:id="formula_4">c g = i p g i H i ∈ R drnn<label>(6)</label></formula><p>We similarly compute the local self-attention context c s .</p><formula xml:id="formula_5">a s i = W s H i + b s ∈ R (7) p s = softmax (a s ) ∈ R n (8) c s = i p s i H i ∈ R drnn<label>(9)</label></formula><p>The global-local self-attention context c is the mixture</p><formula xml:id="formula_6">c = β s c s + (1 − β s ) c g ∈ R drnn<label>(10)</label></formula><p>For ease of exposition, we define the multivalue encode function encode (X).</p><formula xml:id="formula_7">encode : X → H, c<label>(11)</label></formula><p>This function maps the sequence X to the encoding H and the self-attention context c.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Encoding module</head><p>Having defined the global-locally self-attentive encoder, we now build representations for the user utterance, the previous system actions, and the slot-value pair under consideration. Let U denote word embeddings of the user utterance, A j denote those of the jth previous system action (e.g. request ( price range ), and V denote those of the slot-value pair under consideration (e.g. food = french). We have</p><formula xml:id="formula_8">H utt , c utt = encode (U ) (12) H act j , C act j = encode (A j )<label>(13)</label></formula><formula xml:id="formula_9">H val , c val = encode (V )<label>(14)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Scoring module</head><p>Intuitively, we can determine whether the user has expressed the slot-value pair under consideration by examining two input sources. The first source is the user utterance, in which the user directly states the goals and requests. An example of this is the user saying "how about a French restaurant in the centre of town?", after the system asked "how may I help you?" To handle these cases, we determine whether the utterance specifies the slot-value pair. Namely, we attend over the user utterance H utt , taking into account the slot-value pair being considered c val , and use the resulting attention context q utt to score the slot-value pair.</p><formula xml:id="formula_10">a utt i = H utt i c val ∈ R (15) p utt = softmax a utt ∈ R m<label>(16)</label></formula><formula xml:id="formula_11">q utt = i p utt i H utt i ∈ R drnn<label>(17)</label></formula><formula xml:id="formula_12">y utt = W q utt + b ∈ R (18)</formula><p>where m is the number of words in the user utterance. The score y utt indicates the degree to which the value was expressed by the user utterance.</p><p>The second source is the previous system actions. This source is informative when the user utterance does not present enough information and instead refers to previous system actions. An example of this is the user saying "yes", after the system asked "would you like a restaurant in the centre of town?" To handle these cases, we examine previous actions after considering the user utterance. First, we attend over the previous action representations</p><formula xml:id="formula_13">C act = [C act 1 · · · C act l ]</formula><p>, taking into account the current user utterance c utt . Here, l is the number of previous system actions. Then, we use the similarity between the attention context q act and the slot-value pair c val to score the slot-value pair.</p><formula xml:id="formula_14">a act j = C act j c utt ∈ R<label>(19)</label></formula><formula xml:id="formula_15">p act = softmax a act ∈ R l+1<label>(20)</label></formula><formula xml:id="formula_16">q act = j p act j C act j ∈ R drnn<label>(21)</label></formula><formula xml:id="formula_17">y act = q act c val ∈ R<label>(22)</label></formula><p>In addition to real actions, we introduce a sentinel action to each turn which allows the attention mechanism to ignore previous system actions. The score y act indicates the degree to which the value was expressed by the previous actions.</p><p>The final score y is then a weighted sum between the two scores y utt and y act , normalized by the sigmoid function σ.</p><formula xml:id="formula_18">y = σ y utt + wy act ∈ R<label>(23)</label></formula><p>Here, the weight w is a learned parameter.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Experiments</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Dataset</head><p>The Dialogue Systems Technology Challenges (DSTC) provides a common framework for developing and evaluating dialogue systems and dialogue state trackers ( <ref type="bibr" target="#b38">Williams et al., 2013;</ref><ref type="bibr">Hender- son et al., 2014a)</ref>. Under this framework, dialogue semantics such as states and actions are based on a task ontology such as restaurant reservation. During each turn, the user informs the system of particular goals (e.g. inform(food=french)), or requests for more information from the system (e.g. request(address)). For instance, food and area are examples of slots in the DSTC2 task, and french and chinese are example values within the food slot. We train and evaluate our model using DSTC2 as well as the Wizard of Oz (WoZ) restaurant reservation task ( , which also adheres to the DSTC framework and has the same ontology as DSTC2. For DSTC2, it is standard to evaluate using the N-best list of the automatic speech recognition system (ASR) that is included with the dataset. Because of this, each turn in the DSTC2 dataset contains several noisy ASR outputs instead of a noise-free user utterance. The WoZ task does not provide ASR outputs, and we instead train and evaluate using the user utterance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Metrics</head><p>We evaluate our model using turn-level request tracking accuracy as well as joint goal tracking accuracy. Our definition of GLAD in the previous sections describes how to obtain turn goals and requests. To compute the joint goal, we simply accumulate turn goals. In the event that the current turn goal specifies a slot that has been specified before, the new specification takes precedence. For example, suppose the user specifies a food=french restaurant during the current turn. If the joint goal has no existing food specifications, then we simply add food=french to the joint goal. Alternatively, if food=thai had been specified in a previous turn, we simply replace it with food=french.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Implementation Details</head><p>We use fixed, pretrained GloVe embeddings <ref type="bibr">(Pen- nington et al., 2014</ref>) as well as character n-gram embeddings ( <ref type="bibr" target="#b5">Hashimoto et al., 2017)</ref>. Each model is trained using ADAM ( <ref type="bibr" target="#b13">Kingma and Ba, 2015)</ref>. For regularization, we apply dropout with 0.2 drop rate ( <ref type="bibr" target="#b26">Srivastava et al., 2014</ref>) to embeddings and the output of each local and global module. We use the development split for hyperparameter tuning and apply early stopping using the joint goal accuracy.</p><p>For the DSTC2 task, we train using transcripts of user utterances and evaluate using the noisy ASR transcriptions. During evaluation, we take the sum of the scores resulting from each ASR output as the output score of a particular slot-value. We then normalize this sum using a sigmoid function as shown in Equation (23). We also apply word dropout, in which the embeddings of a word is randomly set to zero with a probability of 0.3. This accounts for the poor quality of ASR outputs in DSTC2, which frequently miss words in the user utterance. We did not find word dropout to be helpful for the WoZ task, which does not contain noisy ASR outputs. <ref type="table">Table 1</ref> shows the performance of GLAD compared to previous state-of-the-art models. The delexicalisation models, which replace slots and values in the utterance with generic tags, are from On the WoZ dataset, we find that GLAD significantly improves upon previous state-of-theart performance by 3.7% on joint goal tracking accuracy and 5.5% on turn-level request tracking accuracy. On the DSTC dataset, which evaluates using noisy ASR outputs instead of user utterances, GLAD improves upon previous state of the art per-  <ref type="table">Table 2</ref>: Ablation study showing turn goal, joint goal, and turn request accuracies on the dev. split of the WoZ dataset. For "-self-attn", we use meanpooling instead of self-attention. For "-LSTM", we compute self-attention over word embeddings.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Comparison to Existing Methods</head><p>formance by 1.1% on joint goal tracking accuracy and 1.0% on turn-level request tracking accuracy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Ablation study</head><p>We perform ablation experiments on the development set to analyze the effectiveness of different components of GLAD. The results of these experiments are shown in <ref type="table">Table 2</ref>. We also show turn goal accuracy in addition to joint goal accuracy and turn request accuracy for reference. Temporal order is important for state tracking. We experiment with an embedding-matching variant of GLAD with self-attention but without LSTMs. The weaker performance by this model suggests that representations that capture temporal dependencies is helpful for understanding phrases for state tracking.</p><p>Self-attention allows slot-specific, robust feature learning. We observe a consistent drop in performance for models that use mean-pooling over the temporal dimension as opposed to selfattention (Equations <ref type="formula">(4)</ref> to <ref type="formula" target="#formula_4">(6)</ref>). This stems from the flexibility in the attention context computation afforded by the self-attention mechanism, which allows the model to focus on select words relevant to the slot-value pair under consideration. <ref type="figure" target="#fig_4">Figure 4</ref> illustrates an example in which local self-attention modules focus on relevant parts of the utterance. The model attends to relevant phrases that n-gram and embedding matching techniques do not capture (e.g. "within 5 miles" for the "area" slot).</p><p>Global-local sharing improves goal tracking. We study the two extremes of sharing between the global module and the local module. The first uses only the local module and results in degradation in goal tracking but does not affect request tracking (e.g. β s = 1). This is because the former is a joint prediction over several slot-values with few training examples, whereas the latter predicts a single slot that has the most training examples.</p><p>The second uses only the global module and underperforms in both goal tracking and request tracking (e.g. β s = 0). This model is less expressive, as it lacks slot-specific specializations except for the final scoring modules. <ref type="figure" target="#fig_5">Figure 5</ref> shows the performance of GLAD and the two sharing variants across different numbers of occurrences in the training data. GLAD consistently outperforms both variants for rare slot-value pairs. For slot-value pairs with an abundance of training data, there is no significant performance difference between models as there is sufficient data to generalize. <ref type="table" target="#tab_5">Table 3</ref> shows example predictions by GLAD. In the first example, the user explicitly outlines requests and goals in a single utterance. In the second example, the model previously prompted the user for confirmation of two requests (e.g. for the restaurant's address and phone number), and the user simply answers in the affirmative. In this w a i t , y o u n e v e r g a v e m e t h e i n f o r m a t i o n . f i n d m e a c h i n e s e r e s t a u r a n t w i t h i n 5 m i l e s .    <ref type="bibr" target="#b27">and Young, 2010;</ref><ref type="bibr" target="#b30">Wang and Lemon, 2013;</ref><ref type="bibr" target="#b33">Williams, 2014;</ref><ref type="bibr" target="#b22">Perez and Liu, 2017)</ref>. Recent results in dialogue state tracking show that it is beneficial to jointly learn speech understanding and dialogue tracking <ref type="bibr" target="#b9">(Henderson et al., 2014b;</ref><ref type="bibr" target="#b40">Zilka and Jurcicek, 2015;</ref>. These approaches directly take as input the N-best list produced by the ASR system. By avoiding the accumulation of errors from the initial SLU component, these joint approaches typically achieved stronger performance on tasks such as DSTC2. One drawback to these approaches is that they rely on hand-crafted features and complex domain-specific lexicon (in addition to the ontology), and consequently are difficult to extend and scale to new domains. The recent Neural Belief Tracker (NBT) by Mrkši´Mrkši´c et al. <ref type="formula" target="#formula_11">(2017)</ref> avoids reliance on hand-crafted features and lexicon by using representation learning. The NBT employs convolutional filters over word embeddings in lieu of previously-used hand-engineered features. Moreover, to outperform previous methods, the NBT uses pretrained embeddings tailored to retain semantic relationships by injecting semantic similarity constraints from the Paraphrase Database ( <ref type="bibr" target="#b32">Wieting et al., 2015;</ref><ref type="bibr" target="#b4">Ganitkevitch et al., 2013</ref>). On the one hand, these specialized embeddings are more difficult to obtain than word embeddings from language modeling. On the other hand, these embeddings are not specific to any dialogue domain and generalize to new domains.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.6">Qualitative analysis</head><p>Neural attention models in NLP. Attention mechanisms have led to improvements on a variety of natural language processing tasks. <ref type="bibr">Bah- danau et al. (2015)</ref> propose attentional sequence to sequence models for neural machine translation. <ref type="bibr" target="#b17">Luong et al. (2015)</ref> analyze various attention techniques and highlight the effectiveness of the simple, parameterless dot product attention. Similar models have also proven successful in tasks such as summarization ( <ref type="bibr" target="#b23">See et al., 2017</ref>  are prefaced with a "+" symbol. Ground truth slot-value pairs that are not predicted by the model (e.g. false negatives) are prefaced with a "-" symbol.</p><p>2018). Self-attention, or intra-attention, has led improvements in language modeling, sentiment analysis, natural language inference ( <ref type="bibr" target="#b3">Cheng et al., 2016)</ref>, semantic role labeling ( , and coreference resolution ( . Deep self-attention has also achieved state-of-the-art results in machine translation ( . Coattention, or bidirectional attention that codependently encode two sequences, have led to significant gains in question answering ( <ref type="bibr" target="#b25">Seo et al., 2017;</ref> as well as visual question answering ( <ref type="bibr" target="#b16">Lu et al., 2016)</ref>.</p><p>Parameter sharing between related tasks. Sharing parameters between related tasks to improve joint performance is prominent in multitask learning <ref type="bibr" target="#b2">(Caruana, 1998;</ref><ref type="bibr" target="#b28">Thrun, 1996)</ref>. Early works in multi-tasking use Gaussian processes whose covariance matrix is induced from shared kernels ( <ref type="bibr" target="#b14">Lawrence and Platt, 2004;</ref><ref type="bibr" target="#b39">Yu et al., 2005;</ref><ref type="bibr" target="#b24">Seeger et al., 2005;</ref><ref type="bibr" target="#b1">Bonilla et al., 2008)</ref>. <ref type="bibr" target="#b5">Hashimoto et al. (2017)</ref> propose a progressively trained joint model for NLP tasks. When a new task is introduced, a new section is added to the network whose inputs are intermediate representations from sections for previous tasks. In this sense, tasks share parameters in a hierarchical manner. <ref type="bibr" target="#b11">Johnson et al. (2016)</ref> propose a single model that jointly learns to translate between multiple language pairs, including one-tomany, many-to-one, and many-to-many translation.  propose a model that jointly learns multiple tasks across modalities. Each modality-specific feature extractor extracts a representation that is fed into a shared encoder.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Conclusions</head><p>We introduced the Global-Locally Self-Attentive Dialogue State Tracker (GLAD), a new state-ofthe-art model for dialogue state tracking. At the core of GLAD is the global-locally self-attention encoder, whose global modules allow parameter sharing between slots and local modules allow slot-specific feature learning. This allows GLAD to generalize on rare slot-value pairs with few training data. GLAD achieves state-of-theart results of 88.1% goal accuracy and 97.1% request accuracy on the WoZ dialogue state tracking task, as well as 74.5% goal accuracy and 97.5% request accuracy on DSTC2.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Where</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 2 :Figure 3 :</head><label>23</label><figDesc>Figure 2: The Global-Locally Self-Attentive Dialogue State Tracker.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head></head><label></label><figDesc>Henderson et al. (2014b) for DSTC2 and Wen et al. (2017) for WoZ. Semantic dic- tionaries map slot-value pairs to hand-engineered synonyms and phrases. The NBT (Mrkši´Mrkši´c et al., 2017) applies CNN over word embeddings learned over a paraphrase database (Wieting et al., 2015) instead of delexicalised n-gram features.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Global and local self-attention scores on user utterances. Each row corresponds to the selfattention score for a particular slot. Slot-specific local self-attention modules emphasize relevant key words and phrases to that slot, whereas the global module attends to all relevant words.</figDesc><graphic url="image-1.png" coords="7,145.83,106.18,337.91,89.15" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: F1 performance for each slot-value pair in the development split of the WoZ task, grouped by the number of training instances.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head>would you go to eat in the south part of town?</head><label></label><figDesc></figDesc><table>inform(area=south) 
+
+ok I can help you with that. Are you 
+looking for a particular type of food, or 
+within a specific price range? 
+
+request(food) 
+request(price range) 
+
+I just want to eat at a cheap restaurant in the south 
+part of town. What food types are available, can you 
+also provide some phone numbers? 
+
+inform(price range=cheap) 
+inform(area=south) 
+request(phone) 
+request(food) 
+
+request(food) 
+
+I found two restaurants serving cheap 
+food. Would you prefer Portuguese or 
+Chinese food? 
+
+Either is fine, can I have the phone number please? 
+
+request(phone) 
+
+The lucky start is at 01223 244277 and 
+Nandos is at 01223 327908. 
+
+Thank you very much. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>;</head><label></label><figDesc></figDesc><table>Paulus et al., 
+
+System actions in previous turn 
+
+User utterance 
+Predicted turn belief state 
+
+N/A 
+I would like Polynesian 
+food in the South part of 
+town. Please send me phone 
+number and address. 
+
+request(phone) 
+request(address) 
+inform(food=polynesian) 
+inform(area=south) 
+
+request(address) 
+request(phone) 
+
+There is a moderately priced italian place 
+called Pizza hut at cherry hilton. would 
+you like the address and phone number? 
+
+Yes please. 
+request(phone) 
+request(address) 
+
+request(food) 
+request(price range) 
+
+ok I can help you with that. Are you look-
+ing for a particular type of food, or within 
+a specific price range? 
+
+I just want to eat at a cheap 
+restaurant in the south part 
+of town. What food types 
+are available, can you also 
+provide some phone num-
+bers? 
+
+request(phone) 
+inform(price range=cheap) 
+inform(area=south) 
+-inform(food=dontcare) 
++request(food) 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Example predictions by Global-Locally Self-Attentive Dialogue State Tracker on the develop-
+ment split of the WoZ restaurant reservation dataset. Model predicted slot-value pairs that are not in the 
+ground truth (e.g. false positives) </table></figure>
+
+			<note place="foot" n="1"> https://github.com/salesforce/glad</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgement</head><p>We thank Nikola Mrkši´Mrkši´c for helpful discussion and for providing a preprocessed version of the DSTC2 dataset.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Neural machine translation by jointly learning to align and translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Multi-task gaussian process prediction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Edwin V Bonilla</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Chai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Multitask learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rich</forename><surname>Caruana</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Learning to learn</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="95" to="133" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Long short-term memory-networks for machine reading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianpeng</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Dong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mirella</forename><surname>Lapata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">PPDB: The paraphrase database</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Juri</forename><surname>Ganitkevitch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Benjamin</forename><surname>Van Durme</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Callison-Burch</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">HLT-NAACL</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">A joint many-task model: Growing a neural network for multiple NLP tasks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuma</forename><surname>Hashimoto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshimasa</forename><surname>Tsuruoka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Deep semantic role labeling: What works and whats next</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luheng</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Lewis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Discriminative spoken language understanding using word confusion networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Henderson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milica</forename><surname>Gaši´gaši´c</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Blaise</forename><surname>Thomson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pirros</forename><surname>Tsiakoulis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Young</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Spoken Language Technology Workshop (SLT)</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">The second dialog state tracking challenge</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Henderson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Blaise</forename><surname>Thomson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason D</forename><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGDIAL</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Word-based dialog state tracking with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Henderson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Blaise</forename><surname>Thomson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Young</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+	<note>In SIGDIAL</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Compututation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Google&apos;s multilingual neural machine translation system: Enabling zero-shot translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Melvin</forename><surname>Johnson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Quoc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maxim</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Krikun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhifeng</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nikhil</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fernanda</forename><surname>Thorat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Vigas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Wattenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Macduff</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Hughes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Dean</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+			<pubPlace>Google</pubPlace>
+		</imprint>
+	</monogr>
+<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aidan</forename><forename type="middle">N</forename><surname>Gomez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Vaswani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Niki</forename><surname>Parmar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Llion</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jakob</forename><surname>Uszkoreit</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1706.05137</idno>
+		<title level="m">One model to learn them all</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Diederik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ba</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Learning to learn with the informative vector machine</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Neil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John C</forename><surname>Lawrence</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Platt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICML</title>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">End-to-end neural coreference resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luheng</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Lewis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><forename type="middle">S</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Hierarchical question-image coattention for visual question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiasen</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianwei</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dhruv</forename><surname>Batra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Devi</forename><surname>Parikh</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Effective approaches to attentionbased neural machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minh-Thang</forename><surname>Luong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hieu</forename><surname>Pham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nikola</forename><surname>Mrkši´mrkši´c</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Diarmuid</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Blaise</forename><surname>Séaghdha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milica</forename><surname>Thomson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pei-Hao</forename><surname>Gaši´gaši´c</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Su</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tsung-Hsien</forename><surname>Vandyke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Wen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Young</surname></persName>
+		</author>
+		<title level="m">Multidomain dialog state tracking using recurrent neural networks. In ACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Neural belief tracker: Data-driven dialogue state tracking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nikola</forename><surname>Mrkši´mrkši´c</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Diarmuid</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tsung-Hsien</forename><surname>Séaghdha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Blaise</forename><surname>Wen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Thomson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Young</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">A deep reinforced model for abstractive summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Romain</forename><surname>Paulus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+	<note>In ICLR</note>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">GloVe: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Dialog state tracking, a machine reading approach using memory network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julien</forename><surname>Perez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fei</forename><surname>Liu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EACL</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Get to the point: Summarization with pointergenerator networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abigail</forename><surname>See</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Semiparametric latent factor models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthias</forename><surname>Seeger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yee-Whye</forename><surname>Teh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Jordan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AIS-TATS</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Bidirectional attention flow for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Min Joon</forename><surname>Seo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aniruddha</forename><surname>Kembhavi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ali</forename><surname>Farhadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hannaneh</forename><surname>Hajishirzi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Dropout: a simple way to prevent neural networks from overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of machine learning research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Bayesian update of dialogue state: A POMDP framework for spoken dialogue systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Blaise</forename><surname>Thomson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Young</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Speech &amp; Language</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">Is learning the n-th thing any easier than learning the first? In NIPS</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sebastian Thrun</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Attention is all you need</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Vaswani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Niki</forename><surname>Parmar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jakob</forename><surname>Uszkoreit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Llion</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aidan</forename><forename type="middle">N</forename><surname>Gomez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Illia</forename><surname>Polosukhin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">A simple and generic belief tracking mechanism for the dialog state tracking challenge: On the believability of observed information</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhuoran</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oliver</forename><surname>Lemon</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGDIAL</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">A networkbased end-to-end trainable task-oriented dialogue system</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Tsung-Hsien Wen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nikola</forename><surname>Vandyke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milica</forename><surname>Mrkši´mrkši´c</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lina</forename><forename type="middle">M Rojas</forename><surname>Gaši´gaši´c</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pei-Hao</forename><surname>Barahona</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Su</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Ultes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Young</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EACL</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">From paraphrase database to compositional paraphrase model and back</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Wieting</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohit</forename><surname>Bansal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Gimpel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karen</forename><surname>Livescu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Web-style ranking and slu combination for dialog state tracking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason D</forename><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGDIAL</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Deepak Ramachandran, and Alan Black. 2013. The dialog state tracking challenge</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason D</forename><surname>Williams</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Raux</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGDIAL</title>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Partially observable markov decision processes for spoken dialog systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jason</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Williams</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Young</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Speech and Language</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Dynamic coattention networks for question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">DCN+: Mixed objective and deep residual coattention for question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">POMDP-based statistical spoken dialog systems: A review</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Young</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milica</forename><surname>Gaši´gaši´c</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Blaise</forename><surname>Thomson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason D</forename><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings of the IEEE</title>
+		<imprint>
+			<biblScope unit="volume">101</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Learning gaussian processes from multiple tasks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Volker</forename><surname>Tresp</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anton</forename><surname>Schwaighofer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICML</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Incremental LSTM-based dialog state tracker</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukas</forename><surname>Zilka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Filip</forename><surname>Jurcicek</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Automatic Speech Recognition and Understanding Workshop (ASRU)</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

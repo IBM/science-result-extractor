@@ -1,0 +1,1120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:40+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">SQLNet: GENERATING STRUCTURED QUERIES FROM NATURAL LANGUAGE WITHOUT REINFORCEMENT LEARNING</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaojun</forename><surname>Xu</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution" key="instit1">Shanghai Jiao Tong University</orgName>
+								<orgName type="institution" key="instit2">University of the California</orgName>
+								<address>
+									<settlement>Berkeley</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chang</forename><surname>Liu</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution" key="instit1">Shanghai Jiao Tong University</orgName>
+								<orgName type="institution" key="instit2">University of the California</orgName>
+								<address>
+									<settlement>Berkeley</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dawn</forename><surname>Song</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution" key="instit1">Shanghai Jiao Tong University</orgName>
+								<orgName type="institution" key="instit2">University of the California</orgName>
+								<address>
+									<settlement>Berkeley</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">SQLNet: GENERATING STRUCTURED QUERIES FROM NATURAL LANGUAGE WITHOUT REINFORCEMENT LEARNING</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Synthesizing SQL queries from natural language is a long-standing open problem and has been attracting considerable interest recently. Toward solving the problem , the de facto approach is to employ a sequence-to-sequence-style model. Such an approach will necessarily require the SQL queries to be serialized. Since the same SQL query may have multiple equivalent serializations, training a sequence-to-sequence-style model is sensitive to the choice from one of them. This phenomenon is documented as the &quot;order-matters&quot; problem. Existing state-of-the-art approaches rely on reinforcement learning to reward the decoder when it generates any of the equivalent serializations. However, we observe that the improvement from reinforcement learning is limited. In this paper, we propose a novel approach, i.e., SQLNet, to fundamentally solve this problem by avoiding the sequence-to-sequence structure when the order does not matter. In particular, we employ a sketch-based approach where the sketch contains a dependency graph so that one prediction can be done by taking into consideration only the previous predictions that it depends on. In addition, we propose a sequence-to-set model as well as the column attention mechanism to synthesize the query based on the sketch. By combining all these novel techniques , we show that SQLNet can outperform the prior art by 9% to 13% on the WikiSQL task.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Semantic parsing is a long-standing open question and has many applications. In particular, parsing natural language descriptions into SQL queries recently attracts much interest from both academia ( <ref type="bibr" target="#b34">Yaghmazadeh et al., 2017</ref>) and industry ( <ref type="bibr" target="#b41">Zhong et al., 2017)</ref>. We refer to this problem as the natural-language-to-SQL problem (NL2SQL). The de facto standard approach to solve this problem is to treat both the natural language description and SQL query as sequences and train a sequence-to-sequence model ( <ref type="bibr" target="#b29">Vinyals et al., 2015b</ref>) or its variants <ref type="bibr">(Dong &amp; Lapata, 2016</ref>) which can be used as the parser. One issue of such an approach is that different SQL queries may be equivalent to each other due to commutativity and associativity. For example, consider the following two queries:</p><p>SELECT result SELECT result WHERE score='1-0' AND goal=16 WHERE goal=16 AND score='1-0'</p><p>The order of the two constraints in the WHERE clause does not affect the execution results of the query, but syntactically, these two are considered as different queries. It is well-known that the order of these constraints affects the performance of a sequence-to-sequence-style model ( <ref type="bibr" target="#b30">Vinyals et al., 2016)</ref>, and it is typically hard to find the best ordering. To mitigate this ordering issue, a typical approach that has been applied in many scenarios is to employ reinforcement learning ( <ref type="bibr" target="#b41">Zhong et al., 2017;</ref><ref type="bibr" target="#b11">Hu et al., 2017)</ref>. The basic idea is that, after a standard supervised training procedure, the model is further trained using a policy gradient algorithm. In particular, given an input sequence, the decoder of a sequence-to-sequence model samples an output sequence following the output distribution and computes the reward based on whether the output is a well-formed query and whether the query will compute the correct results. This reward can be used by the policy gradient algorithm to fine-tune the model. However, the improvement that can be achieved through reinforcement learning is often limited. For example, on a NL2SQL task called WikiSQL ( <ref type="bibr" target="#b41">Zhong et al., 2017)</ref>, the state-of-the-art work ( <ref type="bibr" target="#b41">Zhong et al., 2017)</ref> reports an improvement of only 2% by employing reinforcement learning.</p><p>In this work, we propose SQLNet to fundamentally solve this issue by avoiding the sequence-tosequence structure when the order does not matter. In particular, we employ a sketch-based approach to generate a SQL query from a sketch. The sketch aligns naturally to the syntactical structure of a SQL query. A neural network, called SQLNet, is then used to predict the content for each slot in the sketch. Our approach can be viewed as a neural network alternative to the traditional sketchbased program synthesis approaches ( <ref type="bibr" target="#b0">Alur et al., 2013;</ref><ref type="bibr" target="#b26">Solar-Lezama et al., 2006;</ref><ref type="bibr" target="#b6">Bornholt et al., 2016)</ref>. Note that the-state-of-the-art neural network SQL synthesis approach ( <ref type="bibr" target="#b41">Zhong et al., 2017</ref>) also employs a sketch-based approach, although their sketch is more coarse-grained and they employ a sequence-to-sequence structure to fill in the most challenging slot in the sketch.</p><p>As discussed above, the most challenging part is to generate the WHERE clause. Essentially, the issue with a sequence-to-sequence decoder is that the prediction of the next token depends on all previously generated tokens. However, different constraints may not have a dependency on each other. In our approach, SQLNet employs the sketch to provide the dependency relationship of different slots so that the prediction for each slot is only based on the predictions of other slots that it depends on. To implement this idea, the design of SQLNet introduces two novel constructions: sequence-to-set and column attention. The first is designed to predict an unordered set of constraints instead of an ordered sequence, and the second is designed to capture the dependency relationship defined in the sketch when predicting.</p><p>We evaluate our approach on the WikiSQL dataset ( <ref type="bibr" target="#b41">Zhong et al., 2017)</ref>, which is, to the best of our knowledge, the only large scale NL2SQL dataset, and compare with the state-of-the-art approach, Seq2SQL ( <ref type="bibr" target="#b41">Zhong et al., 2017)</ref>. Our approach results in the exact query-match accuracy of 61.5% and the result-match accuracy of 68.3% on the WikiSQL testset. In other words, SQLNet can achieve exact query-match and query-result-match accuracy of 7.5 points and 8.9 points higher than the corresponding metrics of Seq2SQL respectively, yielding the new state-of-the-art on the WikiSQL dataset.</p><p>The WikiSQL dataset was originally proposed to ensure that the training set and test set have a disjoint set of tables. In the practical setting, it is more likely that such an NL2SQL solution is deployed where there exists at least one query observed in the training set for the majority of tables. We re-organize the WikiSQL dataset to simulate this case and evaluate our approach and the baseline approach, Seq2SQL. We observe that in such a case the advantage of SQLNet over Seq2SQL enlarges by 2 points, and the SQLNet model can achieve an execution accuracy of 70.1%.</p><p>To summarize, our main contributions in this work are three-fold. First, we propose a novel principled approach to handle the sequence-to-set generation problem. Our approach avoids the "order-matters" problems in a sequence-to-sequence model and thus avoids the necessity to employ a reinforcement learning algorithm, and achieves a better performance than existing sequence-tosequence-based approach. Second, we propose a novel attention structure called column attention, and show that this helps to further boost the performance over a raw sequence-to-set model. Last, we design SQLNet which bypasses the previous state-of-the-art approach by 9 to 13 points on the WikiSQL dataset, and yield the new state-of-the-art on an NL2SQL task.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">SQL QUERY SYNTHESIS FROM NATURAL LANGUAGE QUESTIONS AND TABLE SCHEMA</head><p>In this work, we consider the WikiSQL task proposed in ( <ref type="bibr" target="#b41">Zhong et al., 2017)</ref>. Different from most previous NL2SQL datasets <ref type="bibr" target="#b27">(Tang &amp; Mooney, 2001;</ref><ref type="bibr" target="#b23">Price, 1990;</ref><ref type="bibr" target="#b14">Li &amp; Jagadish, 2014;</ref><ref type="bibr" target="#b19">Pasupat &amp; Liang, 2015;</ref><ref type="bibr" target="#b36">Yin et al., 2015)</ref>, the WikiSQL task has several properties that we would like. First, it provides a large-scale dataset so that a neural network can be effectively trained. Second, it employs crowd-sourcing to collect the natural language questions created by human beings, so that it can help to overcome the issue that a well-trained model may overfit to template-synthesized descriptions. Third, the task synthesizes the SQL query based only on the natural language and the   <ref type="figure">Figure 1</ref>: An example of the WikiSQL task.</p><p>without relying on the table's content. This will help to mitigate the scalability and privacy issue that alternative approaches may suffer when being applied to realistic application scenarios where large scale and sensitive user data is involved. Fourth, the data is split so that the training, dev, and test set do not share tables. This helps to evaluate an approach's capability to generalize to an unseen schema.</p><p>We now explain the WikiSQL task. In particular, the input contains two parts: a natural language question stating the query for a table, and the schema of the table being queried. The schema of a table contains both the name and the type (i.e., real numbers or strings) of each column. The output is a SQL query which reflects the natural language question with respect to the queried table.</p><p>Note that the WikiSQL task considers synthesizing a SQL query with respect to only one table.</p><p>Thus, in an output SQL query, only the SELECT clause and the WHERE clause need to be predicted, and the FROM clause can be omitted. We present an example in <ref type="figure">Figure 1</ref>.</p><p>The WikiSQL task makes further assumptions to make it tractable. First, it assumes that each column name is a meaningful natural language description so that the synthesis task is tractable from only the natural language question and column names. Second, any token in the output SQL query is either a SQL keyword or a sub-string of the natural language question. For example, when generating a constraint in the WHERE clause, e.g., name='Bob', the token 'Bob' must appear in the natural language question as a sub-string. This assumption is necessary when the content in a database table is not given as an input. Third, each constraint in the WHERE clause has the form of COLUMN OP VALUE, where COLUMN is a column name, OP is one of "&lt;, =, &gt;, ≥, ≤", and VALUE is a substring of the natural language question as explained above.</p><p>Albeit these assumptions, the WikiSQL task is still challenging. <ref type="bibr" target="#b41">Zhong et al. (2017)</ref> report that the state-of-the-art task-agnostic semantic parsing model <ref type="bibr">(Dong &amp; Lapata, 2016)</ref> can achieve an execution accuracy of merely 37%, while the state-of-the-art model for this task can achieve an execution accuracy of around 60%. Given its several properties discussed at the beginning of this section, we think that the WikiSQL task is a more suitable challenging task than others considered previously. We consider building and tackling the SQL synthesis task of more complex queries as important future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">SQLNet</head><p>In this section, we present our SQLNet solution to tackle the WikiSQL task. Different from existing semantic parsing models <ref type="bibr">(Dong &amp; Lapata, 2016)</ref> which are designed to be agnostic to the output grammar, our basic idea is to employ a sketch, which highly aligns with the SQL grammar. Therefore, SQLNet only needs to fill in the slots in the sketch rather than to predict both the output grammar and the content.</p><p>The sketch is designed to be generic enough so that all SQL queries of interest can be expressed by the sketch. Therefore, using the sketch does not hinder our approach's generalizability. We will explain the details of a sketch in Section 3.1.</p><p>The sketch captures the dependency of the predictions to make. By doing so, the prediction of the value of one slot is only conditioned on the values of those slots that it depends on. This avoids the "order matters" problem in a sequence-to-sequence model, in which one prediction is conditioned . To make predictions based on a sketch, we develop two techniques, sequence-to-set and column attention. We will explain the details of these techniques in Section 3.2.</p><p>We combine all techniques to design a SQLNet neural network to synthesize a SQL query from a natural language question and a table schema. In Section 3.3, we present the details of SQLNet and training details to surpass previous state-of-the-art approach without using reinforcement learning.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">SKETCH-BASED QUERY SYNTHESIS</head><p>The SQL sketch that we employ is formally stated in <ref type="figure">Figure 2a</ref>. The tokens in bold (i.e., SELECT, WHERE, and AND) indicate the SQL keywords. The tokens starting with "$" indicate the slot to be filled. The name following the "$" indicates the type of the prediction. For example, the $AGG slot can be filled with either an empty token or one of the aggregation operators, such as SUM and MAX. The $COLUMN and the $VALUE slots need be filled with a column name and a sub-string of the question respectively. The $OP slot can take a value from {=, &lt;, &gt;}. The notion (...) * employ a regular expression to indicate zero or more AND clauses.</p><p>The dependency graph of the sketch is illustrated in <ref type="figure">Figure 2b</ref>. All slots whose values are to be predicted are illustrated as boxes, and each dependency is depicted as a directed edge. For example, the box of OP 1 has two incoming edges from Column 1 and the natural language question respectively. These edges indicate that the prediction of the value for OP 1 depends on both the values of Column 1 and the natural language question. We can view our model as a graphical model based on this dependency graph, and the query synthesis problem as an inference problem on the graph. From this perspective, we can see that the prediction of one constraint is independent with another, and thus our approach can fundamentally avoid the "order-matters" problem in a sequence-to-sequence model.</p><p>Note that although it is simple, this sketch is expressive enough to represent all queries in the WikiSQL task. Our SQLNet approach is not limited to this sketch only. To synthesize more complex SQL queries, we can simply employ a sketch that supports a richer syntax. In fact, the state-ofthe-art approach on the WikiSQL task, i.e., <ref type="bibr">Seq2SQL (Zhong et al., 2017)</ref>, can also be viewed as a sketch-based approach. In particular, Seq2SQL predicts for $AGG and $COLUMN separately from the WHERE clause. However, Seq2SQL generates the WHERE clause using a sequence-to-sequence model. Thus it still suffers the "order-matters" problem.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">SEQUENCE-TO-SET PREDICTION USING COLUMN ATTENTION</head><p>In this section, we use the prediction of a column name in the WHERE clause as an example to explain the ideas of a sequence-to-set model and column attention. We will explain the full SQLNet model in Section 3.3.</p><p>Sequence-to-set. Intuitively, the column names appearing in the WHERE clause constitute a subset of the full set of all column names. Therefore, instead of generating a sequence of column names, we can simply predict which column names appear in this subset of interest. We refer to this idea as sequence-to-set prediction.</p><p>In particular, we compute the probability P wherecol (col|Q), where col is a column name and Q is the natural language question. To this aim, one idea is to compute P wherecol (col|Q) as</p><formula xml:id="formula_0">P wherecol (col|Q) = σ(u T c E col + u T q E Q )<label>(1)</label></formula><p>where σ is the sigmoid function, E col and E Q are the embeddings of the column name and the natural language question respectively, and u c and u q are two column vectors of trainable variables. Here, the embeddings E col and E Q can be computed as the hidden states of a bi-directional LSTM running on top of the sequences of col and Q respectively. Note the two LSTMs to encode the column names and the question do not share their weights. The dimensions of u c , u q , E col , E Q are all d, which is the dimension of the hidden states of the LSTM.</p><p>In doing so, the decision of whether or not to include a particular column in the WHERE clause can be made independently to other columns by examining P wherecol (col|Q).</p><p>Column attention. Equation <ref type="formula" target="#formula_0">(1)</ref> has a problem of using E Q . Since it is computed as the hidden states of the natural language question only, it may not be able to remember the particular information useful in predicting a particular column name. For example, in the question in <ref type="figure">Figure 1</ref>, the token "number" is more relevant to predicting the column "No." in the WHERE clause. However, the token "player" is more relevant to predicting the "player" column in the SELECT clause. The embedding should reflect the most relevant information in the natural language question when predicting on a particular column.</p><p>To incorporate this intuition, we design the column attention mechanism to compute E Q|col instead of E Q . In particular, we assume H Q is a matrix of d×L, where L is the length of the natural language question. The i-th column of H Q represents the hidden states output of the LSTM corresponding to the i-th token of the question.</p><p>We compute the attention weights w for each token in the question. In particular, w is a L-dimension column vector, which is computed as After the attention weights w are computed, we can compute E Q|col as the weighted sum of each token's LSTM hidden output based on w:</p><formula xml:id="formula_1">w = softmax(v) v i = (E col ) T W H i Q ∀i ∈ {1, ..., L}</formula><formula xml:id="formula_2">E Q|col = H Q w</formula><p>We can replace E Q with E Q|col in Equation (1) to get the column attention model:</p><formula xml:id="formula_3">P wherecol (col|Q) = σ(u T c E col + u T q E Q|col )<label>(2)</label></formula><p>In fact, we find that adding one more layer of affine transformation before the σ operator can improve the prediction performance by around 1.5%. Thus, we get the final model for predicting column names in the WHERE clause:</p><formula xml:id="formula_4">P wherecol (col|Q) = σ((u col a ) T tanh(U col c E col + U col q E Q|col ))<label>(3)</label></formula><p>where U col c and U col q are trainable matrices of size d × d, and u col a is a d-dimensional trainable vector.</p><p>We want to highlight that column attention is a special instance of the generic attention mechanism to compute the attention map on a question conditioned on the column names. We will show in our evaluation that this mechanism can improve upon a sequence-to-set model by around 3 points.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">SQLNet MODEL AND TRAINING DETAILS</head><p>In this section, we present the full SQLNet model and training details. As illustrated in <ref type="figure">Figure 2b</ref>, the predictions of the SELECT clause and WHERE clause are separated. In the following, we first present the model for generating the WHERE clause and then the SELECT clause. In the end, we describe more training details which significantly help to improve the prediction accuracy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3.1">PREDICTING THE WHERE CLAUSE</head><p>The WHERE clause is the most complex structure to predict in the WikiSQL task. Our SQLNet model first predicts the set of columns that appear in the WHERE clause based on Section 3.2, and then for each column it generates the constraint by predicting the OP and VALUE slots. We describe them below.</p><p>Column slots. After P wherecol (col|Q) is computed based on Equation (3), SQLNet needs to decide which columns to include in the WHERE. One approach is to set a threshold τ ∈ (0, 1), so that all columns with P wherecol (col|Q) ≥ τ are chosen.</p><p>However, we find that an alternative approach can typically give a better performance. We now explain this approach. In particular, we use a network to predict the total number K of columns to be included in the subset, and choose the top-K columns with the highest P wherecol (col|Q) to form the column names in the WHERE clause.</p><p>We observe that most queries have a limited number of columns in their WHERE clauses. Therefore, we set an upper-bound N on the number of columns to choose, and thus we cast the problem to predict the number of columns as a (N + 1)-way classification problem (from 0 to N ). In particular, we have</p><formula xml:id="formula_5">P #col (K|Q) = softmax(U #col 1 tanh(U #col 2 E Q|Q )) i</formula><p>where U #col 1 and U #col 2 are trainable matrices of size (N + 1) × d and d × d respectively. The notion softmax(...) i indicates the i-th dimension of the softmax output, and we will use this notion throughout the rest of the description. SQLNet chooses the number of columns K that maximizes P #col (K|Q).</p><p>In our evaluation, we simply choose N = 4 to simplify our evaluation setup. But note that we can get rid of the hyper-parameter N by employing a variant-length prediction model, such as the one for the SELECT column prediction model that will be discussed in Section 3.3.2.</p><p>OP slot. For each column in the WHERE clause, predicting the value of its OP slot is a 3-way classifications: the model needs to choose from {=, &gt;, &lt;}. Therefore, we compute</p><formula xml:id="formula_6">P op (i|Q, col) = softmax(U op 1 tanh(U op c E col + U op q E Q|col )) i</formula><p>where col is the column under consideration, U op 1 , U op c , U op q are trainable matrices of size 3 × d, d × d, and d × d respectively. Note that E Q|col is used in the right-hand side. This means that SQLNet uses column attention for OP prediction to capture the dependency in <ref type="figure">Figure 2b</ref>. VALUE slot. For the VALUE slot, we need to predict a substring from the natural language question. To this end, SQLNet employs a sequence-to-sequence structure to generate the sub-string. Note that, here the order of the tokens in the VALUE slot indeed matters. Therefore, using a sequence-to-sequence structure is reasonable.</p><p>The encoder phase still employs a bi-directional LSTM. The decoder phase computes the distribution of the next token using a pointer network ( <ref type="bibr" target="#b28">Vinyals et al., 2015a;</ref><ref type="bibr" target="#b35">Yang et al., 2016</ref>) with the column attention mechanism. In particular, consider the hidden state of the previously generated sequence is h, and the LSTM output for each token in the natural language question is H i Q . Then the probability of the next token in VALUE can be computed as</p><formula xml:id="formula_7">P val (i|Q, col, h) = softmax(a(h)) a(h) i = (u val ) T tanh(U val 1 H i Q + U val 2 E col + U val 3 h) ∀i ∈ {1, ..., L} where u val a is a d-dimensional trainable vector, U val h , U val c , U val q</formula><p>are three trainable matrices of size d × d, and L is the length of the natural language question. Note that the computation of the a(h) i is using the column attention mechanism, which is similar in the computation of E Q|col .</p><p>Note that P val (i|Q, col, h) represents the probability that the next token to generate is the i-th token in the natural language question.SQLNet simply chooses the most probable one for each step to generate the sequence. Note that the END token also appears in the question. The SQLNet model stops generating for VALUE when the END token is predicted.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3.2">PREDICTING THE SELECT CLAUSE</head><p>The SELECT clause has an aggregator and a column name. The prediction of the column name in the SELECT clause is quite similar to the WHERE clause. The main difference is that for the SELECT clause, we only need to select one column among all. Therefore, we compute</p><formula xml:id="formula_8">P selcol (i|Q) = softmax(sel) i sel i = (u sel a ) T tanh(U sel c E coli + U sel q E Q|coli ) ∀i ∈ {1, ..., C} Here, u sel a , U sel c , U sel q are similar to u col a , U col c , U col q</formula><p>in <ref type="formula" target="#formula_4">(3)</ref>, and C is the total number of columns. Notice that each different dimension of the vector sel is computed based on a corresponding column col i . The model will predict the column col i that maximizes P selcol (i|Q).</p><p>For the aggregator, assuming the predicted column name for the SELECT clause is col , we can simply compute P agg (i|Q, col) = softmax(U agg tanh(U a E Q|col )) i where U a is a trainable matrix of size 6 × d. Notice that the prediction of the aggregator shares a similar structure as OP.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3.3">TRAINING DETAILS</head><p>In this section, we present more details to make our experiments reproducible. We also emphasize on the details that can improve our model's performance.</p><p>Input encoding model details. Both natural language descriptions and column names are treated as a sequence of tokens. We use the Stanford CoreNLP tokenizer ( ) to parse the sentence. Each token is represented as a one-hot vector and fed into a word embedding vector before feeding them into the bi-directional LSTM. To this end, we use the GloVe word embedding ( <ref type="bibr" target="#b20">Pennington et al., 2014</ref>).</p><p>Training details. We need a special loss to train the sequence-to-set model. Intuitively, we design the loss to reward the correct prediction while penalizing the wrong prediction. In particular, given a question Q and a set of C columns col, assume y is a C-dimensional vector where y j = 1 indicates that the j-th column appears in the ground truth of the WHERE clause; and y j = 0 otherwise. Then we minimize the following weighted negative log-likelihood loss to train the sub-model for P wherecol :</p><formula xml:id="formula_9">loss(col, Q, y) = − C j=1</formula><p>(αy j log P wherecol (col j |Q) + (1 − y j ) log(1 − P wherecol (col j |Q))</p><p>In this function, the weight α is hyper-parameter to balance the positive data versus negative data.</p><p>In our evaluation, we choose α = 3. For all other sub-module besides P wherecol , we minimize the standard cross-entropy loss.</p><p>We choose the size of the hidden states to be 100. We use the Adam optimizer <ref type="bibr" target="#b13">(Kingma &amp; Ba, 2014</ref>) with a learning rate 0.001. We train the model for 200 epochs and the batch size is 64. We randomly re-shuffle the training data in each epoch.</p><p>Weight sharing details. The model contains multiple LSTMs for predicting different slots in the sketch. In our evaluation, we find that using different LSTM weights for predicting different slots yield better performance than making them share the weights. However, we find that sharing the same word embedding vector helps to improve the performance. Therefore, different components in SQLNet only share the word embedding.</p><p>Training the word embedding. In Seq2SQL, <ref type="bibr" target="#b41">Zhong et al. (2017)</ref> suggest that the word embedding for tokens appearing in GloVe should be fixed during training. However, we observe that the performance can be boosted by 2 points when we allow the word embedding to be updated during training. Therefore, we initialize the word embedding with GloVe as discussed above, and allow them to be trained during the Adam updates after 100 epochs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>dev test Acc lf</head><p>Acc qm Acc ex Acc lf Acc qm Acc ex Seq2SQL ( <ref type="bibr" target="#b41">Zhong et al. (2017)</ref>) 49.5% -60.8% 48.3% -59.4% Seq2SQL (ours) 52.5% 53.5% 62.1% 50.8% 51.6% 60.4% SQLNet -63.2% 69.8% -61.3% 68.0% <ref type="table">Table 1</ref>: Overall result on the WikiSQL task. Acc lf , Acc qm , and Acc ex indicate the logical form, query-match and the execution accuracy respectively.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">EVALUATION</head><p>In this section, we evaluate SQLNet versus the state-of-the-art approach, i.e., <ref type="bibr">Seq2SQL (Zhong et al., 2017</ref>), on the WikiSQL dataset. The code is available on https://github.com/xxj96/ SQLNet.</p><p>In the following, we first present the evaluation setup. Then we present the comparison between our approach and Seq2SQL on the query synthesis accuracy, as well as a break-down comparison on different sub-tasks. In the end, we propose another variant of the WikiSQL dataset to reflect another application scenario of the SQL query synthesis task and present our evaluation results of our approach versus Seq2SQL.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">EVALUATION SETUP</head><p>In this work, we focus on the WikiSQL dataset ( <ref type="bibr" target="#b41">Zhong et al., 2017</ref>). The dataset was updated on October 16, 2017. In our evaluation, we use the updated version.</p><p>We compare our work with Seq2SQL, the state-of-the-art approach on the WikiSQL task. We compare SQLNet with Seq2SQL using three metrics to evaluate the query synthesis accuracy:</p><p>1. Logical-form accuracy. We directly compare the synthesized SQL query with the ground truth to check whether they match each other. This metric is used in ( <ref type="bibr" target="#b41">Zhong et al., 2017</ref>).</p><p>2. Query-match accuracy. We convert the synthesized SQL query and the ground truth into a canonical representation and compare whether two SQL queries match exactly. This metric can eliminate the false negatives due to only the ordering issue.</p><p>3. Execution accuracy. We execute both the synthesized query and the ground truth query and compare whether the results match to each other. This metric is used in ( <ref type="bibr" target="#b41">Zhong et al., 2017</ref>).</p><p>We are also interested in the break-down results on different sub-tasks: (1) the aggregator in the SELECT clause; (2) the column in the SELECT clause; and (3) the WHERE clause. Due to the different structure, it is hard to make a further fine-grained comparison.</p><p>We implement SQLNet using PyTorch <ref type="bibr">(Facebook, 2017)</ref>. For the baseline approach in our comparison, i.e., Seq2SQL, we compare our results with the numbers reported by <ref type="bibr" target="#b41">Zhong et al. (2017)</ref>.</p><p>However, <ref type="bibr" target="#b41">Zhong et al. (2017)</ref> do not include the break-down results for different sub-tasks, and the source code is not available. To solve this issue, we re-implement Seq2SQL by ourselves. For evaluations whose results are not reported in ( <ref type="bibr" target="#b41">Zhong et al., 2017)</ref>, we report the results from our re-implementation and compare SQLNet against those as the baseline. <ref type="table">Table 1</ref> presents the results for query synthesis accuracy of our approach and Seq2SQL. We first observe that our re-implementation of Seq2SQL yields better result than that reported in ( <ref type="bibr" target="#b41">Zhong et al., 2017</ref>). Since we do not have access to the source code of the original implementation, we cannot analyze the reason.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">EVALUATION ON THE WIKISQL TASK</head><p>We observe that SQLNet outperforms Seq2SQL (even our version) by a large margin. On the logical-form metric, SQLNet outperforms our re-implementation of Seq2SQL by 10.7 points on dev test Acc agg Acc sel Acc where Acc agg Acc sel Acc where Seq2SQL (ours) 90.0% 89.6% 62.1% 90.1% 88.9% 60.2% Seq2SQL (ours, C-order) -</p><formula xml:id="formula_10">- 63.3% - - 61.2% SQLNet (Seq2set) - - 69.1% - - 67.1% SQLNet (Seq2set+CA)</formula><p>90.1% 91.1% 72.1% 90.3% 90.4% 70.0% SQLNet (Seq2set+CA+WE) 90.1% 91.5%</p><p>74.1% 90.3% 90.9% 71.9% <ref type="table">Table 2</ref>: Break down result on the WikiSQL dataset. Seq2SQL (C-order) indicates that after Seq2SQL generates the WHERE clause, we convert both the prediction and the ground truth into a canonical order when being compared. Seq2set indicates that the sequence-to-set technique is employed. +CA indicates that column attention is used. +WE indicates that the word embedding is allowed to be trained. Acc agg and Acc sel indicate the accuracy on the aggregator and column prediction accuracy on the SELECT clause, and Acc where indicates the accuracy to generate the WHERE clause.</p><p>the dev set and by 10.5 points on the test set. These advancements are even larger to reach 13.7 points and 13.0 points respectively if we compare with the original results reported in ( <ref type="bibr" target="#b41">Zhong et al., 2017)</ref>. Note that even if we eliminate the false negatives of Seq2SQL by considering the querymatch accuracy, the gap is only closed by 1 point, and still remains as large as 9.7 points. We attribute the reason to that Seq2SQL employs a sequence-to-sequence model and thus suffers the "order-matters" problem, while our sequence-to-set-based approach can entirely solve this issue.</p><p>On the execution accuracy metric, SQLNet is better than Seq2SQL (reported in Zhong et al. <ref type="formula" target="#formula_0">(2017)</ref>) by 9.0 points and 8.6 points respectively on the dev and test sets. Although they are still large, the advancements are not as large as those on the query-match metric. This phenomenon shows that, for some of the queries that Seq2SQL cannot predict exactly correct, (e.g., maybe due to the lack of one constraint in the WHERE clause), the execution results are still correct. We want to highlight that the execution accuracy is sensitive to the data in the table, which contributes to the difference between query-match accuracy and execution accuracy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">A BREAK-DOWN ANALYSIS ON THE WIKISQL TASK</head><p>We would like to further analyze SQLNet's and Seq2SQL's performance on different sub-tasks as well as the improvement provided by different techniques in SQLNet. The results are presented in <ref type="table">Table 2</ref>.</p><p>We observe that on the SELECT clause prediction, the accuracy is around 90%. This shows that the SELECT clause is less challenging to predict than the WHERE clause. SQLNet's accuracy on the SELECT column prediction better than Seq2SQL. We attribute this improvement to the reason that SQLNet employs column attention.</p><p>We observe that the biggest advantage of SQLNet over Seq2SQL is on the WHERE clause's prediction accuracy. The improvement on the WHERE clause prediction is around 11 points to 12 points. Notice that the order of the constraints generated by Seq2SQL matters. To eliminate this effect, we evaluate the accuracy based on a canonical order, i.e., Seq2SQL (ours, C-order), in a similar way as the query-match accuracy. This metric will improve Seq2SQL's accuracy by 1 point, which obeys our observation on the overall query-match accuracy of Seq2SQL. However, we still observe that the SQLNet can outperform Seq2SQL by a large margin. From the break-down analysis, we can observe that the improvement from the usage of a sequence-to-set architecture is the largest to achieve around 6 points. The column attention further improves a sequence-to-set only model by 3 points, while allowing training word embedding gives another 2 points' improvement.</p><p>Note that the improvement on the SELECT prediction is around 2 points. The improvements from two clauses add up to the 13 points to 14 points improvements in total.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>dev test Acc lf</head><p>Acc qm Acc ex Acc lf Acc qm Acc ex Seq2SQL (ours) 54.5% 55.6% 63.8% 54.8% 55.6% 63.9% SQLNet -65.5% 71.5% -64.4% 70.3% <ref type="table">Table 3</ref>: Overall result on the WikiSQL variant dataset.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">EVALUATION ON A VARIANT OF THE WIKISQL TASK</head><p>In practice, a machine learning model is frequently retrained periodically to reflect the latest dataset. Therefore, it is more often that when a model is trained, the table in the test set is already seen in the training set. The original WikiSQL dataset is split so that the training, dev, and test sets are disjoint in their sets of tables, and thus it does not approximate this application scenario very well.</p><p>To better understand different model's performance in this alternative application scenario, we reshuffle the data, so that all the tables appear at least once in the training set.</p><p>On this new dataset, we evaluate both SQLNet and Seq2SQL, and the results are presented in <ref type="table">Table 3</ref>. We observe that all metrics of both approaches are improved. We attribute this to that all tables in the test set are observed by the models in the training set. This observation meets our expectation. The improvement of SQLNet over Seq2SQL (our implementation) remains the same across different metrics.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">RELATED WORK</head><p>The study of translating natural language into SQL queries has a long history <ref type="bibr" target="#b32">(Warren &amp; Pereira, 1982;</ref><ref type="bibr" target="#b1">Androutsopoulos et al., 1993;</ref><ref type="bibr" target="#b2">1995;</ref><ref type="bibr" target="#b21">Popescu et al., 2003;</ref><ref type="bibr" target="#b22">2004;</ref><ref type="bibr" target="#b15">Li et al., 2006;</ref><ref type="bibr" target="#b10">Giordani &amp; Moschitti, 2012;</ref><ref type="bibr" target="#b40">Zhang &amp; Sun, 2013;</ref><ref type="bibr" target="#b14">Li &amp; Jagadish, 2014;</ref>. Earlier work focuses on specific databases and requires additional customization to generalize to each new database.</p><p>Recent work considers mitigating this issue by incorporating users' guidance <ref type="bibr" target="#b14">(Li &amp; Jagadish, 2014;</ref><ref type="bibr" target="#b12">Iyer et al., 2017)</ref>. In contrast, SQLNet does not rely on human in the loop. Another direction incorporates the data in the table as an additional input <ref type="bibr" target="#b19">(Pasupat &amp; Liang, 2015;</ref><ref type="bibr" target="#b18">Mou et al., 2016)</ref>. We argue that such an approach may suffer scalability and privacy issues when handling large scale user databases.</p><p>SQLizer ( <ref type="bibr" target="#b34">Yaghmazadeh et al., 2017</ref>) is a related work handling the same application scenario. SQLizer is also a sketch-based approach so that it is not restricted to any specific database. Different from our work, SQLizer ( <ref type="bibr" target="#b34">Yaghmazadeh et al., 2017</ref>) relies on an off-the-shelf semantic parser <ref type="bibr">(Be- rant et al., 2013;</ref>) to translate a natural language question into a sketch, and then employs programming language techniques such as type-directed sketch completion and automatic repairing to iteratively refine the sketch into the final query. Since SQLizer does not require database-specific training and its code is not available, it is unclear how SQLizer will perform on the WikiSQL task. In this work, we focus on neural network approaches to handle the NL2SQL tasks.</p><p>Seq2SQL ( <ref type="bibr" target="#b41">Zhong et al., 2017</ref>) is the most relevant work and achieves the state-of-the-art on the WikiSQL task. We use Seq2SQL as the baseline in our work. Our SQLNet approach enjoys all the benefits of Seq2SQL, such as generalizability to an unseen schema and overcoming the inefficiency of a sequence-to-sequence model. Our approach improves over Seq2SQL in that by proposing a sequence-to-set-based approach, we eliminate the sequence-to-sequence structure when the order does not matter, so that we do not require reinforcement learning at all. These techniques enable SQLNet to outperform Seq2SQL by 9 points to 13 points.</p><p>The problem to parse a natural language to SQL queries can be considered as a special instance to the more generic semantic parsing problem. There have been many works considering parsing a natural language description into a logical form <ref type="bibr" target="#b37">(Zelle &amp; Mooney, 1996;</ref><ref type="bibr" target="#b33">Wong &amp; Mooney, 2007;</ref><ref type="bibr" target="#b38">Zettlemoyer &amp; Collins, 2007;</ref><ref type="bibr" target="#b3">Artzi &amp; Zettlemoyer, 2011;</ref><ref type="bibr" target="#b7">Cai &amp; Yates, 2013;</ref><ref type="bibr" target="#b25">Reddy et al., 2014;</ref><ref type="bibr" target="#b16">Liang et al., 2011;</ref><ref type="bibr" target="#b24">Quirk et al., 2015;</ref><ref type="bibr" target="#b8">Chen et al., 2016</ref>). Although they are not handling the SQL generation problem, we observe that most of them need to be fine-tuned to the specific domain of interest, and may not generalize.</p><p>Dong &amp; Lapata (2016) provide a generic approach, i.e., a sequence-to-tree model, to handle the semantic parsing problem, which yields the state-of-the-art results on many tasks. This approach is evaluated in ( <ref type="bibr" target="#b41">Zhong et al., 2017)</ref>, and it has been demonstrated less effective than the Seq2SQL approach. Thus, we do not include it in our comparison.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">CONCLUSION</head><p>In this paper, we propose an approach, SQLNet, to handle an NL2SQL task. We observe that all existing approaches employing a sequence-to-sequence model suffer from the "order-matters" problem when the order does not matter. Previous attempts using reinforcement learning to solve this issue bring only a small improvement, e.g., by around 2 points. In our work, SQLNet fundamentally solves the "order-matters" problem by employing a sequence-to-set model to generate SQL queries when order does not matter. We further introduce the column attention mechanism, which can further boost a sequence-to-set model's performance. In total, we observe that our SQLNet system can improve over the prior art, i.e., Seq2SQL, by a large margin ranging from 9 points to 13 points on various metrics. This demonstrates that our approach can effectively solve the "order-matters" problem, and shed new light on novel solutions to structural generation problems when order does not matter.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>SELECT</head><label></label><figDesc>Figure 2: Sketch syntax and the dependency in a sketch</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head></head><label></label><figDesc>where v i indicates the i-th dimension of v, H i Q indicates the i-th column of H Q , and W is a trainable matrix of size d × d.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head>table schema</head><label>schema</label><figDesc></figDesc><table>Player 
+
+No. 
+Nationality 
+Position 
+Years in 
+Toronto 
+
+School/Club 
+Team 
+
+Antonio Lang 
+21 
+United States Guard-Forward 1999-2000 Duke 
+
+Voshon Lenard 2 
+United States Guard 
+2002-03 
+Minnesota 
+
+Martin Lewis 
+32, 44 United States Guard-Forward 1996-97 
+Butler CC (KS) 
+
+Brad Lohaus 
+33 
+United States Forward-Center 1996 
+Iowa 
+
+Art Long 
+42 
+United States Forward-Center 2002-03 
+Cincinnati 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table Question :</head><label>Question</label><figDesc></figDesc><table>Who is the player that wears number 
+42? 
+
+SQL: 
+Result: 
+
+SELECT player 
+WHERE no. = 42 
+
+Art Long 
+
+</table></figure>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Syntaxguided synthesis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rajeev</forename><surname>Alur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rastislav</forename><surname>Bodik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Garvit</forename><surname>Juniwal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">K</forename><surname>Milo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mukund</forename><surname>Martin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Raghothaman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Sanjit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rishabh</forename><surname>Seshia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Singh</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Emina Torlak, and Abhishek Udupa</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1" to="8" />
+		</imprint>
+	</monogr>
+	<note>Armando Solar-Lezama</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Masque/sql an efficient and portable natural language query interface for relational databases. Database technical paper</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Androutsopoulos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ritchie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Thanisch</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1993" />
+		</imprint>
+		<respStmt>
+			<orgName>Department of AI, University of Edinburgh</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Natural language interfaces to databases-an introduction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ion Androutsopoulos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><surname>Graeme D Ritchie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Thanisch</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Natural language engineering</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="29" to="81" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Bootstrapping semantic parsers from conversations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Artzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on empirical methods in natural language processing</title>
+		<meeting>the conference on empirical methods in natural language processing</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="421" to="432" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Weakly supervised learning of semantic parsers for mapping instructions to actions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Artzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+		<idno>2307-387X</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Transactions of the Association for Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="49" to="62" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Semantic parsing on freebase from question-answer pairs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename><surname>Berant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Chou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roy</forename><surname>Frostig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Optimizing synthesis with metasketches</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bornholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emina</forename><surname>Torlak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Grossman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luis</forename><surname>Ceze</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">51</biblScope>
+			<biblScope unit="page" from="775" to="788" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Large-scale semantic parsing via schema matching and lexicon extension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qingqing</forename><surname>Cai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><surname>Yates</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Latent attention for if-then program synthesis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xinyun</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chang</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Shin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dawn</forename><surname>Song</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mingcheng</forename><surname>Chen</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01867</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Language to logical form with neural attention</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Dong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mirella</forename><surname>Lapata</surname></persName>
+		</author>
+		<ptr target="http://pytorch.org/" />
+	</analytic>
+	<monogr>
+		<title level="m">ACL, 2016. Facebook. Pytorch</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Translating questions to SQL queries with generative parsers discriminatively reranked</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandra</forename><surname>Giordani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Moschitti</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COLING</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Learning to reason: End-to-end module networks for visual question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronghang</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Andreas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marcus</forename><surname>Rohrbach</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Trevor</forename><surname>Darrell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kate</forename><surname>Saenko</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.05526</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Learning a neural semantic parser from user feedback</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Srinivasan</forename><surname>Iyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ioannis</forename><surname>Konstas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alvin</forename><surname>Cheung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jayant</forename><surname>Krishnamurthy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+		<idno>abs/1704.08760</idno>
+		<imprint>
+			<date type="published" when="2017" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Diederik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ba</surname></persName>
+		</author>
+		<idno>abs/1412.6980</idno>
+		<imprint>
+			<date type="published" when="2014" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Constructing an interactive natural language interface for relational databases</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fei</forename><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the VLDB Endowment</title>
+		<meeting>the VLDB Endowment</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="page" from="73" to="84" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Constructing a generic natural language interface for an xml database</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yunyao</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Huahai</forename><surname>Yang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EDBT</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="volume">3896</biblScope>
+			<biblScope unit="page" from="737" to="754" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Learning dependency-based compositional semantics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Michael I Jordan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Klein</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="590" to="599" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">The Stanford CoreNLP natural language processing toolkit</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mihai</forename><surname>Surdeanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Bauer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jenny</forename><surname>Finkel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><forename type="middle">J</forename><surname>Bethard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Mcclosky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Association for Computational Linguistics (ACL) System Demonstrations</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="55" to="60" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title level="m" type="main">Coupling distributed and symbolic execution for natural language queries</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lili</forename><surname>Mou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hang</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhi</forename><surname>Jin</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1612.02741</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Compositional semantic parsing on semi-structured tables</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Panupong</forename><surname>Pasupat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+		<idno>abs/1508.00305</idno>
+		<imprint>
+			<date type="published" when="2015" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 conference on empirical methods in natural language processing (EMNLP)</title>
+		<meeting>the 2014 conference on empirical methods in natural language processing (EMNLP)</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1532" to="1543" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Towards a theory of natural language interfaces to databases</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ana-Maria</forename><surname>Popescu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oren</forename><surname>Etzioni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Henry</forename><surname>Kautz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 8th international conference on Intelligent user interfaces</title>
+		<meeting>the 8th international conference on Intelligent user interfaces</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="149" to="157" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Modern natural language interfaces to databases: Composing statistical parsing with semantic tractability</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ana-Maria</forename><surname>Popescu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Armanasu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oren</forename><surname>Etzioni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Ko</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><surname>Yates</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 20th international conference on Computational Linguistics</title>
+		<meeting>the 20th international conference on Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2004" />
+			<biblScope unit="page">141</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Evaluation of spoken language systems: the atis domain</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">J</forename><surname>Price</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Speech and Natural Language: Proceedings of a Workshop Held at Hidden Valley</title>
+		<meeting><address><addrLine>Pennsylvania</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="page" from="91" to="95" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Language to code: Learning semantic parsers for if-this-then-that recipes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Quirk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Raymond</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michel</forename><surname>Mooney</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Galley</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL (1)</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="878" to="888" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Large-scale semantic parsing without questionanswer pairs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Siva</forename><surname>Reddy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mirella</forename><surname>Lapata</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Steedman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Transactions of the Association for Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="377" to="392" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Combinatorial sketching for finite programs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armando</forename><surname>Solar-Lezama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Liviu</forename><surname>Tancau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rastislav</forename><surname>Bodik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sanjit</forename><surname>Seshia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vijay</forename><surname>Saraswat</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM SIGOPS Operating Systems Review</title>
+		<imprint>
+			<biblScope unit="volume">40</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="404" to="415" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Using multiple clause constructors in inductive logic programming for semantic parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Lappoon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raymond</forename><forename type="middle">J</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mooney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 12th European Conference on Machine Learning</title>
+		<meeting>the 12th European Conference on Machine Learning<address><addrLine>Freiburg, Germany</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="466" to="477" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Pointer networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Meire</forename><surname>Fortunato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Navdeep</forename><surname>Jaitly</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="2692" to="2700" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Grammar as a foreign language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Łukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Terry</forename><surname>Koo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Order matters: Sequence to sequence for sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samy</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Manjunath</forename><surname>Kudlur</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Synthesizing highly expressive sql queries from input-output examples</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chenglong</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alvin</forename><surname>Cheung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rastislav</forename><surname>Bodik</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 38th ACM SIGPLAN Conference on Programming Language Design and Implementation</title>
+		<meeting>the 38th ACM SIGPLAN Conference on Programming Language Design and Implementation</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="452" to="466" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">An efficient easily adaptable system for interpreting natural language queries</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">D</forename><surname>David</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Warren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">N</forename><surname>Fernando</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Pereira</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">3-4</biblScope>
+			<biblScope unit="page" from="110" to="122" />
+			<date type="published" when="1982" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Learning synchronous grammars for semantic parsing with lambda calculus</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuk</forename><forename type="middle">Wah</forename><surname>Wong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raymond</forename><surname>Mooney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 45th Annual Meeting of the Association of Computational Linguistics</title>
+		<meeting>the 45th Annual Meeting of the Association of Computational Linguistics<address><addrLine>Prague, Czech Republic</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2007-06" />
+			<biblScope unit="page" from="960" to="967" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Sqlizer: Query synthesis from natural language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Navid</forename><surname>Yaghmazadeh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuepeng</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Isil</forename><surname>Dillig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thomas</forename><surname>Dillig</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">OOPSLA</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zichao</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang</forename><surname>Ling</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01628</idno>
+		<title level="m">Reference-aware language models</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pengcheng</forename><surname>Yin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hang</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ben</forename><surname>Kao</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1512.00965</idno>
+		<title level="m">Neural enquirer: Learning to query tables with natural language</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Learning to parse database queries using inductive logic programming</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>John</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raymond J</forename><surname>Zelle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mooney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the national conference on artificial intelligence</title>
+		<meeting>the national conference on artificial intelligence</meeting>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="1050" to="1055" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Online learning of relaxed ccg grammars for parsing to logical form</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><forename type="middle">S</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2007 Joint Conference on Empirical Methods in Natural Language Processing and Computational Natural Language Learning (EMNLP-CoNLL-2007</title>
+		<meeting>the 2007 Joint Conference on Empirical Methods in Natural Language Processing and Computational Natural Language Learning (EMNLP-CoNLL-2007</meeting>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="678" to="687" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+		<title level="m" type="main">Learning to map sentences to logical form: Structured classification with probabilistic categorial grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Luke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Collins</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1207.1420</idno>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Automatically synthesizing sql queries from input-output examples</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sai</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuyin</forename><surname>Sun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Automated Software Engineering (ASE), 2013 IEEE/ACM 28th International Conference on</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="224" to="234" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<monogr>
+		<title level="m" type="main">Seq2sql: Generating structured queries from natural language using reinforcement learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1709.00103</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

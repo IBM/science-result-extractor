@@ -1,0 +1,844 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:03+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">MULTIPLICATIVE LSTM FOR SEQUENCE MODELLING</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ben</forename><surname>Krause</surname></persName>
+							<email>ben.krause@ed.ac.uk</email>
+							<affiliation key="aff0">
+								<orgName type="department">School of Informatics</orgName>
+								<orgName type="institution">University of Edinburgh Edinburgh</orgName>
+								<address>
+									<country key="GB">Scotland, UK</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iain</forename><surname>Murray</surname></persName>
+							<email>i.murray@ed.ac.uk</email>
+							<affiliation key="aff0">
+								<orgName type="department">School of Informatics</orgName>
+								<orgName type="institution">University of Edinburgh Edinburgh</orgName>
+								<address>
+									<country key="GB">Scotland, UK</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Renals</surname></persName>
+							<email>s.renals@ed.ac.uk</email>
+							<affiliation key="aff0">
+								<orgName type="department">School of Informatics</orgName>
+								<orgName type="institution">University of Edinburgh Edinburgh</orgName>
+								<address>
+									<country key="GB">Scotland, UK</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Liang</forename><surname>Lu</surname></persName>
+							<affiliation key="aff1">
+								<orgName type="institution">Toyota Technological Institute at Chicago Chicago</orgName>
+								<address>
+									<settlement>Illinois</settlement>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">MULTIPLICATIVE LSTM FOR SEQUENCE MODELLING</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+					<note>Previous version appeared in workshop track -ICLR 2017</note>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We introduce multiplicative LSTM (mLSTM), a recurrent neural network architecture for sequence modelling that combines the long short-term memory (LSTM) and multiplicative recurrent neural network architectures. mLSTM is characterised by its ability to have different recurrent transition functions for each possible input, which we argue makes it more expressive for autoregressive density estimation. We demonstrate empirically that mLSTM outperforms standard LSTM and its deep variants for a range of character level language modelling tasks. In this version of the paper, we regularise mLSTM to achieve 1.27 bits/char on text8 and 1.24 bits/char on Hutter Prize. We also apply a purely byte-level mLSTM on the WikiText-2 dataset to achieve a character level entropy of 1.26 bits/char, corresponding to a word level perplexity of 88.8, which is comparable to word level LSTMs regularised in similar ways on the same task.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Recurrent neural networks (RNNs) are powerful sequence density estimators that can use long contexts to make predictions. They have achieved tremendous success in (conditional) sequence modelling tasks such as language modelling, machine translation and speech recognition. Generative models of sequences can apply factorization via the product rule to perform density estimation of the sequence x 1:T = {x 1 , . . . , x T }, P (x 1 , . . . , x T ) = P (x 1 )P (x 2 |x 1 )P (x 3 |x 2 , x 1 ) · · · P (x T |x 1 . . . x T −1 ).</p><p>(1)</p><p>RNNs can model sequences with the above factorization by using a hidden state to summarize past inputs. The hidden state vector h t is updated recursively using the previous hidden state vector h t−1 and the current input x t as h t = F(h t−1 , x t ),</p><p>where F is a differentiable function with learnable parameters. In a vanilla RNN, F multiplies its inputs by a matrix and squashes the result with a non-linear function such as a hyperbolic tangent (tanh). The updated hidden state vector is then used to predict a probability distribution over the next sequence element, using function G. In the case where x 1:T consists of mutually exclusive discrete outcomes, G may apply a matrix multiplication followed by a softmax function:</p><formula xml:id="formula_1">P (x t+1 ) = G(h t ).<label>(3)</label></formula><p>Generative RNNs can evaluate log-likelihoods of sequences exactly, and are differentiable with respect to these log-likelihoods. RNNs can be difficult to train due to the vanishing gradient problem ( <ref type="bibr" target="#b0">Bengio et al., 1994)</ref>, but advances such as the long short-term memory architecture (LSTM) <ref type="bibr" target="#b7">(Hochreiter &amp; Schmidhuber, 1997</ref>) have allowed RNNs to be successful. Despite their success, generative RNNs (as well as other conditional generative models) are known to have problems with recovering from mistakes ( <ref type="bibr" target="#b5">Graves, 2013)</ref>. Each time the recursive function of the RNN is applied and the hidden state is updated, the RNN must decide which information from the previous hidden state to store, due to its limited capacity. If the RNN's hidden representation remembers the wrong information and reaches a bad numerical state for predicting future sequence elements, for instance as a result of an unexpected input, it may take many time-steps to recover.</p><p>We argue that RNN architectures with hidden-to-hidden transition functions that are input-dependent are better suited to recover from surprising inputs. Our approach to generative RNNs combines LSTM <ref type="figure">Figure 1</ref>: Diagram of hidden states of a generative RNN as a tree, where x (n) t denotes which of N possible inputs is encountered at timestep t. Given h t , the starting node of the tree, there will be a different possible h t+1 for every x (n) t+1 . Similarly, for every h t+1 that can be reached from h t , there is a different possible h t+2 for each x (n) t+2 , and so on.</p><p>units with multiplicative RNN (mRNN) factorized hidden weights, allowing flexible input-dependent transitions that are easier to control due to the gating units of LSTM . We compare this multiplicative LSTM hybrid architecture with other variants of LSTM on a range of character level language modelling tasks. Multiplicative LSTM is most appropriate when it can learn parameters specifically for each possible input at a given timestep. Therefore, its main application is to sequences of discrete mutually exclusive elements, such as language modelling and related problems.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.1">INPUT-DEPENDENT TRANSITION FUNCTIONS</head><p>RNNs learn a mapping from previous hidden state h t−1 and input x t to hidden state h t . LetˆhLetˆ Letˆh t denote the input to the next hidden state before any non-linear operation:</p><formula xml:id="formula_2">ˆ h(t) = W hh h t−1 + W hx x t ,<label>(4)</label></formula><p>where W hh is the hidden-to-hidden weight matrix, and W hx is the input-to-hidden weight matrix. For problems such as language modelling, x t is a one-hot vector, meaning that the output of W hx x t is a column in W hx , corresponding to the unit element in x t .</p><p>The possible future hidden states in an RNN can be viewed as a tree structure, as shown in <ref type="figure">Figure 1</ref>. For an alphabet of N inputs and a fixed h t−1 , there will be N possible transition functions between h t−1 andˆhandˆ andˆh t . The relative magnitude of W hh h t−1 to W hx x t will need to be large for the RNN to be able to use long range dependencies, and the resulting possible hidden state vectors will therefore be highly correlated across the possible inputs, limiting the width of the tree and making it harder for the RNN to form distinct hidden representations for different sequences of inputs. However, if the RNN has flexible input-dependent transition functions, the tree will be able to grow wider more quickly, giving the RNN the flexibility to represent more probability distributions.</p><p>In a vanilla RNN, it is difficult to allow inputs to greatly affect the hidden state vector without erasing information from the past hidden state. However, an RNN with a transition function mappingˆh mappingˆ mappingˆh t ← h t−1 dependent on the input would allow the relative values of h t to vary with each possible input x t , without overwriting the contribution from the previous hidden state, allowing for more long term information to be stored. This ability to adjust to new inputs quickly while limiting the overwriting of information should make an RNN more robust to mistakes when it encounters surprising inputs, as the hidden vector is less likely to get trapped in a bad numerical state for making future predictions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.2">MULTIPLICATIVE RNN</head><p>The multiplicative RNN (mRNN) <ref type="bibr" target="#b28">(Sutskever et al., 2011</ref>) is an architecture designed specifically to allow flexible input-dependent transitions. Its formulation was inspired by the tensor RNN, an RNN architecture that allows for a different transition matrix for each possible input. The tensor RNN features a 3-way tensor W 1:N hh , which contains a separately learned transition matrix W hh for each input dimension. The 3-way tensor can be stored as an array of matrices</p><formula xml:id="formula_3">W (1:N ) hh = {W (1) hh , ..., W (N ) hh },<label>(5)</label></formula><p>where superscript is used to denote the index in the array, and N is the dimensionality of x t . The specific hidden-to-hidden weight matrix W (xt)</p><p>hh used for a given input x t is then</p><formula xml:id="formula_4">W (xt) hh = N n=1 W (n) hh x (n) t .<label>(6)</label></formula><p>For language modelling problems, only one unit of x t will be on, and W (xt)</p><p>hh will be the matrix in W</p><p>(1:N ) hh corresponding to that unit. Hidden-to-hidden propagation in the tensor RNN is then given byˆh</p><formula xml:id="formula_5">byˆ byˆh(t) = W (xt) hh h t−1 + W hx x t .<label>(7)</label></formula><p>The large number of parameters in the tensor RNN make it impractical for most problems. mRNNs can be thought of as a shared-parameter approximation to the tensor RNN that use a factorized hidden-to-hidden transition matrix in place of the normal RNN hidden-to-hidden matrix W hh , with an input</p><formula xml:id="formula_6">-dependent intermediate diagonal matrix diag(W mx x t ). The input-dependent hidden-to-hidden weight matrix, W (xt)</formula><p>hh is then</p><formula xml:id="formula_7">W (xt) hh = W hm diag(W mx x t )W mh .<label>(8)</label></formula><p>An mRNN is thus equivalent to a tensor RNN using the above form for W (xt)</p><p>hh . For readability, an mRNN can also be described using intermediate state m t as follows:</p><formula xml:id="formula_8">m t = (W mx x t ) (W mh h t−1 ) (9) ˆ h t = W hm m t + W hx x t .<label>(10)</label></formula><p>mRNNs have improved on vanilla RNNs at character level language modelling tasks <ref type="bibr" target="#b28">(Sutskever et al., 2011;</ref><ref type="bibr">Mikolov et al., 2012</ref>), but have fallen short of the more popular LSTM architecture, for instance as shown with LSTM baselines from ( <ref type="bibr" target="#b2">Cooijmans et al., 2017</ref>). The standard RNN units in an mRNN do not provide an easy way for information to bypass its complex transitions, resulting in the potential for difficulty in retaining long term information.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.3">LONG SHORT-TERM MEMORY</head><p>LSTM is a commonly used RNN architecture that uses a series of multiplicative gates to control how information flows in and out of internal states of the network <ref type="bibr" target="#b7">(Hochreiter &amp; Schmidhuber, 1997</ref>). There are several slightly different variants of LSTM, and we present the variant used in our experiments.</p><p>The LSTM hidden state receives inputs from the input layer x t and the previous hidden state h t−1 :</p><formula xml:id="formula_9">ˆ h t = W hx x t + W hh h t−1 .<label>(11)</label></formula><p>The LSTM network also has 3 gating units -input gate i, output gate o, and forget gate f -that have both recurrent and feed-forward connections:</p><formula xml:id="formula_10">i t = σ(W ix x t + W ih h t−1 ) (12) o t = σ(W ox x t + W oh h t−1 ) (13) f t = σ(W f x x t + W f h h t−1 ),<label>(14)</label></formula><p>where σ is the logistic sigmoid function. The input gate controls how much of the input to each hidden unit is written to the internal state vector c t , and the forget gate determines how much of the previous internal state c t−1 is preserved. This combination of write and forget gates allows the network to control what information should be stored and overwritten across each time-step. The internal state is updated by</p><formula xml:id="formula_11">c t = f t c t−1 + i t tanh( ˆ h t ).<label>(15)</label></formula><p>The output gate controls how much of each unit's activation is preserved. It allows the LSTM cell to keep information that is not relevant to the current output, but may be relevant later. The final output of the hidden state is given by</p><formula xml:id="formula_12">h t = tanh(c t ) o t .<label>(16)</label></formula><p>LSTM's ability to control how information is stored in each unit has proven generally useful.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.4">COMPARING LSTM WITH MRNN</head><p>The LSTM and mRNN architectures both feature multiplicative units, but these units serve different purposes. LSTM's gates are designed to control the flow of information through the network, whereas mRNN's gates are designed to allow transition functions to vary across inputs. LSTM gates receive input from both the input units and hidden units, allowing multiplicative interactions between hidden units, but also potentially limiting the extent of input-hidden multiplicative interaction. LSTM gates are also squashed with a sigmoid, forcing them to take values between 0 and 1, which makes them easier to control, but less expressive than mRNN's linear gates. For language modelling problems, mRNN's linear gates do not need to be controlled by the network because they are explicitly learned for each input. They are also placed in between a product of 2 dense matrices, giving more flexibility to the possible values of the final product of matrices.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">MULTIPLICATIVE LSTM</head><p>Since the LSTM and mRNN architectures are complimentary, we propose the multiplicative LSTM (mLSTM), a hybrid architecture that combines the factorized hidden-to-hidden transition of mRNNs with the gating framework from LSTMs. The mRNN and LSTM architectures can be combined by adding connections from the mRNN's intermediate state m t (which is redefined below for convenience) to each gating units in the LSTM, resulting in the following system:</p><formula xml:id="formula_13">m t = (W mx x t ) (W mh h t−1 ) (17) ˆ h t = W hx x t + W hm m t (18) i t = σ(W ix x t + W im m t ) (19) o t = σ(W ox x t + W om m t ) (20) f t = σ(W f x x t + W f m m t ).<label>(21)</label></formula><p>We set the dimensionality of m t and h t equal for all our experiments. We also chose to share m t across all LSTM unit types, resulting in a model with 1.25 times the number of recurrent weights as LSTM for the same number of hidden units.</p><p>The goal of this architecture is to combine the flexible input-dependent transitions of mRNNs with the long time lag and information control of LSTMs. The gated units of LSTMs could make it easier to control (or bypass) the complex transitions in that result from the factorized hidden weight matrix. The additional sigmoid input and forget gates featured in LSTM units allow even more flexible input-dependent transition functions than in regular mRNNs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">RELATED APPROACHES</head><p>Many recently proposed RNN architectures use recurrent depth, which is depth between recurrent steps. Recurrent depth allows more non-linearity in the combination of inputs and previous hidden states from every time step, which in turn allows for more flexible input-dependent transitions. Recurrent depth has been found to perform better than other kinds of non-recurrent depth for sequence modelling ( . Recurrent highway networks (RHNs) ( <ref type="bibr" target="#b32">Zilly et al., 2017</ref>) use a more sophisticated recurrent depth that carefully controls propagation through layers using gating units. The gating units also allow for a greater deal of multiplicative interaction between the inputs and hidden units. While adding recurrent depth could improve our model, we believe that maximizing the input-dependent flexibility of the transition function is more important for expressive sequence modelling. Recurrent depth can do this through non-linear layers combining hidden and input contributions, but our method can do this independently of non-linear depth.</p><p>Another approach, multiplicative integration RNNs (MI-RNNs) ( , use Hadamard products instead of addition when combining contributions from input and hidden units. When applying this to LSTM, this architecture achieves impressive sequence modelling results. The main difference between multiplicative integration LSTM and mLSTM is that mLSTM applies the Hadamard product between the multiplication of two matrices. In the case of LSTM, this allows for the potential for greater expressiveness, without significantly increasing the size of the model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">EXPERIMENTS 4.1 SYSTEM SETUP</head><p>Our experiments measure the performance of mLSTM for character-level language modelling tasks of varying complexity 1 . Our initial experiments, which appeared in previous versions of this work, were mainly designed to compare the convergence and final performance of mLSTM vs LSTM and its deep variants. Our follow up experiments explored training and regularisation of mLSTM in more detail, with goal of comparing more directly with the most competitive architectures in the literature.</p><p>Our initial and follow up experiments used slightly different set ups; initial experiments used a variant of RMSprop, <ref type="bibr" target="#b29">(Tieleman &amp; Hinton, 2012)</ref>, with normalized updates in place of a learning rate. All unnormalized update directions v * , computed by RMSprop, were normalized to have length , where was decayed exponentially over training:</p><formula xml:id="formula_14">v ← v T * v * v * .<label>(22)</label></formula><p>This update rule is similar to applying gradient norm clipping ( <ref type="bibr" target="#b20">Pascanu et al., 2013)</ref>, with a very high learning rate balanced out by a very low gradient norm threshold. The initial experiments also used a slightly non-standard version of LSTM (and mLSTM) with the output gate inside of the final tanh of the LSTM cell. This gave us slightly better results in preliminary experiments with very small models, but likely does not make much difference. We use LSTM (RMSprop) and mLSTM (RMSprop) in tables to distinguish results obtained by these initial set of experiments.</p><p>For our follow up experiments, we use more standard methodology to be more comparable to the literature. We used ADAM <ref type="bibr" target="#b11">(Kingma &amp; Ba, 2014</ref>), always starting with an initial learning rate of 0.001 and decaying this linearly to a minimum learning rate (which was always in the range 0.00005 to 0.0001  In our initial experiments, we compared mLSTMs and 2-layer stacked LSTMs for varying network sizes, ranging from about 3-20 million parameters. These results all used RMS prop with normalized updates, stopping after 4 epochs on the first 95 million characters, with test performance measured on the last 5 million bytes. Hyperparameters for each mLSTM and stacked LSTM were kept constant across all sizes. The results, shown in <ref type="figure">Figure 2</ref>, show that mLSTM gives an improvement across all network sizes.</p><p>We hypothesized that mLSTM's superior performance over stacked LSTM was in part due to its ability to recover from surprising inputs. To test this we looked at each network's performance after viewing surprising inputs that occurred naturally in the test set by creating a set of the 10% characters with the largest average loss taken by mLSTM and stacked LSTM. Both networks perform roughly equally on this set of surprising characters, with mLSTM and stacked LSTM taking losses of 6.27 bits/character and 6.29 bits/character respectively. However, stacked LSTM tended to take much larger losses than mLSTM in the timesteps immediately following surprising inputs. One to four time-steps after a surprising input occurred, mLSTM and stacked LSTM took average losses of (2.26, 2.04, 1.61, 1.51) and (2.48, 2.25, 1.79, 1.67) bits per character respectively, as shown in <ref type="figure" target="#fig_0">Figure 3</ref>. mLSTM's overall advantage over stacked LSTM was 1.42 bits/char to 1.53 bits/char; mLSTM's advantage over stacked LSTM was greater after a surprising input than it is in general.</p><p>We also explore more standard training methodology and regularisation methods on this dataset. These experiments all used ADAM, and the standard 90-5-5 training validation test split on this dataset. We firstly consider a standard unregularised mLSTM trained with this methodology. We then experiment with an mLSTM with a linear embedding layer and weight normalization <ref type="bibr" target="#b25">(Salimans &amp; Kingma, 2016</ref>) on recurrent weights (mLSTM +emb +WN), which is similar to the mLSTM architecture used in ( <ref type="bibr" target="#b22">Radford et al., 2017)</ref>, which was built off our initial work. We also consider regularisation of the later model with variational dropout <ref type="bibr" target="#b3">(Gal &amp; Ghahramani, 2016</ref>) (mLSTM +emb +WN +VD). Variational dropout is a form of dropout ( <ref type="bibr" target="#b27">Srivastava et al., 2014</ref>) where the dropout mask is shared across a sequence.</p><p>The standard unregularised LSTM used 1900 hidden units and 20 million parameters. The weight normalized mLSTM used 1900 hidden units, and a linear embedding layer of 400, giving it 22 million parameters. The large embedding layer was used because it was found to work well with dropout.</p><p>Since this embedding layer is linear, it could potentially be removed during test time by multiplying its incoming and outgoing weight matrices to reduce the number of parameters (however we report parameter numbers with the embedding layer). For the regularised weight normalized mLSTM, we apply a variational dropout of 0.2 to the hidden state and to the embedding layer (dropout masks for both the hidden state and embedding layer were shared across a sequence). We also consider a larger version of the weight normalized mLSTM with 2800 hidden units and 46 million parameters. We increased the dropout in the embedding layer to 0.5 on this model. All results without variational dropout used early stopping on the validation error to reduce overfitting. The results for these experiments are given in Interestingly, adding weight normalization and an embedding layer hurt performance in the absence of regularisation. However, when combined with variational dropout, this model outperformed all previous static single model neural network results on Hutter Prize. We did not explore variational dropout applied to mLSTM without weight normalization. Earlier versions of this work also considered dynamic evaluation of mLSTMs on this task, however this is now in a separate paper focused on dynamic evaluation ( <ref type="bibr" target="#b12">Krause et al., 2017</ref>).</p><p>We also tested an MI-LSTM, mLSTM's nearest neighbor, with a slightly larger size (22M parameters) and a very similar hyperparameter configuration and initialisation scheme 2 (compared with unregularised mLSTM with no WN). MI-LSTM achieved a relatively poor test set performance of 1.53 bits/char, as compared with 1.40 bits/char for mLSTM under the same settings. The MI-LSTM also converged more slowly, although eventually did require early stopping like the mLSTM. While this particular experiment cannot conclusively prove anything about the relative utility of mLSTM vs. MI-LSTM on this task, it does show that the two architectures are sufficiently different to obtain very different results under the same hyper-parameter settings.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">TEXT8 DATASET</head><p>Text8 contains 100 million characters of English text taken from Wikipedia in 2006, consisting of just the 26 characters of the English alphabet plus spaces. This dataset can be found at http: //mattmahoney.net/dc/textdata. This corpus has been widely used to benchmark RNN character level language models, with the first 90 million characters used for training, the next 5 million used for validation, and the final 5 million used for testing. The results of these experiments are shown in <ref type="table" target="#tab_3">Table 2</ref>.</p><p>The first set of experiments we performed were designed to be comparable to those of , who benchmarked several deep LSTMs against shallow LSTMs on this dataset. The shallow LSTM had a hidden state dimensionality of 512, and the deep versions had reduced dimensionality to give them roughly the same number of parameters. Our experiment used an mLSTM with a hidden dimensionality of 450, giving it slightly fewer parameters than the past work, and our own LSTM baseline with hidden dimensionality 512. mLSTM showed an improvement over our baseline and the previously reported best deep LSTM variant.</p><p>We also ran experiments to compare a large mLSTM with other reported experiments. We trained an mLSTM with hidden dimensionality of 1900 on the text8 dataset. Unregularised mLSTM was able to fit the training data well and achieved a competitive performance; however it was outperformed by other architectures that are less prone to over-fitting.</p><p>We later considered our best training setup from the Hutter Prize dataset, reusing the exact same architecture and hyper-parameters from this task, with the only difference being the number of input characters (27 for text8), which reduces the number of parameters to around 45 million. This well regularised mLSTM was able to achieve a much stronger performance on text8, tying RHNs with a recurrent depth of 10 for the best result on this dataset.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">WIKITEXT-2</head><p>The WikiText-2 dataset has been a common benchmark for very recent advances in word-level language modelling. This dataset contains 2 million training tokens and a vocab size of 33k. Documents are given in non-shuffled order, causing the data to contain more long-range dependencies. We use this dataset to benchmark how our advances in character-level language modelling stack up against word level language models. Character language models generally perform worse than word-level language models on standard English text benchmarks. One reason for this is word level language models know the test set vocabulary in advance, whereas character level models model a distribution over all possible words, including out of vocabulary words, making the task inherently more difficult from character level view. Furthermore, very rare words, which character level models are more equipped to handle than word level models, are mapped to an unknown token. From the perspective of training, character level language models must model longer range dependencies, and must learn a more complex non-linear fit to capture joint dependencies between characters. Character level models do have an inherent advantage of being able to capture subword language information, motivating their use on traditionally word-level tasks.</p><p>Character level language models can be compared with word level language models by converting bits per character to perplexity. In this case, we model the data at the UTF-8 byte level. The bits per word can be computed as</p><formula xml:id="formula_15">bits/word = bits/symbol × symbols/f ile words/f ile<label>(23)</label></formula><p>where in this case, symbols are UTF-8 bytes. 2 raised to the power of the number of bits/word is then the perplexity. The WikiText-2 test set is 245,569 words long, and 1,256,449 bytes long, so each word is on average 5.1165 UTF-8 bytes long. A character level model can also assign word level probabilities directly by taking the product of the probabilities of the characters in a word, including the probability of the character ending the word (either a space or a newline). A byte level model is likely at a slight disadvantage compared with word-level because it must predict some information that gets removed during tokenization (such as spaces vs. newlines), but the perplexity given by the conversion above could atleast be seen as an upper bound of the word level perplexity such a model could achieve predicting byte by byte. This is because the entropy of the file after tokenization (which word level models measure) will always be less than or equal to the entropy of the file before tokenization (which byte level models measure).</p><p>We trained the mLSTM configuration from the Hutter Prize dataset, using an embedding layer, weight normalization, and a variational dropout of 0.5 in both the hidden and embedding layer, to model WikiText-2 at the byte level. This model contained 46 million parameters, which is larger than most word level models that use tied input and output embeddings <ref type="bibr" target="#b21">(Press &amp; Wolf, 2017;</ref><ref type="bibr" target="#b9">Inan et al., 2017)</ref> to share parameters, but similar in size to untied word level models on this dataset. The results are given in  Byte mLSTM achieves a byte-level test set cross entropy of 1.2649 bits/char, corresponding to a perplexity of 88.8. Despite all the disadvantages faced by character level models, byte level mLSTM achieves similar word level perplexity to previous word-level LSTM baselines that also use variational dropout for regularisation. Byte mLSTM does not perform as well as word-level models that use adaptive add-on methods or very recent advances in regularisation/hyper-parameter tuning, however it could likely benefit from these advances as well.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">DISCUSSION</head><p>This work combined the mRNN's factorized hidden weights with the LSTM's hidden units for generative modelling of discrete multinomial sequences. This mLSTM architecture was motivated by its ability to have both controlled and flexible input-dependent transitions, to allow for fast changes to the distributed hidden representation without erasing information. In a series of character-level language modelling experiments, mLSTM showed improvements over LSTM and its deep variants. mLSTM regularised with variational dropout performed favorably compared with baselines in the literature, outperforming all previous neural models on Hutter Prize and tying the best previous result on text8. Byte-level mLSTM was also able to perform competitively with word-level language models on WikiText-2.</p><p>Unlike many previous approaches that have achieved success at character level language modelling, mLSTM does not use non-linear recurrent depth. All mLSTMs considered in this work only had 2 linear recurrent transition matrices, whereas comparable works such as recurrent highway networks use a recurrent depth of up to 10 to achieve best results. This makes mLSTM more easily parallelizable than these approaches. Additionally, our work suggests that a large depth is not necessary to achieve competitive results on character level language modelling. We hypothesize that mLSTM's ability to have very different transition functions for each possible input is what makes it successful at this task. While recurrent depth can accomplish this too, mLSTM can achieve this more efficiently.</p><p>While these results are promising, it remains to be seen how mLSTM performs at word-level language modelling and other discrete multinomial generative modelling tasks, and whether mLSTM can be formulated to apply more broadly to tasks with continuous or non-sparse input units. We also hope this work will motivate further exploration in generative RNN architectures with flexible input-dependent transition functions.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Cross entropy loss for mLSTM and stacked LSTM immediately proceeding a surprising input</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0"><head></head><label></label><figDesc></figDesc><graphic url="image-1.png" coords="2,108.00,81.86,396.00,136.34" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>table 1 .</head><label>1</label><figDesc></figDesc><table>architecture 
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Text8 dataset test set error in bits/char. Architectures labelled with small used a highly 
+restrictive hidden dimensionality (512 for LSTM, 450 for mLSTM). 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="true"><head>table 3 .</head><label>3</label><figDesc></figDesc><table>architecture 
+valid test 
+
+LSTM (Grave et al., 2017) 
+104.2 99.3 
+LSTM + VD (untied)(Inan et al., 2017) 
+98.8 
+93.1 
+LSTM + VD (tied)(Inan et al., 2017) 
+91.5 
+87.0 
+Pointer Sentinel LSTM (Merity et al., 2017b) 
+84.8 
+80.8 
+LSTM (tied) + VD + BB tuning (Melis et al., 2017) 
+69.1 
+65.9 
+LSTM + neural cache (Grave et al., 2017) 
+72.1 
+68.9 
+LSTM + dynamic eval (Krause et al., 2017) 
+63.7 
+59.8 
+AWD-LSTM (tied) (Merity et al., 2017a) 
+68.6 
+65.8 
+AWD-LSTM (tied)+ neural cache (Merity et al., 2017a) 53.8 
+52.0 
+AWD-LSTM (tied) + dynamic eval (Krause et al., 2017) 46.4 
+44.3 
+
+byte mLSTM +emb +WN +VD 
+92.8 
+88.8 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 3 : WikiText-2 perplexity errors</head><label>3</label><figDesc></figDesc><table></table></figure>
+
+			<note place="foot" n="1"> Code to replicate our experiments on the Hutter Prize dataset is available at https://github.com/ benkrause/mLSTM.</note>
+
+			<note place="foot" n="2"> The only difference in settings was the scale for the orthogonally initialised hidden weights; mLSTM used 0.7 and MI-LSTM used 0.5. We believed this was justified because mLSTM uses a product of two matrices, resulting in a spectral radius of 0.49 for this product. Additionally, reducing the scale to 0.5 improved MI-LSTM&apos;s initial convergence rate. Downscaling the orthogonal initialisations was necessary in general because an initial forget gate bias of 3 was used.</note>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Learning long-term dependencies with gradient descent is difficult</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Simard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Frasconi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="157" to="166" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+	<note>Neural Networks</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<title level="m">Hierarchical multiscale recurrent neural networks. ICLR</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Recurrent batch normalization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Cooijmans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">César</forename><surname>Laurent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Courville</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">A theoretically grounded application of dropout in recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yarin</forename><surname>Gal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zoubin</forename><surname>Ghahramani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1019" to="1027" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Improving neural language models with a continuous cache</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edouard</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Usunier</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Generating sequences with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Graves</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1308.0850</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Ha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Dai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><surname>Lee</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">The human knowledge compression contest</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hutter</surname></persName>
+		</author>
+		<ptr target="http://prize.hutter1.net" />
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Tying word vectors and word classifiers: A loss framework for language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Khashayar</forename><surname>Hakan Inan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Khosravi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Socher</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Simonyan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Oord</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1610.10099</idno>
+		<title level="m">Neural machine translation in linear time</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diederik</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Ba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6980</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Dynamic evaluation of neural sequence models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ben</forename><surname>Krause</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emmanuel</forename><surname>Kahembwe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iain</forename><surname>Murray</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Renals</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1709.07432</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Building a large annotated corpus of English: The Penn Treebank</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">P</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Marcinkiewicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Santorini</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational linguistics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="313" to="330" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">On the state of the art of evaluation in neural language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gábor</forename><surname>Melis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.05589</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Regularizing and optimizing lstm language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Shirish Keskar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1708.02182</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Pointer sentinel mixture models. ICLR</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Subword language modeling with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Deoras</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kombrink</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cernocky</surname></persName>
+		</author>
+		<ptr target="http://www.fit.vutbr.cz/imikolov/rnnlm/char.pdf" />
+		<imprint>
+			<biblScope unit="page">2012</biblScope>
+		</imprint>
+	</monogr>
+	<note>preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Asier</forename><surname>Mujika</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Florian</forename><surname>Meier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Angelika</forename><surname>Steger</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.08639</idno>
+		<title level="m">Fast-slow recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Regularization and nonlinearities for neural language models: when are they needed?</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pachitariu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Sahani</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1301.5650</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">On the difficulty of training recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Razvan</forename><surname>Pascanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Machine Learning</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1310" to="1318" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Using the output embedding to improve language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ofir</forename><surname>Press</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lior</forename><surname>Wolf</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page">157</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Learning to generate reviews and discovering sentiment</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alec</forename><surname>Radford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.01444</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Rocki</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.03085</idno>
+		<title level="m">Recurrent memory array structures</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Rocki</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.06027</idno>
+		<title level="m">Surprisal-driven feedback in recurrent networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Weight normalization: A simple reparameterization to accelerate training of deep neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Salimans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Diederik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kingma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="901" to="909" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Exact solutions to the nonlinear dynamics of learning in deep linear neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><forename type="middle">L</forename><surname>Andrew M Saxe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Surya</forename><surname>Mcclelland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ganguli</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1312.6120</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Dropout: a simple way to prevent neural networks from overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of machine learning research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Generating text with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Martens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 28th International Conference on Machine Learning (ICML-11)</title>
+		<meeting>the 28th International Conference on Machine Learning (ICML-11)</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="1017" to="1024" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Lecture 6.5-rmsprop: Divide the gradient by a running average of its recent magnitude</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Tieleman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COURSERA: Neural Networks for Machine Learning</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="volume">4</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">On multiplicative integration with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuhuai</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Saizheng</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ying</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2856" to="2864" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Architectural complexity measures of recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Che</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Memisevic</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1602.08210</idno>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">G</forename><surname>Zilly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">K</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Koutník</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<title level="m">Recurrent highway networks. ICLR</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

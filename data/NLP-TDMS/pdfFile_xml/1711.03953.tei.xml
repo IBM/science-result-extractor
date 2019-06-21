@@ -1,0 +1,1297 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:41+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Published as a conference paper at ICLR 2018 BREAKING THE SOFTMAX BOTTLENECK: A HIGH-RANK RNN LANGUAGE MODEL</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhilin</forename><surname>Yang</surname></persName>
+							<email>zhiliny@cs.cmu.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">School of Computer Science</orgName>
+								<orgName type="institution">Carnegie Mellon University</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zihang</forename><surname>Dai</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">School of Computer Science</orgName>
+								<orgName type="institution">Carnegie Mellon University</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">School of Computer Science</orgName>
+								<orgName type="institution">Carnegie Mellon University</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William</forename><forename type="middle">W</forename><surname>Cohen</surname></persName>
+							<email>wcohen@cs.cmu.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">School of Computer Science</orgName>
+								<orgName type="institution">Carnegie Mellon University</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Published as a conference paper at ICLR 2018 BREAKING THE SOFTMAX BOTTLENECK: A HIGH-RANK RNN LANGUAGE MODEL</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We formulate language modeling as a matrix factorization problem, and show that the expressiveness of Softmax-based models (including the majority of neu-ral language models) is limited by a Softmax bottleneck. Given that natural language is highly context-dependent, this further implies that in practice Softmax with distributed word embeddings does not have enough capacity to model natural language. We propose a simple and effective method to address this issue, and improve the state-of-the-art perplexities on Penn Treebank and WikiText-2 to 47.69 and 40.68 respectively. The proposed method also excels on the large-scale 1B Word dataset, outperforming the baseline by over 5.6 points in perplexity. 1</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>As a fundamental task in natural language processing, statistical language modeling has gone through significant development from traditional Ngram language models to neural language models in the last decade ( <ref type="bibr" target="#b2">Bengio et al., 2003;</ref><ref type="bibr" target="#b31">Mnih &amp; Hinton, 2007;</ref><ref type="bibr" target="#b29">Mikolov et al., 2010)</ref>. Despite the huge variety of models, as a density estimation problem, language modeling mostly relies on a universal auto-regressive factorization of the joint probability and then models each conditional factor using different approaches. Specifically, given a corpus of tokens X = (X 1 , . . . , X T ), the joint probability P (X) factorizes as P (X) = t P (X t | X &lt;t ) = t P (X t | C t ), where C t = X &lt;t is referred to as the context of the conditional probability hereafter.</p><p>Based on the factorization, recurrent neural networks (RNN) based language models achieve stateof-the-art results on various benchmarks ( <ref type="bibr" target="#b27">Merity et al., 2017;</ref><ref type="bibr" target="#b25">Melis et al., 2017;</ref><ref type="bibr" target="#b22">Krause et al., 2017)</ref>. A standard approach is to use a recurrent network to encode the context into a fixed size vector, which is then multiplied by the word embeddings <ref type="bibr" target="#b17">(Inan et al., 2016;</ref><ref type="bibr" target="#b34">Press &amp; Wolf, 2017</ref>) using dot product to obtain the logits. The logits are consumed by the Softmax function to give a categorical probability distribution over the next token. In spite of the expressiveness of RNNs as universal approximators <ref type="bibr" target="#b36">(Schäfer &amp; Zimmermann, 2006</ref>), an unclear question is whether the combination of dot product and Softmax is capable of modeling the conditional probability, which can vary dramatically with the change of the context.</p><p>In this work, we study the expressiveness of the aforementioned Softmax-based recurrent language models from a perspective of matrix factorization. We show that learning a Softmax-based recurrent language model with the standard formulation is essentially equivalent to solving a matrix factorization problem. More importantly, due to the fact that natural language is highly context-dependent, the matrix to be factorized can be high-rank. This further implies that standard Softmax-based language models with distributed (output) word embeddings do not have enough capacity to model natural language. We call this the Softmax bottleneck.</p><p>We propose a simple and effective method to address the Softmax bottleneck. Specifically, we introduce discrete latent variables into a recurrent language model, and formulate the next-token probability distribution as a Mixture of Softmaxes (MoS). Mixture of Softmaxes is more expressive than Softmax and other surrogates considered in prior work. Moreover, we show that MoS learns 2 LANGUAGE MODELING AS MATRIX FACTORIZATION As discussed in Section 1, with the autoregressive factorization, language modeling can be reduced to modeling the conditional distribution of the next token x given the context c. Though one might argue that a natural language allows an infinite number of contexts due to its compositionality <ref type="bibr" target="#b33">(Pinker, 1994)</ref>, we proceed with our analysis by considering a finite set of possible contexts. The unboundedness of natural language does not affect our conclusions, which will be discussed later.</p><p>We consider a natural language as a finite set of pairs of a context and its conditional next-token distribution 2 L = {(c 1 , P * (X|c 1 )), · · · , (c N , P * (X|c N ))}, where N is the number of possible contexts. We assume P * &gt; 0 everywhere to account for errors and flexibility in natural language. Let {x 1 , x 2 , · · · , x M } denote a set of M possible tokens in the language L. The objective of a language model is to learn a model distribution P θ (X|C) parameterized by θ to match the true data distribution P * (X|C).</p><p>In this work, we study the expressiveness of the parametric model class P θ (X|C). In other words, we are asking the following question: given a natural language L, does there exist a parameter θ such that P θ (X|c) = P * (X|c) for all c in L?</p><p>We start by looking at a Softmax-based model class since it is widely used.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">SOFTMAX</head><p>The majority of parametric language models use a Softmax function operating on a context vector (or hidden state) h c and a word embedding w x to define the conditional distribution P θ (x|c). More specifically, the model distribution is usually written as</p><formula xml:id="formula_0">P θ (x|c) = exp h c w x x exp h c w x (1)</formula><p>where h c is a function of c, and w x is a function of x. Both functions are parameterized by θ. Both the context vector h c and the word embedding w x have the same dimension d. The dot product h c w x is called a logit. To help discuss the expressiveness of Softmax, we define three matrices:</p><formula xml:id="formula_1">H θ =     h c1 h c2 · · · h c N     ; W θ =     w x1 w x2 · · · w x M     ; A =     log P * (x 1 |c 1 ), log P * (x 2 |c 1 ) · · · log P * (x M |c 1 ) log P * (x 1 |c 2 ), log P * (x 2 |c 2 ) · · · log P * (x M |c 2 ) . . . . . . . . . . . . log P * (x 1 |c N ), log P * (x 2 |c N ) · · · log P * (x M |c N )    </formula><p>where H θ ∈ R N ×d , W θ ∈ R M ×d , A ∈ R N ×M , and the rows of H θ , W θ , and A correspond to context vectors, word embeddings, and log probabilities of the true data distribution respectively. We use the subscript θ because (H θ , W θ ) is effectively a function indexed by the parameter θ, from the joint function family U. Concretely, H θ is implemented as deep neural networks, such as a recurrent network, while W θ is instantiated as an embedding lookup.</p><p>We further specify a set of matrices formed by applying row-wise shift to A</p><formula xml:id="formula_2">F (A) = {A + ΛJ N,M |Λ is diagonal and Λ ∈ R N ×N },</formula><p>where J N,M is an all-ones matrix with size N × M . Essentially, the row-wise shift operation adds an arbitrary real number to each row of A. Thus, F (A) is an infinite set. Notably, the set F (A) has two important properties (see Appendix A for the proof), which are key to our analysis.</p><p>Property 1. For any matrix A , A ∈ F (A) if and only if Softmax(A ) = P * . In other words, F (A) defines the set of all possible logits that correspond to the true data distribution.</p><p>Property 2. For any A 1 = A 2 ∈ F (A), |rank(A 1 ) − rank(A 2 )| ≤ 1. In other words, all matrices in F (A) have similar ranks, with the maximum rank difference being 1.</p><p>Based on the Property 1 of F (A), we immediately have the following Lemma.</p><formula xml:id="formula_3">Lemma 1. Given a model parameter θ, H θ W θ ∈ F (A) if and only if P θ (X|c) = P * (X|c) for all c in L.</formula><p>Now the expressiveness question becomes: does there exist a parameter θ and A ∈ F (A) such that</p><formula xml:id="formula_4">H θ W θ = A</formula><p>. This is essentially a matrix factorization problem. We want the model to learn matrices H θ and W θ that are able to factorize some matrix A ∈ F (A). First, note that for a valid factorization to exist, the rank of H θ W θ has to be at least as large as the rank of A . Further, since H θ ∈ R N ×d and W θ ∈ R M ×d , the rank of H θ W θ is strictly upper bounded by the embedding size d. As a result, if d ≥ rank(A ), a universal approximator can theoretically recover A . However, if d &lt; rank(A ), no matter how expressive the function family U is, no (H θ , W θ ) can even theoretically recover A . We summarize the reasoning above as follows (see Appendix A for the proof). Proposition 1. Given that the function family U is a universal approximator, there exists a parameter θ such that P θ (X|c) = P * (X|c) for all c in L if and only if d ≥ min A ∈F (A) rank(A ).</p><p>Combining Proposition 1 with the Property 2 of F (A), we are now able to state the Softmax Bottleneck problem formally. Corollary 1. (Softmax Bottleneck) If d &lt; rank(A) − 1, for any function family U and any model parameter θ, there exists a context c in L such that P θ (X|c) = P * (X|c).</p><p>The above corollary indicates that when the dimension d is too small, Softmax does not have the capacity to express the true data distribution. Clearly, this conclusion is not restricted to a finite language L. When L is infinite, one can always take a finite subset and the Softmax bottleneck still exists. Next, we discuss why the Softmax bottleneck is an issue by presenting our hypothesis that A is high-rank for natural language.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">HYPOTHESIS: NATURAL LANGUAGE IS HIGH-RANK</head><p>We hypothesize that for a natural language L, the log probability matrix A is a high-rank matrix. It is difficult (if possible) to rigorously prove this hypothesis since we do not have access to the true data distribution of a natural language. However, it is suggested by the following intuitive reasoning and empirical observations:</p><p>• Natural language is highly context-dependent <ref type="bibr" target="#b28">(Mikolov &amp; Zweig, 2012)</ref>. For example, the token "north" is likely to be followed by "korea" or "korean" in a news article on international politics, which however is unlikely in a textbook on U.S. domestic history. We hypothesize that such subtle context dependency should result in a high-rank matrix A.</p><p>• If A is low-rank, it means humans only need a limited number (e.g. a few hundred) of bases, and all semantic meanings can be created by (potentially) negating and (weighted) averaging these bases. However, it is hard to find a natural concept in linguistics and cognitive science that corresponds to such bases, which questions the existence of such bases. For example, semantic meanings might not be those bases since a few hundred meanings may not be enough to cover everyday meanings, not to mention niche meanings in specialized domains.</p><p>• Empirically, our high-rank language model outperforms conventional low-rank language models on several benchmarks, as shown in Section 3. We also provide evidences in Section 3.3 to support our hypothesis that learning a high-rank language model is important.</p><p>Given the hypothesis that natural language is high-rank, it is clear that the Softmax bottleneck limits the expressiveness of the models. In practice, the embedding dimension d is usually set at the scale of 10 2 , while the rank of A can possibly be as high as M (at the scale of 10 5 ), which is orders of magnitude larger than d. Softmax is effectively learning a low-rank approximation to A, and our experiments suggest that such approximation loses the ability to model context dependency, both qualitatively and quantitatively (Cf. Section 3).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">EASY FIXES?</head><p>Identifying the Softmax bottleneck immediately suggests some possible "easy fixes". First, as considered by a lot of prior work, one can employ a non-parametric model, namely an Ngram model <ref type="bibr" target="#b21">(Kneser &amp; Ney, 1995)</ref>. Ngram models are not constrained by any parametric forms so it can universally approximate any natural language, given enough parameters. Second, it is possible to increase the dimension d (e.g., to match M ) so that the model can express a high-rank matrix A.</p><p>However, these two methods increase the number of parameters dramatically, compared to using a low-dimensional Softmax. More specifically, an Ngram needs (N × M ) parameters in order to express A, where N is potentially unbounded. Similarly, a high-dimensional Softmax requires (M × M ) parameters for the word embeddings. Increasing the number of model parameters easily leads to overfitting. In past work, <ref type="bibr" target="#b21">Kneser &amp; Ney (1995)</ref> used back-off to alleviate overfitting. Moreover, as deep learning models were tuned by extensive hyper-parameter search, increasing the dimension d beyond several hundred is not helpful <ref type="bibr">3 (Merity et al., 2017;</ref><ref type="bibr" target="#b25">Melis et al., 2017;</ref><ref type="bibr" target="#b22">Krause et al., 2017)</ref>.</p><p>Clearly there is a tradeoff between expressiveness and generalization on language modeling. Naively increasing the expressiveness hurts generalization. Below, we introduce an alternative approach that increases the expressiveness without exploding the parametric space.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.4">MIXTURE OF SOFTMAXES: A HIGH-RANK LANGUAGE MODEL</head><p>We propose a high-rank language model called Mixture of Softmaxes (MoS) to alleviate the Softmax bottleneck issue. MoS formulates the conditional distribution as</p><formula xml:id="formula_5">P θ (x|c) = K k=1 π c,k exp h c,k w x x exp h c,k w x ; s.t. K k=1 π c,k = 1</formula><p>where π c,k is the prior or mixture weight of the k-th component, and h c,k is the k-th context vector associated with context c. In other words, MoS computes K Softmax distributions and uses a weighted average of them as the next-token probability distribution. Similar to prior work on recurrent language modeling ( <ref type="bibr" target="#b27">Merity et al., 2017;</ref><ref type="bibr" target="#b25">Melis et al., 2017;</ref><ref type="bibr" target="#b22">Krause et al., 2017)</ref>, we first apply a stack of recurrent layers on top of X to obtain a sequence of hidden states (g 1 , · · · , g T ).</p><p>The prior and the context vector for context c t are parameterized as</p><formula xml:id="formula_6">π ct,k = exp w π,k gt K k =1 exp w π,k gt and h ct,k = tanh(W h,k g t )</formula><p>where w π,k and W h,k are model parameters.</p><p>Our method is simple and easy to implement, and has the following advantages:</p><p>• Improved expressiveness (compared to Softmax). MoS is theoretically more (or at least equally) expressive compared to Softmax given the same dimension d. This can be seen by the fact that MoS with K = 1 is reduced to Softmax. More importantly, MoS effectively approximates A byˆA</p><formula xml:id="formula_7">byˆ byˆA MoS = log K k=1 Π k exp(H θ,k W θ )</formula><p>where Π k is an (N × N ) diagonal matrix with elements being the prior π c,k . Becausê A MoS is a nonlinear function (log_sum_exp) of the context vectors and the word embeddings, ˆ A MoS can be arbitrarily high-rank. As a result, MoS does not suffer from the rank limitation, compared to Softmax.</p><p>• Improved generalization (compared to Ngram). Ngram models and high-dimensional Softmax (Cf. Section 2.3) improve the expressiveness but do not generalize well. In contrast, MoS does not have a generalization issue due to the following reasons. First, MoS defines the following generative process: a discrete latent variable k is first sampled from {1, · · · , K}, and then the next token is sampled based on the k-th Softmax component. By doing so we introduce an inductive bias that the next token is generated based on a latent discrete decision (e.g., a topic), which is often safe in language modeling ( <ref type="bibr" target="#b3">Blei et al., 2003)</ref>. Second, sincê A MoS is defined by a nonlinear function and not restricted by the rank bottleneck, in practice it is possible to reduce d to compensate for the increase of model parameters brought by the mixture structure. As a result, MoS has a similar model size compared to Softmax and thus is not prone to overfitting.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.5">MIXTURE OF CONTEXTS: A LOW-RANK BASELINE</head><p>Another possible approach is to directly mix the context vectors (or logits) before taking the Softmax, rather than mixing the probabilities afterwards as in MoS. Specifically, the conditional distribution is parameterized as</p><formula xml:id="formula_8">P θ (x|c) = exp K k=1 π c,k h c,k w x x exp K k=1 π c,k h c,k w x = exp K k=1 π c,k h c,k w x x exp K k=1 π c,k h c,k w x ,<label>(2)</label></formula><p>where h c,k and π c,k share the same parameterization as in MoS. Despite its superficial similarity to MoS, this model, which we refer to as mixture of contexts (MoC), actually suffers from the same rank limitation problem as Softmax. This can be easily seen by defining</p><formula xml:id="formula_9">h c = K k=1 π c,k h c,k , which turns the MoC parameterization (2) into P θ (x|c) = exp h c wx x exp h c w x .</formula><p>Note that this is equivalent to the Softmax parameterization (1). Thus, performing mixture in the feature space can only make the function family U more expressive, but does not change the fact that the rank of H θ W θ is upper bounded by the embedding dimension d. In our experiments, we implement MoC as a baseline and compare it experimentally to MoS.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">EXPERIMENTS</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">MAIN RESULTS</head><p>We conduct a series of experiments with the following settings:</p><p>• Following previous work ( <ref type="bibr" target="#b22">Krause et al., 2017;</ref><ref type="bibr" target="#b27">Merity et al., 2017;</ref><ref type="bibr" target="#b25">Melis et al., 2017)</ref>, we evaluate the proposed MoS model on two widely used language modeling datasets, namely Penn Treebank (PTB) ( <ref type="bibr" target="#b29">Mikolov et al., 2010)</ref> and WikiText-2 (WT2) ( <ref type="bibr" target="#b26">Merity et al., 2016</ref>) based on perplexity. For fair comparison, we closely follow the regularization and optimization techniques introduced by <ref type="bibr" target="#b27">Merity et al. (2017)</ref>. We heuristically and manually search hyper-parameters for MoS based on the validation performance while limiting the model size (see Appendix B.1 for our hyper-parameters).</p><p>• To investigate whether the effectiveness of MoS can be extended to even larger datasets, we conduct an additional language modeling experiment on the 1B Word dataset ( <ref type="bibr" target="#b4">Chelba et al., 2013</ref>). Specifically, we lower-case the text and choose the top 100K tokens as the vocabulary. A standard neural language model with 2 layers of LSTMs followed by a Softmax output layer is used as the baseline. Again, the network size of MoS is adjusted to ensure a comparable number of parameters. Notably, dropout was not used, since we found it not helpful to either model (see Appendix B.2 for more details).</p><p>• To show that the MoS is a generic structure that can be used to model other context-dependent distributions, we additionally conduct experiments in the dialog domain. We use the Switchboard dataset <ref type="bibr" target="#b11">(Godfrey &amp; Holliman, 1997</ref>   are used as baselines. For evaluation, we include both the perplexity and the precision/recall of Smoothed Sentence-level BLEU, as suggested by <ref type="bibr" target="#b41">Zhao et al. (2017)</ref>. When generating responses, we use beam search with beam size 10, restrict the maximum length to 30, and retain the top-5 responses.</p><p>The language modeling results on PTB and WT2 are presented in <ref type="table" target="#tab_1">Table 1 and Table 2</ref>   The improvement on the large-scale dataset is even more significant. As shown in  Further, the experimental results on Switchboard are summarized in <ref type="table" target="#tab_6">Table 4</ref> 5 . Clearly, on all metrics, MoS outperforms MoC and Softmax, showing its general effectiveness.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">ABLATION STUDY</head><p>To further verify the improvement shown above does come from the MoS structure rather than adding another hidden layer or finding a particular set of hyper-parameters, we conduct an ablation study on both PTB and WT2. Firstly, we compare MoS with an MoC architecture with the same number of layers, hidden sizes, and embedding sizes, which thus has the same number of parameters. In addition, we adopt the hyper-parameters used to obtain the best MoS model (denoted as MoS hyper-parameters), and train a baseline AWD-LSTM. To avoid distractive factors and save computational resources, all ablative experiments excluded the use of finetuing and dynamic evaluation.</p><p>The results are shown in  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">VERIFY THE ROLE OF RANK</head><p>While the study above verifies that MoS is the key to achieving the state-of-the-art performance, it is still not clear whether the superiority of MoS comes from its potential high rank, as suggested by our theoretical analysis in Section 2. In the sequel, we take steps to verify this hypothesis.</p><p>• Firstly, we verify that MoS does induce a high-rank log-probability matrix empirically, while MoC and Softmax fail. On the validation or test set of PTB with tokens X = {X 1 , . . . , X T }, we compute the log probabilities {log P (</p><formula xml:id="formula_10">X i | X &lt;i ) ∈ R M } T t=1</formula><p>for each token using all three models. Then, for each model, we stack all T log-probability vectors into a T × M matrix, resulting inˆA inˆ inˆA MoS , ˆ A MoC andˆAandˆ andˆA Softmax . Theoretically, the number of non-zero singular values of a matrix is equal to its rank. However, performing singular value decomposition of real valued matrices using numerical approaches often encounter roundoff errors. Hence, we adopt the expected roundoff error suggested by <ref type="bibr" target="#b35">Press (2007)</ref> when estimating the ranks ofˆAofˆ ofˆA MoS , ˆ A MoC andˆAandˆ andˆA Softmax . The estimated ranks are shown in <ref type="table" target="#tab_10">Table 6</ref>. As predicted by our theoretical analysis, the matrix ranks induced by Softmax and MoC are both limited by the corresponding embedding sizes. By contrast, the matrix rank obtained from MoS does not suffer from this constraint, almost reaching full rank (M = 10000). In appendix C.1, we give additional evidences for the higher rank of MoS.   • Secondly, we show that, before reaching full rank, increasing the number of mixture components in MoS also increases the rank of the log-probability matrix, which in turn leads to improved performance (lower perplexity). Specifically, on PTB, with other hyper-parameters fixed as used in section 3.1, we vary the number of mixtures used in MoS and compare the corresponding empirical rank and test perplexity without finetuning. <ref type="table" target="#tab_11">Table 7</ref> summarizes the results. This clear positive correlation between rank and performance strongly supports the our theoretical analysis in section 2. Moreover, note that after reaching almost full rank (i.e., using 15 mixture components), further increasing the number of components degrades the performance due to overfitting (as we inspected the training and test perplexities).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>• In addition, as performance improvement can often come from better regularization, we investigate whether MoS has a better, though unexpected, regularization effect compared to Softmax. We consider the 1B word dataset where overfitting is unlikely and no explicit regularization technique (e.g., dropout) is employed. As we can see from the left part of <ref type="table" target="#tab_4">Table 3</ref>, MoS and Softmax achieve a similar generalization gap, i.e., the performance gap between the test set and the training set. It suggests both models have similar regularization effects. Meanwhile, MoS has a lower training perplexity compared to Softmax, indicating that the improvement of MoS results from improved expressiveness.</p><p>• The last evidence we provide is based on an inverse experiment. Empirically, we find that when Softmax does not suffer from a rank limitation, e.g., in character-level language modeling, using MoS will not improve the performance. Due to lack of space, we refer readers to Appendix C.2 for details.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">ADDITIONAL ANALYSIS</head><p>MoS computational time The expressiveness of MoS does come with a computational costcomputing a K-times larger Softmax. To give readers a concrete idea of the influence on training time, we perform detailed analysis in Appendix C.3. As we will see, computational wall time of MoS is actually sub-linear w.r.t. the number of Softmaxes K. In most settings, we observe a two to three times slowdown when using MoS with up to 15 mixture components.</p><p>Qualitative analysis Finally, we conduct a case study on PTB to see how MoS improves the next-token prediction in detail. Due to lack of space, we refer readers to Appendix C.4 for details.</p><p>The key insight from the case study is that MoS is better at making context-dependent predictions. Specifically, given the same immediate preceding word, MoS will produce distinct next-step prediction based on long-term context in history. By contrast, the baseline often yields similar next-step prediction, independent of the long-term context.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">RELATED WORK</head><p>In language modeling, <ref type="bibr" target="#b15">Hutchinson et al. (2011;</ref> have previously considered the problem from a matrix rank perspective. However, their focus was to improve the generalization of Ngram language models via a sparse plus low-rank approximation. By contrast, as neural language models already generalize well, we focus on a high-rank neural language model that improves expressiveness without sacrificing generalization. <ref type="bibr" target="#b32">Neubig &amp; Dyer (2016)</ref> proposed to mix Ngram and neural language models to unify and benefit from both. However, this mixture might not generalize well since an Ngram model, which has poor generalization, is included. Moreover, the fact that the two components are separately trained can limit its expressiveness. <ref type="bibr" target="#b23">Levy &amp; Goldberg (2014)</ref> also considered the matrix factorization perspective, but in the context of learning word embeddings.</p><p>In a general sense, Mixture of Softmaxes proposed in this work can be seen as a particular instantiation of the long-existing idea called Mixture of Experts (MoE) ( <ref type="bibr" target="#b18">Jacobs et al., 1991)</ref>. However, there are two core differences. Firstly, MoE has usually been instantiated as mixture of Gaussians to model data in continuous domains ( <ref type="bibr" target="#b18">Jacobs et al., 1991;</ref><ref type="bibr" target="#b13">Graves, 2013;</ref><ref type="bibr" target="#b1">Bazzani et al., 2016</ref>). More importantly, the motivation of using the mixture structure is distinct. For Gaussian mixture models, the mixture structure is employed to allow for a parameterized multi-modal distribution. By contrast, Softmax by itself can parameterize a multi-modal distribution, and MoS is introduced to break the Softmax bottleneck as discussed in Section 2.</p><p>There has been previous work <ref type="bibr" target="#b7">(Eigen et al., 2013;</ref><ref type="bibr" target="#b37">Shazeer et al., 2017)</ref> proposing architectures that can be categorized as instantiations of MoC, since the mixture structure is employed in the feature space. <ref type="bibr">6</ref> The target of <ref type="bibr" target="#b7">Eigen et al. (2013)</ref> is to create a more expressive feed-forward layer through the mixture structure. In comparison, Shazeer et al. <ref type="formula" target="#formula_8">(2017)</ref> focuses on a sparse gating mechanism also on the feature level, which enables efficient conditional computation and allows the training of a very large neural architecture. In addition to having different motivations from our work, all these MoC variants suffer from the same rank limitation problem as discussed in Section 2.</p><p>Finally, several previous works have tried to introduce latent variables into sequence modeling <ref type="bibr" target="#b0">(Bayer &amp; Osendorfer, 2014;</ref><ref type="bibr" target="#b14">Gregor et al., 2015;</ref><ref type="bibr" target="#b5">Chung et al., 2015;</ref><ref type="bibr" target="#b10">Gan et al., 2015;</ref><ref type="bibr">Frac- caro et al., 2016;</ref><ref type="bibr" target="#b6">Chung et al., 2016)</ref>. Except for ( <ref type="bibr" target="#b6">Chung et al., 2016</ref>), these structures all define a continuous latent variable for each step of the RNN computation, and rely on the SGVB estimator <ref type="bibr" target="#b20">(Kingma &amp; Welling, 2013)</ref> to optimize a variational lower bound of the log-likelihood. Since exact integration is infeasible, these models cannot estimate the likelihood (perplexity) exactly at test time. Moreover, for discrete data, the variational lower bound is usually too loose to yield a competitive approximation compared to standard auto-regressive models. As an exception, <ref type="bibr" target="#b6">Chung et al. (2016)</ref> utilizes Bernoulli latent variables to model the hierarchical structure in language, where the Bernoulli sampling is replaced by a thresholding operation at test time to give perplexity estimation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">CONCLUSIONS</head><p>Under the matrix factorization framework, the expressiveness of Softmax-based language models is limited by the dimension of the word embeddings, which is termed as the Softmax bottleneck. Our proposed MoS model improves the expressiveness over Softmax, and at the same time avoids overfitting compared to non-parametric models and naively increasing the word embedding dimensions. Our method improves the current state-of-the-art results on standard benchmarks by a large margin, which in turn justifies our theoretical reasoning: it is important to have a high-rank model for natural language.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A PROOFS</head><p>Proof of Property 1</p><p>Proof. For any A ∈ F (A), let P A (X|C) denote the distribution defined by applying Softmax on the logits given by A . Consider row i column j, by definition any entry in A can be expressed as</p><formula xml:id="formula_11">A ij = A ij + Λ ii . It follows P A (x j |c i ) = exp A ij k exp A ik = exp(A ij + Λ ii ) k exp(A ik + Λ ii ) = exp A ij k exp A ik = P * (x j |c i )</formula><p>For any A ∈ {A | Softmax(A ) = P * }, for any i and j, we have</p><formula xml:id="formula_12">P A (x j |c i ) = P A (x j |c i )</formula><p>It follows that for any i, j, and k,</p><formula xml:id="formula_13">P A (x j |c i ) P A (x k |c i ) = exp A ij exp A ik = exp A ij exp A ik = P A (x j |c i ) P A (x k |c i )</formula><p>As a result, A ij − A ij = A ik − A ik This means each row in A can be obtained by adding a real number to the corresponding row in A. Therefore, there exists a diagonal matrix Λ ∈ R N ×N such that</p><formula xml:id="formula_14">A = A + ΛJ N,M It follows that A ∈ F (A).</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Proof of Property 2</head><p>Proof. For any A 1 and A 2 in F (A), by definition we have A 1 = A + Λ 1 J N,M , and A 2 = A + Λ 2 J N,M where Λ 1 and Λ 2 are two diagonal matrices. It can be rewritten as</p><formula xml:id="formula_15">A 1 = A 2 + (Λ 1 − Λ 2 )J N,M</formula><p>Let S be a maximum set of linearly independent rows in A 2 . Let e N be an all-ones vector with dimension N . The i-th row vector a 1,i in A 1 can be written as</p><formula xml:id="formula_16">a 1,i = a 2,i + (Λ 1,ii − Λ 2,ii )e N</formula><p>Because a 2,i is a linear combination of vectors in S, a 1,i is a linear combination of vectors in S ∪ {e N }. It follows that rank(A 1 ) ≤ rank(A 2 ) + 1</p><p>Similarly, we can derive rank(A 2 ) ≤ rank(A 1 ) + 1</p><p>Therefore,</p><formula xml:id="formula_17">|rank(A 1 ) − rank(A 2 )| ≤ 1</formula><p>Proof of Proposition 1</p><p>Proof. If there exists a parameter θ such that P θ (X|c) = P * (X|c) for all c in L, by Lemma 1, we have H θ W θ ∈ F (A). As a result, there exists a matrix A ∈ F (A) such that H θ W θ = A . Because H θ and W θ are of dimensions (N × d) and (M × d) respectively, we have</p><formula xml:id="formula_18">d ≥ rank(A ) ≥ min A ∈F (A) rank(A )</formula><p>If d ≥ min A ∈F (A) rank(A ), there exist matrices A ∈ F (A), H ∈ R N ×d and W ∈ R M ×d , such that A can be factorized as A = H W . Because U is a universal approximator, there exists θ such that H θ = H and W θ = W . By Lemma 1, P θ (X|c) = P * (X|c) for all c in L.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>B EXPERIMENT SETTING AND HYPER-PARAMETERS</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>B.1 PTB AND WT2</head><p>The hyper-parameters used for MoS in language modeling experiment is summarized below.</p><p>Hyper-parameter PTB WT2       </p><formula xml:id="formula_19">[KLD(P (X | c)P (X | c ))]</formula><p>where C denotes all possible contexts, as another metric to evaluate the ranks of the three models (MoS, MoC and Softmax). Practically, we sample c, c from validation or test data of PTB to get the empirical estimations for the three models, which are shown in the right half of  <ref type="table" target="#tab_1">Table 12</ref>: BPC comparison on text8. For MoS, "-n" indicates using n mixtures. "hid" and "emb" denote the hidden size and embedding size respectively.</p><p>Here, we detail the inverse experiment, which shows that when Softmax does not suffer from a rank limitation, using MoS will not improve the performance. Notice that character-level language modeling (CharLM) is exactly such a problem, because the rank of the log-likelihood matrix is upper bounded by the vocabulary size, and CharLM usually has a very limited vocabulary (tens of characters). In this case, with the embedding size being hundreds in practice, Softmax is no longer a bottleneck in this task. Hence, we expect MoS to yield similar performance to Softmax on CharLM.</p><p>We conduct experiments of CharLM using the text8 dataset <ref type="bibr" target="#b24">(Mahoney, 2011)</ref>, which consists of 100M characters including only alphabetical characters and spaces derived from Wikipedia. We follow <ref type="bibr" target="#b28">Mikolov et al. (2012)</ref> and use the first 90M characters for training, the next 5M for validation and the final 5M for testing. The standard evaluation metric bit-per-character (BPC) is employed. We employ a 1-layer 1024-unit LSTM followed by Softmax as the baseline. For MoS, we consider 7 or 10 mixtures and reduce the hidden and/or embedding size to match the baseline capacity. When decreasing the hidden and/or embedding size, we either keep both the same, or make the hidden size relatively larger. The results are summarized in <ref type="table" target="#tab_1">Table 12</ref>. Clearly, the Softmax and MoS obtain the same BPC on the test set and comparable BPC on the validation set, which well match our hypothesis. Since the only difference in word-level language modeling is the existence of the Softmax bottleneck, the distinct behavior of MoS again supports our hypothesis that it is solving the Softmax bottleneck problem.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>C.3 MOS COMPUTATIONAL TIME</head><p>Model PTB/bs PTB/best-1 WT2/bs WT2/best-1 WT2/best-3 1B/bs 1B/best-1 1B/best-3  indicates Softmax and MoS use the same batch sizes on one GPU. "best-1" and "best-3" refer to the settings where Softmax and MoS obtain their own best perplexity, with 1 and 3 GPUs respectively.</p><formula xml:id="formula_20">Softmax 1x 1x 1x 1x 1x 1x 1x 1x MoS-5 1.2x - 1.3x - - - - - MoS-7 - - - - - 3.</formula><p>We evaluate the additional computational cost introduced by MoS. We consider two sets of controlled experiments. In the first set, we compare the training time of MoS and Softmax using the same batch sizes. In the second set, we compare the training time of two methods using the hyperparameter settings that achieve the best performance for each model (i.e., the settings in <ref type="table" target="#tab_1">Tables 1, 2</ref>, and 3). In both sets, we control two models to have comparable model sizes.</p><p>The results on the three datasets are shown in <ref type="table" target="#tab_1">Table 13</ref>. Thanks to the efficiency of matrix multiplication on GPU, the computational wall time of MoS is actually sub-linear w.r.t. the number of Softmaxes K. In most settings, we observe a two to three times slowdown when using MoS. Specifically, the "bs" setting measures the computational cost introduced by MoS given enough memory, which is 1.9x, 2.5x, and 3.8x slowdown on PTB, WT2, and 1B respectively. The "best-1" setting is usually slower compared to "bs", because a single batch does not fit into the memory of a single GPU using MoS, in which case we have to split one batch into multiple small ones, resulting in further slowdown. In this sense, the gap between "best-1" and "bs" measures the computational cost introduced due to the increase of memory consumed by MoS. The "best-3" alleviates this issue by using three GPUs, which allows larger-batch training for MoS. In this case, we reduce the computational cost to 2.9x on WT2 and 2.1x on 1B with our best performing model.</p><p>Note that the computational cost is closely related to the batch size, which is interleaved with optimization. Though how batch sizes affect optimization remains an open question and might be task dependent, we believe the "best-1" and "best-3" settings well reflect the actual computational cost brought by MoS on language modeling tasks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>C.4 QUALITATIVE ANALYSIS</head><p>Since MoC shows a stronger performance than Softmax on PTB, the qualitative study focuses on the comparison between MoC and MoS. Concretely, given the same context (previous tokens), we search for prediction steps where MoS achieves lower negative log loss than MoC by a margin. We show some representative cases in <ref type="table" target="#tab_1">Table 14</ref> with the following observations:</p><p>• Comparing the first two cases, given the same preceding word "N", MoS flexibly adjusts its top predictions based on the different topic quantities being discussed in the context. In comparison, MoC emits quite similar top choices regardless of the context, suggesting its inferiority in make context-dependent predictions.</p><p>• In the 3rd case, the context is about international politics, where country/region names are likely to appear. MoS captures this nuance well, and yields top choices that can be used to complete a country name given the immediate preceding word "south". Similarly, in the 4th case, MoS is able to include "ual", a core entity of discussion in the context, in its top predictions. In contrast, MoC gives rather generic predictions irrieselevant to the context in both cases.</p><p>• For the 5th and the 6th example, we see MoS is able to exploit less common words accurately according to the context, while MoC fails to yield such choices. This well matches our analysis that MoS has the capacity of modeling context-dependent language.</p><p>#1 Context managed properly and with a long-term outlook these can become investment-grade quality properties &lt;eos&gt; canadian &lt;unk&gt; production totaled N metric tons in the week ended oct. N up N N from the preceding week 's total of N __?__ Reference as the days go by the south african government will be ever more hard pressed to justify the continued &lt;unk&gt; of mr. &lt;unk&gt; as well as the continued banning of the anc and enforcement of the state of emergency &lt;eos&gt; #4 Context shares of ual the parent of united airlines were extremely active all day friday reacting to news and rumors about the proposed $ N billion buy-out of the airline by an &lt;unk&gt; group &lt;eos&gt; wall street 's takeover-stock speculators or risk arbitragers had placed unusually large bets that a takeover would succeed and __?__ Reference wall street 's takeover-stock speculators or risk arbitragers had placed unusually large bets that a takeover would succeed and ual stock would rise &lt;eos&gt; #5 Context the government is watching closely to see if their presence in the &lt;unk&gt; leads to increased &lt;unk&gt; protests and violence if it does pretoria will use this as a reason to keep mr. &lt;unk&gt; behind bars &lt;eos&gt; pretoria has n't forgotten why they were all sentenced to life &lt;unk&gt; in the first place for sabotage and __?__ Reference pretoria has n't forgotten why they were all sentenced to life &lt;unk&gt; in the first place for sabotage and conspiracy to &lt;unk&gt; the government &lt;eos&gt; #6 Context china 's &lt;unk&gt; &lt;unk&gt; program has achieved some successes in &lt;unk&gt; runaway economic growth and stabilizing prices but has failed to eliminate serious defects in state planning and an &lt;unk&gt; drain on state budgets &lt;eos&gt; the official china daily said retail prices of &lt;unk&gt; foods have n't risen since last december but acknowledged that huge government __?__ Reference the official china daily said retail prices of &lt;unk&gt; foods have n't risen since last december but acknowledged that huge government subsidies were a main factor in keeping prices down &lt;eos&gt;  <ref type="bibr" target="#b29">Mikolov et al., 2010</ref>). The context shown only includes the previous sentence and the current sentence the prediction step resides in.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Cumulative percentage of normalized singulars given a value in [0, 1].</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head></head><label></label><figDesc>Reference canadian &lt;unk&gt; production totaled N metric tons in the week ended oct. N up N N from the preceding week 's total of N tons statistics canada a federal agency said &lt;eos&gt; #2 Context the thriving &lt;unk&gt; street area offers &lt;unk&gt; of about $ N a square foot as do &lt;unk&gt; locations along lower fifth avenue &lt;eos&gt; by contrast &lt;unk&gt; in the best retail locations in boston san fran- cisco and chicago rarely top $ N __?__Reference by contrast &lt;unk&gt; in the best retail locations in boston san francisco and chicago rarely top $ N a square foot &lt;eos&gt; #3 Context as other &lt;unk&gt; governments particularly poland and the soviet union have recently discovered initial steps to open up society can create a momentum for radical change that becomes difficult if not impossible to control &lt;eos&gt; as the days go by the south __?__</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 1 :</head><label>1</label><figDesc></figDesc><table>Single model perplexity on validation and test sets on Penn Treebank. Baseline results are obtained 
+
+from Merity et al. (2017) and Krause et al. (2017).  † indicates using dynamic evaluation. 
+
+Model 
+#Param Validation 
+Test 
+
+Inan et al. (2016) -Variational LSTM + augmented loss 
+28M 
+91.5 
+87.0 
+Grave et al. (2016) -LSTM + continuous cache pointer  † 
+-
+-
+68.9 
+Melis et al. (2017) -2-layer skip connection LSTM 
+24M 
+69.1 
+65.9 
+
+Merity et al. (2017) -AWD-LSTM w/o finetune 
+33M 
+69.1 
+66.0 
+Merity et al. (2017) -AWD-LSTM 
+33M 
+68.6 
+65.8 
+Ours -AWD-LSTM-MoS w/o finetune 
+35M 
+66.01 
+63.33 
+Ours -AWD-LSTM-MoS 
+35M 
+63.88 
+61.45 
+
+Merity et al. (2017) -AWD-LSTM + continuous cache pointer  † 
+33M 
+53.8 
+52.0 
+Krause et al. (2017) -AWD-LSTM + dynamic evaluation  † 
+33M 
+46.4 
+44.3 
+Ours -AWD-LSTM-MoS + dynamical evaluation  † 
+35M 
+42.41 
+40.68 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Single model perplexity over WikiText-2. Baseline results are obtained from Merity et al. (2017) and 
+
+Krause et al. (2017).  † indicates using dynamic evaluation. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Perplexity comparison on 1B word dataset. Train perplexity is the average of the last 4,000 updates. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 3 ,</head><label>3</label><figDesc></figDesc><table>MoS 
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Evaluation scores on Switchboard. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head>Table 5 .</head><label>5</label><figDesc></figDesc><table>Compared to the vanilla AWD-LSTM, though being more expres-
+sive, MoC performs only better on PTB, but worse on WT2. It suggests that simply adding another 
+hidden layer or employing a mixture structure in the feature space does not guarantee a better per-
+formance. On the other hand, training AWD-LSTM using MoS hyper-parameters severely hurts the 
+performance, which rules out hyper-parameters as the main source of improvement. 
+
+PTB 
+WT2 
+Model 
+Validation 
+Test 
+Validation 
+Test 
+
+AWD-LSTM-MoS 
+58.08 
+55.97 
+66.01 
+63.33 
+AWD-LSTM-MoC 
+59.82 
+57.55 
+68.76 
+65.98 
+AWD-LSTM (Merity et al. (2017) hyper-parameters) 
+61.49 
+58.95 
+68.73 
+65.40 
+AWD-LSTM (MoS hyper-parameters) 
+78.86 
+74.86 
+72.73 
+69.18 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Ablation study on Penn Treebank and WikiText-2 without finetuning or dynamical evaluation. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_10" validated="false"><head>Table 6 :</head><label>6</label><figDesc></figDesc><table>Rank comparison on PTB. To ensure com-
+
+parable model sizes, the embedding sizes of Softmax, 
+MoC and MoS are 400, 280, 280 respectively. The 
+vocabulary size, i.e., M , is 10,000 for all models. 
+
+#Softmax Rank Perplexity 
+
+3 
+6467 
+58.62 
+5 
+8930 
+57.36 
+10 
+9973 
+56.33 
+15 
+9981 
+55.97 
+20 
+9981 
+56.17 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_11" validated="false"><head>Table 7 :</head><label>7</label><figDesc></figDesc><table>Empirical rank and test perplexity on 
+
+PTB with different number of Softmaxes. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_13" validated="false"><head>Table 8 :</head><label>8</label><figDesc></figDesc><table>Hyper-parameters used for MoS. V-dropout abbreviates variational dropout (Gal &amp; Ghahramani, 
+
+2016). See (Merity et al., 2017) for more detailed descriptions. 
+
+The hyper-parameters used for dynamic evaluation of MoS is summarized below. 
+
+Hyper-parameter 
+PTB 
+WT2 
+Batch size 
+100 
+100 
+learning rate (η) 
+0.002 0.002 
+
+0.001 0.002 
+λ 
+0.075 
+0.02 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_14" validated="false"><head>Table 9 :</head><label>9</label><figDesc></figDesc><table>Hyper-parameters used for dynamic evaluation of MoS. See (Krause et al., 2017) for more detailed 
+
+descriptions. 
+
+B.2 1B WORD DATASET 
+
+For training, we use all of the 100 training shards. For validation, we use two shards from the 
+heldout set, namely [heldout-00, heldout-10]. For test, we use another three shards from 
+the heldout set, namely [heldout-20, heldout-30, heldout-40]. 
+
+The hyper-parameters are listed below. 
+
+Hyper-parameter 
+Softmax 
+MoS-7 
+
+Learning rate 
+20 
+20 
+Batch size 
+60 
+60 
+BPTT langth 
+35 
+35 
+Embedding size 
+1024 
+900 
+RNN hidden sizes 
+[1024, 1024] [1024,1024] 
+Dropout rate 
+0 
+0 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_15" validated="false"><head>Table 10 :</head><label>10</label><figDesc></figDesc><table>Hyper-parameters used for Softmax and MoS in experiment on 1B word dataset. 
+
+C ADDITIONAL EXPERIMENTS 
+
+C.1 HIGHER EMPIRICAL RANK OF MOS COMPARED TO MOC AND SOFTMAX 
+
+In section 3, we compute the rank of different models based on the non-zero singular values of the 
+empirical log-likelihood matrix. Since there can be roundoff mistakes, a less error-prone approach 
+is to directly study the distribution of singular values. Specifically, if more singular values have 
+relatively larger magnitude, the rank of the matrix tends to be higher. Motivated from this intuition, </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_17" validated="true"><head>Table 11 : Empirical expected pairwise KLD on PTB.</head><label>11</label><figDesc></figDesc><table>What's more, another indicator of high rank is that the model can precisely capture the nuance of dif-
+ference contexts. If a model can better capture the distinctions among contexts, we expect the next-
+step conditional distributions to be less similar to each on average. Based on this intuition, we use the 
+expected pairwise Kullback-Leibler divergence (KLD), i.e., E c,c ∼C </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_18" validated="false"><head>Table 11 .</head><label>11</label><figDesc></figDesc><table>As we 
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_20" validated="false"><head>Table 13 :</head><label>13</label><figDesc></figDesc><table>Training time slowdown compared to Softmax. MoS-K means using K mixture components. "bs" 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_21" validated="false"><head>Table 14 :</head><label>14</label><figDesc></figDesc><table>Compaison of next-token prediction on Penn Treebank test data. N stands for a number as the result 
+
+of preprocessing (</table></figure>
+
+			<note place="foot" n="2"> We use capital letters for variables and small letters for constants.</note>
+
+			<note place="foot" n="3"> This is also confirmed by our preliminary experiments.</note>
+
+			<note place="foot" n="4"> https://github.com/snakeztc/NeuralDialog-CVAE/tree/master/data</note>
+
+			<note place="foot" n="5"> The numbers are not directly comparable to Zhao et al. (2017) since their Seq2Seq implementation and evaluation scripts are not publicly available.</note>
+
+			<note place="foot" n="6"> Although Shazeer et al. (2017) name their architecture as MoE, it is not a standard MoE (Jacobs et al., 1991) and should be classified as MoC under our terminology.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>This work was supported by the DARPA award D17AP00001, the Google focused award, and the Nvidia NVAIL award.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Learning stochastic recurrent networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Justin</forename><surname>Bayer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Osendorfer</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1411.7610</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Recurrent mixture density network for spatiotemporal visual attention</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Loris</forename><surname>Bazzani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hugo</forename><surname>Larochelle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lorenzo</forename><surname>Torresani</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.08199</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">A neural probabilistic language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Réjean</forename><surname>Ducharme</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pascal</forename><surname>Vincent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Jauvin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of machine learning research</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="1137" to="1155" />
+			<date type="published" when="2003-02" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Latent dirichlet allocation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>David</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Blei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Andrew</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael I Jordan</forename><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of machine Learning research</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="993" to="1022" />
+			<date type="published" when="2003-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">One billion word benchmark for measuring progress in statistical language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ciprian</forename><surname>Chelba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qi</forename><surname>Ge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thorsten</forename><surname>Brants</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phillipp</forename><surname>Koehn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tony</forename><surname>Robinson</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1312.3005</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">A recurrent latent variable model for sequential data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junyoung</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyle</forename><surname>Kastner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Laurent</forename><surname>Dinh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kratarth</forename><surname>Goel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Aaron</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="2980" to="2988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junyoung</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sungjin</forename><surname>Ahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.01704</idno>
+		<title level="m">Hierarchical multiscale recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Learning factored representations in a deep mixture of experts</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Eigen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Marc&amp;apos;aurelio Ranzato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sutskever</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1312.4314</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Sequential neural models with stochastic layers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marco</forename><surname>Fraccaro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Søren Kaae</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ulrich</forename><surname>Sønderby</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ole</forename><surname>Paquet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Winther</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2199" to="2207" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">A theoretically grounded application of dropout in recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yarin</forename><surname>Gal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zoubin</forename><surname>Ghahramani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1019" to="1027" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Deep temporal sigmoid belief networks for sequence modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhe</forename><surname>Gan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chunyuan</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ricardo</forename><surname>Henao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><forename type="middle">E</forename><surname>Carlson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lawrence</forename><surname>Carin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="2467" to="2475" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Switchboard-1 release 2. Linguistic Data Consortium</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>John</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Godfrey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Holliman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1997" />
+			<pubPlace>Philadelphia</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Improving neural language models with a continuous cache</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edouard</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Usunier</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1612.04426</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Generating sequences with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1308.0850</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Draw: A recurrent neural network for image generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karol</forename><surname>Gregor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ivo</forename><surname>Danihelka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danilo</forename><surname>Jimenez Rezende</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daan</forename><surname>Wierstra</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1502.04623</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Low rank language models for small training sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Brian</forename><surname>Hutchinson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mari</forename><surname>Ostendorf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maryam</forename><surname>Fazel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Signal Processing Letters</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page" from="489" to="492" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">A sparse plus low rank maximum entropy language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Brian</forename><surname>Hutchinson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mari</forename><surname>Ostendorf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maryam</forename><surname>Fazel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">INTERSPEECH</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="1676" to="1679" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Tying word vectors and word classifiers: A loss framework for language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Khashayar</forename><surname>Hakan Inan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Khosravi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01462</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Adaptive mixtures of local experts</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Robert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><forename type="middle">I</forename><surname>Jacobs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Jordan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Steven J Nowlan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="79" to="87" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Character-aware neural language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoon</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yacine</forename><surname>Jernite</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Sontag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander M</forename><surname>Rush</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2741" to="2749" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Auto-encoding variational bayes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Diederik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Max</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Welling</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1312.6114</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Improved backing-off for m-gram language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Reinhard</forename><surname>Kneser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hermann</forename><surname>Ney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Acoustics, Speech, and Signal Processing</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="1995" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="181" to="184" />
+		</imprint>
+	</monogr>
+	<note>ICASSP-95</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Dynamic evaluation of neural sequence models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ben</forename><surname>Krause</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emmanuel</forename><surname>Kahembwe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iain</forename><surname>Murray</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Renals</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1709.07432</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Neural word embedding as implicit matrix factorization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Omer</forename><surname>Levy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="2177" to="2185" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">Large text compression benchmark</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matt</forename><surname>Mahoney</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">On the state of the art of evaluation in neural language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gábor</forename><surname>Melis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.05589</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Pointer sentinel mixture models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.07843</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Regularizing and optimizing lstm language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Shirish Keskar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1708.02182</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">Context dependent recurrent neural network language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Zweig</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="234" to="239" />
+		</imprint>
+		<respStmt>
+			<orgName>SLT</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Cernock`Cernock`y, and Sanjeev Khudanpur. Recurrent neural network based language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Karafiát</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukas</forename><surname>Burget</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In Interspeech</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page">3</biblScope>
+			<date type="published" when="2010-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomáš</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anoop</forename><surname>Deoras</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hai-Son</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Kombrink</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Cernocky</surname></persName>
+		</author>
+		<ptr target="http://www.fit.vutbr.cz/imikolov/rnnlm/char.pdf" />
+		<title level="m">Subword language modeling with neural networks. preprint</title>
+		<imprint>
+			<biblScope unit="page">2012</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Three new graphical models for statistical language modelling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andriy</forename><surname>Mnih</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 24th international conference on Machine learning</title>
+		<meeting>the 24th international conference on Machine learning</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="641" to="648" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<title level="m" type="main">Generalizing and hybridizing count-based and neural language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Graham</forename><surname>Neubig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.00499</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">The language instinct</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Pinker</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Using the output embedding to improve language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ofir</forename><surname>Press</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lior</forename><surname>Wolf</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EACL</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title level="m" type="main">Numerical recipes 3rd edition: The art of scientific computing. Cambridge university press</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>William</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Press</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Recurrent neural networks are universal approximators</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anton</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maximilian</forename><surname>Schäfer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hans</forename><forename type="middle">Georg</forename><surname>Zimmermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Artificial Neural Networks</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="632" to="640" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+		<title level="m" type="main">Outrageously large neural networks: The sparsely-gated mixture-of-experts layer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Azalia</forename><surname>Mirhoseini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Krzysztof</forename><surname>Maziarz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andy</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1701.06538</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Sequence to sequence learning with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc V</forename><surname>Le</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="3104" to="3112" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Regularization of neural networks using dropconnect</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Wan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Zeiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sixin</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rob</forename><surname>Yann L Cun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Fergus</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 30th international conference on machine learning (ICML-13)</title>
+		<meeting>the 30th international conference on machine learning (ICML-13)</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1058" to="1066" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wojciech</forename><surname>Zaremba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.2329</idno>
+		<title level="m">Ilya Sutskever, and Oriol Vinyals. Recurrent neural network regularization</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<monogr>
+		<title level="m" type="main">Learning discourse-level diversity for neural dialog models using conditional variational autoencoders</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tiancheng</forename><surname>Zhao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ran</forename><surname>Zhao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maxine</forename><surname>Eskenazi</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1703.10960</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julian</forename><surname>Georg Zilly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh</forename><forename type="middle">Kumar</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Koutník</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.03474</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">Recurrent highway networks. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barret</forename><surname>Zoph</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Quoc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Le</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01578</idno>
+		<title level="m">Neural architecture search with reinforcement learning</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

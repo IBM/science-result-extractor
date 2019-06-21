@@ -1,0 +1,1086 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:57+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Fast and Accurate Entity Recognition with Iterated Dilated Convolutions</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emma</forename><surname>Strubell</surname></persName>
+							<email>strubell@cs.umass.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">College of Information and Computer Sciences</orgName>
+								<orgName type="institution">University of Massachusetts Amherst</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Patrick</forename><surname>Verga</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">College of Information and Computer Sciences</orgName>
+								<orgName type="institution">University of Massachusetts Amherst</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Belanger</surname></persName>
+							<email>belanger@cs.umass.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">College of Information and Computer Sciences</orgName>
+								<orgName type="institution">University of Massachusetts Amherst</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+							<email>mccallum@cs.umass.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">College of Information and Computer Sciences</orgName>
+								<orgName type="institution">University of Massachusetts Amherst</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Fast and Accurate Entity Recognition with Iterated Dilated Convolutions</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Today when many practitioners run basic NLP on the entire web and large-volume traffic, faster methods are paramount to saving time and energy costs. Recent advances in GPU hardware have led to the emergence of bi-directional LSTMs as a standard method for obtaining per-token vector representations serving as input to labeling tasks such as NER (often followed by prediction in a linear-chain CRF). Though expressive and accurate, these models fail to fully exploit GPU par-allelism, limiting their computational efficiency. This paper proposes a faster alternative to Bi-LSTMs for NER: Iterated Dilated Convolutional Neural Networks (ID-CNNs), which have better capacity than traditional CNNs for large context and structured prediction. Unlike LSTMs whose sequential processing on sentences of length N requires O(N) time even in the face of parallelism, ID-CNNs permit fixed-depth convolutions to run in parallel across entire documents. We describe a distinct combination of network structure , parameter sharing and training procedures that enable dramatic 14-20x test-time speedups while retaining accuracy comparable to the Bi-LSTM-CRF. Moreover , ID-CNNs trained to aggregate context from the entire document are even more accurate while maintaining 8x faster test time speeds.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>In order to democratize large-scale NLP and information extraction while minimizing our environmental footprint, we require fast, resourceefficient methods for sequence tagging tasks such as part-of-speech tagging and named entity recognition (NER). Speed is not sufficient of course: they must also be expressive enough to tolerate the tremendous lexical variation in input data.</p><p>The massively parallel computation facilitated by GPU hardware has led to a surge of successful neural network architectures for sequence labeling ( <ref type="bibr" target="#b15">Ling et al., 2015;</ref><ref type="bibr" target="#b18">Ma and Hovy, 2016;</ref><ref type="bibr">Chiu and Nichols, 2016;</ref><ref type="bibr" target="#b9">Lample et al., 2016)</ref>. While these models are expressive and accurate, they fail to fully exploit the parallelism opportunities of a GPU, and thus their speed is limited. Specifically, they employ either recurrent neural networks (RNNs) for feature extraction, or Viterbi inference in a structured output model, both of which require sequential computation across the length of the input.</p><p>Instead, parallelized runtime independent of the length of the sequence saves time and energy costs, maximizing GPU resource usage and minimizing the amount of time it takes to train and evaluate models. Convolutional neural networks (CNNs) provide exactly this property <ref type="bibr" target="#b6">(Kim, 2014;</ref><ref type="bibr" target="#b4">Kalchbrenner et al., 2014</ref>). Rather than composing representations incrementally over each token in a sequence, they apply filters in parallel across the entire sequence at once. Their computational cost grows with the number of layers, but not the input size, up to the memory and threading limitations of the hardware. This provides, for example, audio generation models that can be trained in parallel (van den ).</p><p>Despite the clear computational advantages of CNNs, RNNs have become the standard method for composing deep representations of text. This is because a token encoded by a bidirectional RNN will incorporate evidence from the entire input sequence, but the CNN's representation is limited by the effective input width 1 of the network: the size of the input context which is observed, directly or indirectly, by the representation of a token at a given layer in the network. Specifically, in a network composed of a series of stacked convolutional layers of convolution width w, the number r of context tokens incorporated into a token's representation at a given layer l, is given by r = l(w − 1) + 1. The number of layers required to incorporate the entire input context grows linearly with the length of the sequence. To avoid this scaling, one could pool representations across the sequence, but this is not appropriate for sequence labeling, since it reduces the output resolution of the representation.</p><p>In response, this paper presents an application of dilated convolutions ( <ref type="bibr" target="#b34">Yu and Koltun, 2016)</ref> for sequence labeling <ref type="figure" target="#fig_0">(Figure 1</ref>). For dilated convolutions, the effective input width can grow exponentially with the depth, with no loss in resolution at each layer and with a modest number of parameters to estimate. Like typical CNN layers, dilated convolutions operate on a sliding window of context over the sequence, but unlike conventional convolutions, the context need not be consecutive; the dilated window skips over every dilation width d inputs. By stacking layers of dilated convolutions of exponentially increasing dilation width, we can expand the size of the effective input width to cover the entire length of most sequences using only a few layers: The size of the effective input width for a token at layer l is now given by 2 l+1 −1. More concretely, just four stacked dilated convolutions of width 3 produces token representations with a n effective input width of 31 tokens -longer than the average sentence length (23) in the Penn TreeBank.</p><p>Our overall iterated dilated CNN architecture (ID-CNN) repeatedly applies the same block of dilated convolutions to token-wise representations. This parameter sharing prevents overfitting and also provides opportunities to inject supervision on intermediate activations of the network. Similar to models that use logits produced by an RNN, the ID-CNN provides two methods for performing prediction: we can predict each token's label independently, or by running Viterbi inference in a chain structured graphical model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>In experiments on CoNLL 2003 and OntoNotes</head><p>1 What we call effective input width here is known as the receptive field in the vision literature, drawing an analogy to the visual receptive field of a neuron in the retina. 5.0 English NER, we demonstrate significant speed gains of our ID-CNNs over various recurrent models, while maintaining similar F1 performance. When performing prediction using independent classification, the ID-CNN consistently outperforms a bidirectional LSTM (Bi-LSTM), and performs on par with inference in a CRF with logits from a Bi-LSTM (Bi-LSTM-CRF). As an extractor of per-token logits for a CRF, our model out-performs the Bi-LSTM-CRF. We also apply ID-CNNs to entire documents, where independent token classification is as accurate as the Bi-LSTM-CRF while decoding almost 8× faster. The clear accuracy gains resulting from incorporating broader context suggest that these models could similarly benefit many other contextsensitive NLP tasks which have until now been limited by the computational complexity of existing context-rich models. <ref type="bibr">2</ref> </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Background</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Conditional Probability Models for Tagging</head><p>Let x = [x 1 , . . . , x T ] be our input text and y = [y 1 , . . . , y T ] be per-token output tags. Let D be the domain size of each y i . We predict the most likely y, given a conditional model P (y|x). This paper considers two factorizations of the conditional distribution. First, we have</p><formula xml:id="formula_0">P (y|x) = T t=1 P (y t |F (x)),<label>(1)</label></formula><p>where the tags are conditionally independent given some features for x. Given these features, O(D) prediction is simple and parallelizable across the length of the sequence. However, feature extraction may not necessarily be parallelizable. For example, RNN-based features require iterative passes along the length of x.</p><p>We also consider a linear-chain CRF model that couples all of y together:</p><formula xml:id="formula_1">P (y|x) = 1 Z x T t=1 ψ t (y t |F (x))ψ p (y t , y t−1 ), (2)</formula><p>where ψ t is a local factor, ψ p is a pairwise factor that scores consecutive tags, and Z x is the partition function ( <ref type="bibr" target="#b8">Lafferty et al., 2001</ref>). To avoid overfitting, ψ p does not depend on the timestep t or the input x in our experiments. Prediction in this model requires global search using the O(D 2 T ) Viterbi algorithm. CRF prediction explicitly reasons about interactions among neighboring output tags, whereas prediction in the first model compiles this reasoning into the feature extraction step ( <ref type="bibr" target="#b13">Liang et al., 2008)</ref>. The suitability of such compilation depends on the properties and quantity of the data. While CRF prediction requires non-trivial search in output space, it can guarantee that certain output constraints, such as for IOB tagging <ref type="bibr" target="#b23">(Ramshaw and Marcus, 1999</ref>), will always be satisfied. It may also have better sample complexity, as it imposes more prior knowledge about the structure of the interactions among the tags ( <ref type="bibr" target="#b16">London et al., 2016)</ref>. However, it has worse computational complexity than independent prediction.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Dilated Convolutions</head><p>CNNs in NLP are typically one-dimensional, applied to a sequence of vectors representing tokens rather than to a two-dimensional grid of vectors representing pixels. In this setting, a convolutional neural network layer is equivalent to applying an affine transformation, W c to a sliding window of width r tokens on either side of each token in the sequence. Here, and throughout the paper, we do not explicitly write the bias terms in affine transformations. The convolutional operator applied to each token x t with output c t is defined as:</p><formula xml:id="formula_2">c t = W c r k=0 x t±k ,<label>(3)</label></formula><p>where ⊕ is vector concatenation. Dilated convolutions perform the same operation, except rather than transforming adjacent inputs, the convolution is defined over a wider effective input width by skipping over δ inputs at a time, where δ is the dilation width. We define the dilated convolution operator:</p><formula xml:id="formula_3">c t = W c r k=0 x t±kδ .<label>(4)</label></formula><p>A dilated convolution of width 1 is equivalent to a simple convolution. Using the same number of parameters as a simple convolution with the same radius (i.e. W c has the same dimensionality), the δ &gt; 1 dilated convolution incorporates broader context into the representation of a token than a simple convolution.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Multi-Scale Context Aggregation</head><p>We can leverage the ability of dilated convolutions to incorporate global context without losing important local information by stacking dilated convolutions of increasing width. First described for pixel classification in computer vision, <ref type="bibr" target="#b34">Yu and Koltun (2016)</ref> achieve state-of-the-art results on image segmentation benchmarks by stacking dilated convolutions with exponentially increasing rates of dilation, a technique they refer to as multiscale context aggregation. By feeding the outputs of each dilated convolution as the input to the next, increasingly non-local information is incorporated into each pixel's representation. Performing a dilation-1 convolution in the first layer ensures that no pixels within the effective input width of any pixel are excluded. By doubling the dilation width at each layer, the size of the effective input width grows exponentially while the number of parameters grows only linearly with the number of layers, so a pixel representation quickly incorporates rich global evidence from the entire image.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Iterated Dilated CNNs</head><p>Stacked dilated CNNs can easily incorporate global information from a whole sentence or document. For example, with a radius of 1 and 4 layers of dilated convolutions, the effective input width of each token is width 31, which exceeds the average sentence length (23) in the Penn TreeBank corpus. With a radius of size 2 and 8 layers of dilated convolutions, the effective input width exceeds 1,000 tokens, long enough to encode a full newswire document.</p><p>Unfortunately, simply increasing the depth of stacked dilated CNNs causes considerable overfitting in our experiments. In response, we present Iterated Dilated CNNs (ID-CNNs), which instead apply the same small stack of dilated convolutions multiple times, each iterate taking as input the result of the last application. Repeatedly employing the same parameters in a recurrent fashion provides both broad effective input width and desirable generalization capabilities. We also obtain significant accuracy gains with a training objective that strives for accurate labeling after each iterate, allowing follow-on iterations to observe and resolve dependency violations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Model Architecture</head><p>The network takes as input a sequence of T vectors x t , and outputs a sequence of per-class scores h t , which serve either as the local conditional distributions of Eqn. (1) or the local factors ψ t of Eqn. <ref type="formula">(2)</ref>.</p><p>We denote the jth dilated convolutional layer of dilation width δ as D 1 that transforms the input to a representation i t :</p><formula xml:id="formula_4">i t = D (0) 1 x t (5)</formula><p>Next, L c layers of dilated convolutions of exponentially increasing dilation width are applied to i t , folding in increasingly broader context into the embedded representation of x t at each layer. Let r() denote the ReLU activation function <ref type="bibr">(Glorot et al., 2011)</ref>. Beginning with c t (0) = i t we define the stack of layers with the following recurrence:</p><formula xml:id="formula_5">c t (j) = r D (j−1) 2 Lc−1 c t (j−1)<label>(6)</label></formula><p>and add a final dilation-1 layer to the stack:</p><formula xml:id="formula_6">c t (Lc+1) = r D (Lc) 1 c t (Lc)<label>(7)</label></formula><p>We refer to this stack of dilated convolutions as a block B(·), which has output resolution equal to its input resolution. To incorporate even broader context without over-fitting, we avoid making B deeper, and instead iteratively apply B L b times, introducing no extra parameters. Starting with b t (1) = B (i t ):</p><formula xml:id="formula_7">b t (k) = B b t (k−1)<label>(8)</label></formula><p>We apply a simple affine transformation W o to this final representation to obtain per-class scores for each token x t :</p><formula xml:id="formula_8">h t (L b ) = W o b t (L b )<label>(9)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Training</head><p>Our main focus is to apply the ID-CNN an encoder to produce per-token logits for the first conditional model described in Sec. 2.1, where tags are conditionally independent given deep features, since this will enable prediction that is parallelizable across the length of the input sequence. Here, maximum likelihood training is straightforward because the likelihood decouples into the sum of the likelihoods of independent logistic regression problems for every tag, with natural parameters given by Eqn. <ref type="formula" target="#formula_8">(9)</ref>:</p><formula xml:id="formula_9">1 T T t=1 log P (y t | h t (L b ) )<label>(10)</label></formula><p>We can also use the ID-CNN as logits for the CRF model (Eqn. <ref type="formula">(2)</ref>), where the partition function and its gradient are computed using the forward-backward algorithm.</p><p>We next present an alternative training method that helps bridge the gap between these two techniques. Sec. 2.1 identifies that the CRF has preferable sample complexity and accuracy since prediction directly reasons in the space of structured outputs. In response, we compile some of this reasoning in output space into ID-CNN feature extraction. Instead of explicit reasoning over output labels during inference, we train the network such that each block is predictive of output labels. Subsequent blocks learn to correct dependency violations of their predecessors, refining the final sequence prediction.</p><p>To do so, we first define predictions of the model after each of the L b applications of the block. Let h t (k) be the result of applying the matrix W o from (9) to b t (k) , the output of block k. We minimize the average of the losses for each application of the block:</p><formula xml:id="formula_10">1 L b L b k=1 1 T T t=1 log P (y t | h t (k) ).<label>(11)</label></formula><p>By rewarding accurate predictions after each application of the block, we learn a model where later blocks are used to refine initial predictions.</p><p>The loss also helps reduce the vanishing gradient problem <ref type="bibr">(Hochreiter, 1998</ref>) for deep architectures. Such an approach has been applied in a variety of contexts for training very deep networks in computer vision ( <ref type="bibr" target="#b25">Romero et al., 2014;</ref><ref type="bibr" target="#b28">Szegedy et al., 2015;</ref><ref type="bibr" target="#b11">Lee et al., 2015;</ref><ref type="bibr">Gülçehre and Bengio, 2016)</ref>, but not to our knowledge in NLP.</p><p>We apply dropout ( <ref type="bibr" target="#b26">Srivastava et al., 2014</ref>) to the raw inputs x t and to each block's output b t (b) to help prevent overfitting. The version of dropout typically used in practice has the undesirable property that the randomized predictor used at train time differs from the fixed one used at test time. <ref type="bibr" target="#b17">Ma et al. (2017)</ref> present dropout with expectationlinear regularization, which explicitly regularizes these two predictors to behave similarly. All of our best reported results include such regularization. This is the first investigation of the technique's effectiveness for NLP, including for RNNs. We encourage its further application.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Related work</head><p>The state-of-the art models for sequence labeling include an inference step that searches the space of possible output sequences of a chain-structured graphical model, or approximates this search with a beam <ref type="bibr">(Collobert et al., 2011;</ref><ref type="bibr" target="#b32">Weiss et al., 2015;</ref><ref type="bibr" target="#b9">Lample et al., 2016;</ref><ref type="bibr" target="#b18">Ma and Hovy, 2016;</ref><ref type="bibr">Chiu and Nichols, 2016)</ref>. These outperform similar systems that use the same features, but independent local predictions. On the other hand, the greedy sequential prediction <ref type="bibr">(Daumé III et al., 2009</ref>) approach of <ref type="bibr" target="#b24">Ratinov and Roth (2009)</ref>, which employs lexicalized features, gazetteers, and word clusters, outperforms CRFs with similar features.</p><p>LSTMs <ref type="bibr" target="#b0">(Hochreiter and Schmidhuber, 1997</ref>) were used for NER as early as the CoNLL shared task in 2003 <ref type="bibr">(Hammerton, 2003;</ref><ref type="bibr" target="#b29">Tjong Kim Sang and De Meulder, 2003)</ref>. More recently, a wide variety of neural network architectures for NER have been proposed. Collobert et al. (2011) employ a one-layer CNN with pre-trained word embeddings, capitalization and lexicon features, and CRF-based prediction. <ref type="bibr" target="#b2">Huang et al. (2015)</ref> achieved state-of-the-art accuracy on partof-speech, chunking and NER using a Bi-LSTM-CRF. <ref type="bibr" target="#b9">Lample et al. (2016)</ref> proposed two models which incorporated Bi-LSTM-composed character embeddings alongside words: a Bi-LSTM-CRF, and a greedy stack LSTM which uses a simple shift-reduce grammar to compose words into labeled entities. Their Bi-LSTM-CRF obtained the state-of-the-art on four languages without word shape or lexicon features. <ref type="bibr" target="#b18">Ma and Hovy (2016)</ref> use CNNs rather than LSTMs to compose characters in a Bi-LSTM-CRF, achieving state-ofthe-art performance on part-of-speech tagging and CoNLL NER without lexicons. <ref type="bibr">Chiu and Nichols (2016)</ref> evaluate a similar network but propose a novel method for encoding lexicon matches, presenting results on CoNLL and OntoNotes NER. <ref type="bibr" target="#b33">Yang et al. (2016)</ref> use GRU-CRFs with GRUcomposed character embeddings of words to train a single network on many tasks and languages.</p><p>In general, distributed representations for text can provide useful generalization capabilities for NER systems, since they can leverage unsupervised pre-training of distributed word representations ( <ref type="bibr" target="#b31">Turian et al., 2010;</ref><ref type="bibr">Collobert et al., 2011;</ref><ref type="bibr" target="#b20">Passos et al., 2014</ref>). Though our models would also likely benefit from additional features such as character representations and lexicons, we focus on simpler models which use word-embeddings alone, leaving more elaborate input representations to future work.</p><p>In these NER approaches, CNNs were used for low-level feature extraction that feeds into alternative architectures. Overall, end-to-end CNNs have mainly been used in NLP for sentence classification, where the output representation is lower resolution than that of the input <ref type="bibr" target="#b6">Kim (2014)</ref> Our work draws on the use of dilated convolutions for image segmentation in the computer vision community ( <ref type="bibr" target="#b34">Yu and Koltun, 2016;</ref><ref type="bibr" target="#b11">Chen et al., 2015)</ref>. Similar to our block, <ref type="bibr" target="#b34">Yu and Koltun (2016)</ref> employ a context-module of stacked dilated convolutions of exponentially increasing dilation width. Dilated convolutions were recently applied to the task of speech generation (van den , and concurrent with this work, <ref type="bibr">Kalchbren- ner et al. (2016)</ref> posted a pre-print describing the similar ByteNet network for machine translation that uses dilated convolutions in the encoder and decoder components. Our basic model architecture is similar to that of the ByteNet encoder, except that the inputs to our model are tokens and not bytes. Additionally, we present a novel loss and parameter sharing scheme to facilitate training models on much smaller datasets than those used by . We are the first to use dilated convolutions for sequence labeling.</p><p>The broad effective input width of the ID-CNN helps aggregate document-level context. <ref type="bibr" target="#b24">Ratinov and Roth (2009)</ref> incorporate document context in their greedy model by adding features based on tagged entities within a large, fixed window of tokens. Prior work has also posed a structured model that couples predictions across the whole document ( <ref type="bibr">Bunescu and Mooney, 2004;</ref><ref type="bibr" target="#b27">Sutton and McCallum, 2004;</ref><ref type="bibr">Finkel et al., 2005</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Experimental Results</head><p>We describe experiments on two benchmark English named entity recognition datasets. On CoNLL-2003 English NER, our ID-CNN performs on par with a Bi-LSTM not only when used to produce per-token logits for structured inference, but the ID-CNN with greedy decoding also performs on-par with the Bi-LSTM-CRF while running at more than 14 times the speed. We also observe a performance boost in almost all models when broadening the context to incorporate entire documents, achieving an average F1 of 90.65 on CoNLL-2003, out-performing the sentence-level model while still decoding at nearly 8 times the speed of the Bi-LSTM-CRF.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Data and Evaluation</head><p>We evaluate using labeled data from the CoNLL-2003 shared task <ref type="bibr">(Tjong Kim Sang and De Meul- der, 2003</ref>) and OntoNotes 5.0 ( <ref type="bibr" target="#b1">Hovy et al., 2006;</ref><ref type="bibr" target="#b21">Pradhan et al., 2006</ref>). Following previous work, we use the same OntoNotes data split used for co-reference resolution in the CoNLL-2012 shared task ( <ref type="bibr" target="#b22">Pradhan et al., 2012</ref>). For both datasets, we convert the IOB boundary encoding to BILOU as previous work found this encoding to result in improved performance <ref type="bibr" target="#b24">(Ratinov and Roth, 2009)</ref>. As in previous work we evaluate the performance of our models using segment-level micro-averaged F1 score. Hyperparameters that resulted in the best performance on the validation set were selected via grid search. A more detailed description of the data, evaluation, optimization and data pre-processing can be found in the Appendix.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Baselines</head><p>We compare our ID-CNN against strong LSTM and CNN baselines: a Bi-LSTM with local decoding, and one with CRF decoding (Bi-LSTM-CRF). We also compare against a non-dilated CNN architecture with the same number of convolutional layers as our dilated network (4-layer CNN) and one with enough layers to incorporate an effective input width of the same size as that of the dilated network (5-layer CNN) to demonstrate that the dilated convolutions more effectively aggregate contextual information than simple convolutions (i.e. using fewer parameters). We also compare our document-level ID-CNNs to a baseline which does not share parameters between blocks (noshare) and one that computes loss only at the last block, rather than after every iterated block of dilated convolutions (1-loss).</p><p>We do not compare with deeper or more elaborate CNN architectures for a number of reasons: 1) Fast train and test performance are highly desirable for NLP practitioners, and deeper models require more computation time 2) more complicated models tend to over-fit on this relatively small dataset and 3) most accurate deep CNN architectures repeatedly up-sample and down-sample the inputs. We do not compare to stacked LSTMs for similar reasons -a single LSTM is already slower than a 4-layer CNN. Since our task is sequence labeling, we desire a model that maintains the token-level resolution of the input, making dilated convolutions an elegant solution. <ref type="table" target="#tab_0">Table 1</ref> lists F1 scores of models predicting with sentence-level context on CoNLL-2003. For models that we trained, we report F1 and standard deviation obtained by averaging over 10 random restarts. The Viterbi-decoding Bi-LSTM-CRF and ID-CNN-CRF and greedy ID-CNN obtain the highest average scores, with the ID-CNN-CRF outperforming the Bi-LSTM-CRF by 0.11 points of F1 on average, and the Bi-LSTM-CRF out-performing the greedy ID-CNN by 0.11 as well. Our greedy ID-CNN outperforms the Bi-LSTM and the 4-layer CNN, which uses the same number of parameters as the ID-CNN, and performs similarly to the 5-layer CNN which uses more parameters but covers the same effective input width. All CNN models out-perform the BiModel F1 <ref type="bibr">Roth (2009) 86.82 Collobert et al. (2011)</ref> 86.96 <ref type="bibr" target="#b9">Lample et al. (2016)</ref> 90.33 Bi-LSTM 89.34 ± 0.28 4-layer CNN 89.97 ± 0.20 5-layer CNN 90.23 ± 0.16 ID-CNN 90.32 ± 0.26 Collobert et al. <ref type="formula" target="#formula_0">(2011)</ref> 88.67 <ref type="bibr" target="#b20">Passos et al. (2014)</ref> 90.05 <ref type="bibr" target="#b9">Lample et al. (2016)</ref> 90.20 Bi-LSTM-CRF (re-impl) 90.43 ± 0.12 ID-CNN-CRF 90.54 ± 0.18 LSTM when paired with greedy decoding, suggesting that CNNs are better token encoders than Bi-LSTMs for independent logistic regression. When paired with Viterbi decoding, our ID-CNN performs on par with the Bi-LSTM, showing that the ID-CNN is also an effective token encoder for structured inference.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">CoNLL-2003 English NER</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3.1">Sentence-level prediction</head><p>Our ID-CNN is not only a better token encoder than the Bi-LSTM but it is also faster. <ref type="table" target="#tab_1">Table 2</ref> lists relative decoding times on the CoNLL development set, compared to the Bi-LSTM-CRF. We report decoding times using the fastest batch size for each method. <ref type="bibr">3</ref> The ID-CNN model decodes nearly 50% faster than the Bi-LSTM. With Viterbi decoding, the gap closes somewhat but the ID-CNN-CRF still comes out ahead, about 30% faster than the Bi-LSTM-CRF. The most vast speed improvements come when comparing the greedy ID-CNN to the Bi-LSTM-CRF -our ID-CNN is more than 14 times faster than the Bi-LSTM-CRF at test time, with comparable accuracy. The 5-layer CNN, which observes the same effective input width as the ID-CNN but with more parameters, performs at about the same speed as the ID-CNN in our experiments. With a better implementation of dilated convolutions than currently included in TensorFlow, we would expect the ID-CNN to be notably faster than</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>Speed <ref type="table" target="#tab_0">Bi-LSTM-CRF 1×  Bi-LSTM  9.92×  ID-CNN-CRF  1.28×  5-layer CNN  12.38×  ID-CNN</ref> 14.10×  <ref type="table">Table 3</ref>: Comparison of models trained with and without expectation-linear dropout regularization (DR). DR improves all models. the 5-layer CNN.</p><p>We emphasize the importance of the dropout regularizer of <ref type="bibr" target="#b17">Ma et al. (2017)</ref> in <ref type="table">Table 3</ref>, where we observe increased F1 for every model trained with expectation-linear dropout regularization. Dropout is important for training neural network models that generalize well, especially on relatively small NLP datasets such as CoNLL-2003. We recommend this regularizer as a simple and helpful tool for practitioners training neural networks for NLP.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3.2">Document-level prediction</head><p>In <ref type="table" target="#tab_2">Table 4</ref> we show that adding document-level context improves every model on CoNLL-2003. Incorporating document-level context further improves our greedy ID-CNN model, attaining 90.65 average F1. We believe this model sees greater improvement with the addition of document-level context than the Bi-LSTM-CRF due to the ID-CNN learning a feature function better suited for representing broad context, in contrast with the Bi-LSTM which, though better than a simple RNN at encoding long memories of sequences, may reach its limit when provided with sequences more than 1,000 tokens long such as entire documents.</p><p>We also note that our combination of training objective (Eqn. 11) and tied parameters (Eqn. 4-layer ID-CNN (sent) 90.32 ± 0.26 Bi-LSTM-CRF (sent) 90.43 ± 0.12 4-layer CNN × 3 90.32 ± 0.32 5-layer CNN × 3 90.45 ± 0.21 Bi-LSTM 89.09 ± 0.19 Bi-LSTM-CRF 90.60 ± 0.19 ID-CNN 90.65 ± 0.15  8) more effectively learns to aggregate this broad context than a vanilla cross-entropy loss or deep CNN back-propagated from the final neural network layer. <ref type="table" target="#tab_3">Table 5</ref> compares models trained to incorporate entire document context using the document baselines described in Section 6.2.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>In <ref type="table" target="#tab_5">Table 6</ref> we show that, in addition to being more accurate, our ID-CNN model is also much faster than the Bi-LSTM-CRF when incorporating context from entire documents, decoding at almost 8 times the speed. On these long sequences, it also tags at more than 4.5 times the speed of the greedy Bi-LSTM, demonstrative of the benefit of our IDCNNs context-aggregating computation that does not depend on the length of the sequence.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.4">OntoNotes 5.0 English NER</head><p>We observe similar patterns on OntoNotes as we do on CoNLL.   <ref type="bibr">83.45 Durrett and Klein (2014)</ref> 84.04 <ref type="bibr">Chiu and Nichols (2016)</ref> 86.19 ± 0.25 Bi-LSTM-CRF 86.99 ± 0.22 1× Bi-LSTM-CRF-Doc 86.81 ± 0.18 1.32× Bi-LSTM 83.76 ± 0.10 24.44× ID-CNN-CRF <ref type="table" target="#tab_0">(1 block)</ref> 86.84 ± 0.19 1.83× ID-CNN-Doc <ref type="table">(3 blocks)</ref> 85.76 ± 0.13 21.19× ID-CNN <ref type="table">(3 blocks)</ref> 85.27 ± 0.24 13.21× ID-CNN <ref type="table" target="#tab_0">(1 block)</ref> 84.28 ± 0.10 26.01× <ref type="table" target="#tab_4">Table 7</ref>: F1 score of sentence and document models on OntoNotes.</p><p>icalized greedy model of <ref type="bibr" target="#b24">Ratinov and Roth (2009)</ref>, and our ID-CNN out-performs the Bi-LSTM as well as the more complex model of <ref type="bibr">Durrett and Klein (2014)</ref> which leverages the parallel coreference annotation available in the OntoNotes corpus to predict named entities jointly with entity linking and co-reference. Our greedy model is out-performed by the Bi-LSTM-CRF reported in <ref type="bibr">Chiu and Nichols (2016)</ref> as well as our own re-implementation, which appears to be the new state-of-the-art on this dataset. The gap between our greedy model and those using Viterbi decoding is wider than on CoNLL. We believe this is due to the more diverse set of entities in OntoNotes, which also tend to be much longer -the average length of a multi-token named entity segment in CoNLL is about one token shorter than in OntoNotes. These long entities benefit more from explicit structured constraints enforced in Viterbi decoding. Still, our ID-CNN outperforms all other greedy methods, achieving our goal of learning a better token encoder for structured prediction.</p><p>Incorporating greater context significantly boosts the score of our greedy model on OntoNotes, whereas the Bi-LSTM-CRF performs more poorly. In <ref type="table" target="#tab_4">Table 7</ref>, we also list the F1 of our ID-CNN model and the Bi-LSTM-CRF model trained on entire document context. For the first time, we see the score decrease when more context is added to the Bi-LSTM-CRF model, though the ID-CNN, whose sentence model a lower score than that of the Bi-LSTM-CRF, sees an increase. We believe the decrease in the Bi-LSTM-CRF model occurs because of the nature of the OntoNotes dataset compared to <ref type="bibr">CoNLL-2003</ref><ref type="bibr">: CoNLL-2003</ref> contains a particularly high proportion of ambiguous entities, 7 perhaps leading to more benefit from document context that helps with disambiguation. In this scenario, adding the wider context may just add noise to the high-scoring Bi-LSTM-CRF model, whereas the less accurate dilated model can still benefit from the refined predictions of the iterated dilated convolutions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Conclusion</head><p>We present iterated dilated convolutional neural networks, fast token encoders that efficiently aggregate broad context without losing resolution. These provide impressive speed improvements for sequence labeling, particularly when processing entire documents at a time. In the future we hope to extend this work to NLP tasks with richer structured output, such as parsing.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: A dilated CNN block with maximum dilation width 4 and filter width 3. Neurons contributing to a single highlighted neuron in the last layer are also highlighted.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>δ</head><label></label><figDesc>. The first layer in the net- work is a dilation-1 convolution D (0)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head></head><label></label><figDesc>; Kalchbrenner et al. (2014); Zhang et al. (2015); Toutanova et al. (2015). Lei et al. (2015) present a CNN variant where convolutions adaptively skip neighboring words. While the flexibility of this model is powerful, its adaptive behavior is not well-suited to GPU acceleration.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>F1</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head>Table 1 :</head><label>1</label><figDesc></figDesc><table>F1 score of models observing sentence-
+level context. No models use character embed-
+dings or lexicons. Top models are greedy, bottom 
+models use Viterbi inference . 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Relative test-time speed of sentence mod-
+els, using the fastest batch size for each model. 5 
+
+Model 
+w/o DR 
+w/ DR 
+Bi-LSTM 
+88.89 ± 0.30 89.34 ± 0.28 
+4-layer CNN 
+89.74 ± 0.23 89.97 ± 0.20 
+5-layer CNN 
+89.93 ± 0.32 90.23 ± 0.16 
+Bi-LSTM-CRF 
+90.01 ± 0.23 90.43 ± 0.12 
+4-layer ID-CNN 89.65 ± 0.30 90.32 ± 0.26 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>F1 score of models trained to predict 
+document-at-a-time. Our greedy ID-CNN model 
+performs as well as the Bi-LSTM-CRF. 
+
+Model 
+F1 
+ID-CNN noshare 89.81 ± 0.19 
+ID-CNN 1-loss 
+90.06 ± 0.19 
+ID-CNN 
+90.65 ± 0.15 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Comparing ID-CNNs with 1) back-
+propagating loss only from the final layer (1-loss) 
+and 2) untied parameters across blocks (noshare) 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 7 lists</head><label>7</label><figDesc>overall F1 scores of our models compared to those in the existing liter- ature. The greedy Bi-LSTM out-performs the lex-</figDesc><table>Model 
+Speed 
+Bi-LSTM-CRF 1× 
+Bi-LSTM 
+4.60× 
+ID-CNN 
+7.96× 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 6 :</head><label>6</label><figDesc></figDesc><table>Relative test-time speed of document 
+models (fastest batch size for each model). 
+
+</table></figure>
+
+			<note place="foot" n="2"> Our implementation in TensorFlow (Abadi et al., 2015) is available at: https://github.com/iesl/ dilated-cnn-ner</note>
+
+			<note place="foot" n="3"> For each model, we tried batch sizes b = 2 i with i = 0...11. At scale, speed should increase with batch size, as we could compose each batch of as many sentences of the same length as would fit in GPU memory, requiring no padding and giving CNNs and ID-CNNs even more of a speed advantage.</note>
+
+			<note place="foot" n="5"> Our ID-CNN could see up to 18× speed-up with a less naive implementation than is included in TensorFlow as of this writing.</note>
+
+			<note place="foot" n="6"> Results as reported in Durrett and Klein (2014) as this data split did not exist at the time of publication.</note>
+
+			<note place="foot" n="7"> According to the ACL Wiki page on CoNLL-2003: &quot;The corpus contains a very high ratio of metonymic references (city names standing for sport teams)&quot;</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We thank Subhransu Maji and Luke Vilnis for helpful discussions, and Brendan O'Connor, Yoav Goldberg, the UMass NLP reading group and many anonymous reviewers for constructive comments on various drafts of the paper. We are also grateful to Guillaume Lample for sharing his pretrained word embeddings. This work was supported in part by the Center for Intelligent Information Retrieval, in part by DARPA under agreement number FA8750-13-2-0020, in part by Defense Advanced Research Agency (DARPA) contract number HR0011-15-2-0036, in part by the National Science Foundation (NSF) grant number DMR-1534431, and in part by the National Science Foundation (NSF) grant number IIS-1514053. The U.S. Government is authorized to reproduce and distribute reprints for Governmental purposes notwithstanding any copyright notation thereon. Any opinions, findings and conclusions or recommendations expressed in this material are those of the authors and do not necessarily reflect those of the sponsor.</p></div>
+			</div>
+
+			<div type="annex">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A Appendix</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.1 Optimization and data pre-processing</head><p>Our models are trained end-to-end using backpropagation and mini-batched Adam ( <ref type="bibr" target="#b7">Kingma and Ba, 2015</ref>) SGD. We use dropout regularization ( <ref type="bibr" target="#b26">Srivastava et al., 2014</ref>) on the input embeddings and final dilation layer of each block, along with the dropout regularizer described in <ref type="bibr" target="#b17">Ma et al. (2017)</ref> using a single Monte Carlo sample for each training example. We also found word dropout <ref type="bibr">(Dai and Le, 2015;</ref><ref type="bibr" target="#b9">Lample et al., 2016</ref>) crucial for learning a high-quality representation for outof-vocabulary words. We used the modified version of identity initialization ( <ref type="bibr" target="#b10">Le et al., 2015)</ref> reported by <ref type="bibr" target="#b34">Yu and Koltun (2016)</ref> to initialize our dilated layers, which we found to perform the best in initial experiments compared to orthogonal and Xavier initialization <ref type="bibr">(Glorot and Bengio, 2010)</ref>. Since our models use the same number of filters in each dilated layer, this initialization simplifies to setting the parameters corresponding to the central token to the identity matrix, and all other parameters (corresponding to left and right context) to zero. All other layers (embeddings, projections) were initialized using normally distributed Xavier initialization.</p><p>As in previous work, we found that initializing the word embedding lookup table with pretrained embeddings was vital to achieve good performance. In initial experiments, we found the 100-dimensional skip-n-gram ( <ref type="bibr" target="#b14">Ling et al., 2013)</ref> embeddings of <ref type="bibr" target="#b9">Lample et al. (2016)</ref> to outperform the 50-dimensional word embeddings of <ref type="bibr">Collobert et al. (2011)</ref>, and so we use these 100-dimensional embeddings in all experiments. We concatenate a 5-dimensional word shape vector based on whether the token was all capitalized, not capitalized, first-letter capitalized or contained a capital letter. We preprocessed the data by replacing all digits with 0, but did not lowercase thus our embeddings are case-sensitive.</p><p>We use the parameters of the trained sentence models to initialize the parameters of the document models in order to significantly speed up the rate of convergence of the document models.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.2 Data details</head><p>Entities in the CoNLL-2003 corpus are labeled with one of four types: PER, ORG, LOC or MISC, with a fairly even distribution over the four entity types. OntoNotes <ref type="table">Data  Train  Dev  Test  CoNLL-2003  Tok  Sent  Doc  Ent   204,567  14,041  945  23,499   51,578  3,250  215  5,942   46,666  3,453  230  5,</ref>   <ref type="table">Table 8</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.3 Evaluation</head><p>To select hyperparameters, we iteratively perform grid search over increasingly fine-grained settings of dropout, learning rate, Adam β 2 and parameters, gradient clipping threshold, number of dilated layers, number of repeated blocks, regularizer penalty and batch size. Since we found the variance in score between runs to vary significantly, in the last iteration of grid search, we ran each setting of parameters three times and averaged their scores on the validation set. Of these, we ran the top ten settings ten times, and took the parameters which averaged the highest F1 on the development set, and report scores on the test set using these parameters. Note that we do not in the final stage include the development set as training data as has been done in some previous work, and so do not directly compare to results from other papers which do so. We evaluate test-time speed using our topperforming trained models. All timing experiments were run on a nVidia Titan X GPU with a 2.4GHz Intel Xeon CPU. We do not include data loading, preprocessing or feature hashing in our timing since this is exactly the same across all models. Reported is the time it takes for each model to produce a sequence of labels given a sequence of integers representing the words and their capitalization. After a burn-in run to account for caching and GPU data I/O, we run each model 20 times over the development set and average these times. We do this for batch sizes ranging from 1 to 10,000.</p></div>			</div>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martın</forename><surname>Abadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Agarwal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Barham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Brevdo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhifeng</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Craig</forename><surname>Citro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Ontonotes: the 90% solution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martha</forename><surname>Palmer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lance</forename><surname>Ramshaw</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ralph</forename><surname>Weischedel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Human Language Technology Conference of the NAACL, Companion Volume: Short Papers</title>
+		<meeting>the Human Language Technology Conference of the NAACL, Companion Volume: Short Papers</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="57" to="60" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Bidirectional lstm-crf models for sequence tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiheng</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Yu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1508.01991</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nal</forename><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lasse</forename><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karen</forename><surname>Simonyan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Van Den Oord</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1610.10099</idno>
+		<title level="m">Neural machine translation in linear time</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">A convolutional neural network for modelling sentences</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nal</forename><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 52nd</title>
+		<meeting>the 52nd</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+				<title level="m">Annual Meeting of the Association for Computational Linguistics</title>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Convolutional neural networks for sentence classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoon</forename><surname>Kim</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diederik</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Ba</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference for Learning Representations (ICLR)</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Conditional random fields: Probabilistic models for segmenting and labeling sequence data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><forename type="middle">D</forename><surname>Lafferty</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fernando</forename><forename type="middle">C N</forename><surname>Pereira</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Eighteenth International Conference on Machine Learning (ICML)</title>
+		<meeting>the Eighteenth International Conference on Machine Learning (ICML)</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="282" to="289" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Neural architectures for named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guillaume</forename><surname>Lample</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sandeep</forename><surname>Subramanian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuya</forename><surname>Kawakami</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">A simple way to initialize recurrent networks of rectified linear units</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Navdeep</forename><surname>Quoc V Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Jaitly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hinton</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1504.00941</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Deeplysupervised nets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chen-Yu</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Saining</forename><surname>Xie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Patrick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengyou</forename><surname>Gallagher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhuowen</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AISTATS</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page">5</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Molding cnns for text: non-linear, non-consecutive convolutions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tao</forename><surname>Lei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Regina</forename><surname>Barzilay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tommi</forename><surname>Jaakkola</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Empirical Methods in Natural Language Processing</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Structure compilation: trading structure for features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hal</forename><surname>Daumé</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iii</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 25th international conference on Machine learning</title>
+		<meeting>the 25th international conference on Machine learning</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="592" to="599" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Not all contexts are created equal: Better word representations with variable attention</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lin</forename><surname>Chu-Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yulia</forename><surname>Tsvetkov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Silvio</forename><surname>Amir</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP. Association for Computational Linguistics</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Finding Function in Form: Compositional Character Models for Open Vocabulary Word Representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tiago</forename><surname>Luís</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luís</forename><surname>Marujo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ramón</forename><surname>Fernandez Astudillo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Silvio</forename><surname>Amir</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alan</forename><forename type="middle">W</forename><surname>Black</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Isabel</forename><surname>Trancoso</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Stability and generalization in structured prediction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ben</forename><surname>London</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bert</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lise</forename><surname>Getoor</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">222</biblScope>
+			<biblScope unit="page" from="1" to="52" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Dropout with expectation-linear regularization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuezhe</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yingkai</forename><surname>Gaom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiting</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yaoliang</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuntian</forename><surname>Deng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">End-to-end sequence labeling via bi-directional lstm-cnns-crf</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuezhe</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page">10641074</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Van Den Oord</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sander</forename><surname>Dieleman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Heiga</forename><surname>Zen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karen</forename><surname>Simonyan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nal</forename><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Senior</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.03499</idno>
+		<title level="m">Wavenet: A generative model for raw audio</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Lexicon infused phrase embeddings for named entity resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexandre</forename><surname>Passos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vineet</forename><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+	<note>In CoNLL</note>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Towards robust linguistic analysis using ontonotes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Sameer Pradhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Moschitti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hwee</forename><forename type="middle">Tou</forename><surname>Xue</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Olga</forename><surname>Bj Orkelund</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuchen</forename><surname>Uryupina</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhi</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zhong</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Seventeenth Conference on Computational Natural Language Learning</title>
+		<meeting>the Seventeenth Conference on Computational Natural Language Learning</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="143" to="152" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Conll-2012 shared task: Modeling multilingual unrestricted coreference in ontonotes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Sameer Pradhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Moschitti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Olga</forename><surname>Xue</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuchen</forename><surname>Uryupina</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Joint Conference on EMNLP and CoNLL: Shared Task</title>
+		<meeting>the Joint Conference on EMNLP and CoNLL: Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="1" to="40" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Text chunking using transformation-based learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lance</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell P</forename><surname>Ramshaw</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Marcus</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Natural language processing using very large corpora</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="157" to="176" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Design challenges and misconceptions in named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lev</forename><surname>Ratinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Thirteenth Conference on Computational Natural Language Learning</title>
+		<meeting>the Thirteenth Conference on Computational Natural Language Learning</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="147" to="155" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adriana</forename><surname>Romero</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samira</forename><forename type="middle">Ebrahimi</forename><surname>Kahou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Chassang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carlo</forename><surname>Gatta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6550</idno>
+		<title level="m">Fitnets: Hints for thin deep nets</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Dropout: a simple way to prevent neural networks from overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Collective segmentation and labeling of distant entities in information extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Charles</forename><surname>Sutton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICML Workshop on Statistical Relational Learning</title>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Dumitru Erhan, Vincent Vanhoucke, and Andrew Rabinovich</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Szegedy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yangqing</forename><surname>Jia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pierre</forename><surname>Sermanet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Scott</forename><surname>Reed</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dragomir</forename><surname>Anguelov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition</title>
+		<meeting>the IEEE Conference on Computer Vision and Pattern Recognition</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1" to="9" />
+		</imprint>
+	</monogr>
+	<note>Going deeper with convolutions</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Introduction to the CoNLL-2003 shared task: Language-independent named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erik F Tjong Kim</forename><surname>Sang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fien De</forename><surname>Meulder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the seventh conference on Natural language learning at HLT-NAACL 2003</title>
+		<meeting>the seventh conference on Natural language learning at HLT-NAACL 2003</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="142" to="147" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Representing text for joint embedding of text and knowledge bases</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kristina</forename><surname>Toutanova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Patrick</forename><surname>Pantel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hoifung</forename><surname>Poon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pallavi</forename><surname>Choudhury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Gamon</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1499" to="1509" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Word representations: a simple and general method for semi-supervised learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joseph</forename><surname>Turian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lev</forename><surname>Ratinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 48th annual meeting of the association for computational linguistics</title>
+		<meeting>the 48th annual meeting of the association for computational linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="384" to="394" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Structured training for neural network transition-based parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Annual Meeting of the Association for Computational Linguistics</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">Multi-task cross-lingual sequence tagging from scratch</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhilin</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William</forename><surname>Cohen</surname></persName>
+		</author>
+		<idno type="arXiv">arXivpreprintarXiv:1603.06270</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Multi-scale context aggregation by dilated convolutions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fisher</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vladlen</forename><surname>Koltun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Learning Representations (ICLR)</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Character-level convolutional networks for text classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiang</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junbo</forename><surname>Zhao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yann</forename><surname>Lecun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems 28 (NIPS)</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

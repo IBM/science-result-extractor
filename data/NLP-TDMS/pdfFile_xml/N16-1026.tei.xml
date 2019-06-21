@@ -1,0 +1,1147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:41+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">LSTM CCG Parsing</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+				<date>June 12-17, 2016</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Lewis</surname></persName>
+							<email>mlewis@cs.washington.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Computer Science &amp; Engineering</orgName>
+								<orgName type="institution">University of Washington Seattle</orgName>
+								<address>
+									<postCode>98195</postCode>
+									<region>WA</region>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+							<email>kentonl@cs.washington.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Computer Science &amp; Engineering</orgName>
+								<orgName type="institution">University of Washington Seattle</orgName>
+								<address>
+									<postCode>98195</postCode>
+									<region>WA</region>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">Computer Science &amp; Engineering</orgName>
+								<orgName type="institution">University of Washington Seattle</orgName>
+								<address>
+									<postCode>98195</postCode>
+									<region>WA</region>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">LSTM CCG Parsing</title>
+					</analytic>
+					<monogr>
+						<title level="m">Proceedings of NAACL-HLT 2016</title>
+						<meeting>NAACL-HLT 2016 <address><addrLine>San Diego, California</addrLine></address>
+						</meeting>
+						<imprint>
+							<biblScope unit="page" from="221" to="231"/>
+							<date type="published">June 12-17, 2016</date>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We demonstrate that a state-of-the-art parser can be built using only a lexical tagging model and a deterministic grammar, with no explicit model of bi-lexical dependencies. Instead , all dependencies are implicitly encoded in an LSTM supertagger that assigns CCG lexical categories. The parser significantly out-performs all previously published CCG results , supports efficient and optimal A * decoding , and benefits substantially from semi-supervised tri-training. We give a detailed analysis, demonstrating that the parser can recover long-range dependencies with high accuracy and that the semi-supervised learning enables significant accuracy gains. By running the LSTM on a GPU, we are able to parse over 2600 sentences per second while improving state-of-the-art accuracy by 1.1 F1 in domain and up to 4.5 F1 out of domain.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Combinatory Categorial Grammar (CCG) is a strongly lexicalized formalism-the vast majority of attachment decisions during parsing are specified by the selection of lexical entries for words (see <ref type="figure">Fig- ure</ref> 1 for examples). State-of-the-art parsers typically include a supertagging model, to select possible lexical categories, and a bi-lexical dependency model, to resolve the remaining parse attachment ambiguities. In this paper, we introduce a long shortterm memory (LSTM) CCG parsing model that has no explicit model of bi-lexical dependencies, but instead relies on a bi-directional recurrent neural network (RNN) supertagger to capture all long distance dependencies. This approach has a number of advantages: it is conceptually simple, allows for the reuse of existing optimal and efficient parsing algorithms, benefits significantly from semi-supervised learning, and is highly accurate both in and out of domain. The parser is publicly released. <ref type="bibr" target="#b6">1</ref> Neural networks have shown strong performance in a range of NLP tasks; however they can break the dynamic programs for structured prediction problems, such as parsing, when vector embeddings are recursively computed for subparts of the output. Existing neural net parsers either (1) use greedy inference techniques including shift-reduce parsing <ref type="bibr" target="#b18">(Henderson et al., 2013;</ref><ref type="bibr" target="#b9">Chen and Manning, 2014;</ref><ref type="bibr" target="#b34">Weiss et al., 2015;</ref>, constituency parse re-ranking ( <ref type="bibr" target="#b29">Socher et al., 2013)</ref>, and stringto-string transduction ( <ref type="bibr" target="#b33">Vinyals et al., 2015)</ref>, or (2) avoid recursive computations entirely <ref type="bibr" target="#b13">(Durrett and Klein, 2015)</ref>. Our approach gives a simple alternative: we only train a model for tagging decisions, where we can easily use recurrent architectures such as LSTMs <ref type="bibr" target="#b19">(Hochreiter and Schmidhuber, 1997)</ref>, and rely on the highly lexicalized nature of the CCG grammar to allow this tagger to specify nearly every aspect of the complete parse.</p><p>Our LSTM supertagger is bi-directional and includes a softmax potential over tags for each word in the sentence. During training, we jointly optimize all LSTM parameters, including the word embeddings, to maximize the conditional likelihood of supertag sequences. For inference, we use a recently introduced A* CCG parsing algorithm ( <ref type="bibr" target="#b23">Lewis and Steedman, 2014a)</ref>, which efficiently searches for the  <ref type="figure">Figure 1</ref>: Four examples of prepositional phrase attachment in CCG. In the upper two parses, the attachment decision is determined by the choice of supertags. In the lower parses, the attachment is ambiguous given the supertags. In such cases, our parser deterministically attaches low (i.e. preferring the lower-right parse).</p><p>highest probability sequence of tags that combine to produce a complete parse tree. Whenever there is parsing ambiguity not specified by the supertags, the model attaches low (see <ref type="figure">Figure 1</ref>). This approach is not only conceptually simple but also highly effective, as we demonstrate with extensive experiments. Because the A* algorithm is extremely efficient and the LSTMs can be run in parallel on GPUs, the end-to-end parser can process over 2600 sentences per second. This is more than three times the speed of any publicly available parser for any formalism. Apart from <ref type="bibr" target="#b16">Hall et al. (2014)</ref>, we are not aware of efficient algorithms for running other state-of-art-parsers on GPUs. The LSTM parameters also benefit from semi-supervised training, which we demonstrate by employing a recently introduced tri-training scheme <ref type="bibr" target="#b34">(Weiss et al., 2015)</ref>. Finally, the recurrent nature of the LSTM allows for effective modelling of long distance dependencies, as we show empirically. Our approach significantly advances the state-of-the-art on benchmark datasets-improving accuracy by 1.1 F1 in domain and up to 4.5 F1 out of domain.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Background</head><p>Combinatory Categorial Grammar (CCG) Compared to a phrase-structure grammar, CCG contains a much smaller set of binary rules (we use 11), but a much larger set of lexical tags (we use 425). The binary rules are conjectured to be language-universal, and most language-specific information is lexicalized <ref type="bibr" target="#b30">(Steedman, 2000</ref>). The large tag set means that most (but not all) attachment decisions are determined by tagging decisions. <ref type="figure">Fig- ure 1</ref> shows how a prepositional phrase attachment decision can be encoded in the choice of tags.</p><p>The process of assigning CCG categories to words is called supertagging. All supertaggers used in practice are probabilistic, providing a distribution over possible tags for each word. Parsing models either use these scores directly <ref type="bibr" target="#b4">(Auli and Lopez, 2011b</ref>), or as a form of beam search <ref type="bibr">(Clark and Cur- ran, 2007)</ref>, typically in conjunction with models of the dependencies or derivation.</p><p>Supertag-Factored A * CCG Parsing Lewis and Steedman (2014a) introduced supertag-factored CCG parsers, in which the score for a parse is simply the sum of the scores of its supertags. The parser takes in a distribution over supertags for each word, and outputs the highest scoring parse-subject to the hard constraint that the parse only uses standard CCG combinators (resolving any remaining ambiguity by attaching low). One advantage of the supertag-factored model is that it allows a simple A * parsing algorithm, which provably finds the highest scoring supertag sequence that can be combined to construct a complete parse.</p><p>In A * parsing, partial parses y i,j of span i . . . j are maintained in a sorted agenda and added to the chart in order of their cost, which is the sum of their Viterbi inside score g(y i,j ) and an upper bound on their Viterbi outside score h(y i,j ). <ref type="figure">Figure 2</ref>: Visualization of our supertagging model, based on stacked bi-directional LSTMs. Each word is fed into stacked LSTMs reading the sentence in each direction, the outputs of the LSTMs are combined, and there is a final softmax over categories.</p><formula xml:id="formula_0">When y i,j is doctor NP sent (S pss \NP )/PP for PP /NP</formula><p>added to the chart, the agenda is updated with any new partial parses that can be created by combining y i,j with existing chart items (Algorithm 1). If h is a monotonic upper bound on the outside score, the first chart entry for a span with a given category is guaranteed to be optimal-all other possible completions of the competing partial parses provably have lower scores, due to the outside score bounds. There is no guarantee this certificate of optimality is achieved efficiently for parses of the whole sentence, and in the worst case the algorithm could fill the entire parse chart. However, as we will see later, A* parsing is very efficient in practice for the models we present in this paper.</p><p>In the supertag-factored model, g and h are computed as follows, where g(y k ) is the score for word k having tag y k .</p><formula xml:id="formula_1">g(y i,j ) = j k=i g(y k ) (1) h(y i,j ) = i−1 k=1 max y k g(y k ) + N k=j+1 max y k g(y k ) (2)</formula><p>where Eq. 1 follows from the definition of the supertag factored model and Eq. 2 combines this definition with the fact that the max score over all supertags for a word is an upperbound on the score for the actual supertag used in the best parse.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">LSTM CCG Supertagging Model</head><p>Supertagging is almost parsing (Bangalore and Joshi, 1999)-consequently the task is very chalAlgorithm 1 Agenda-based parsing algorithm Definitions x 1...N is the input words, and y variables denote scored partial parses. TAG(x 1...N ) returns a set of scored pre-terminals for every word. ADD(C, y) adds partial parse y to chart C. RULES(C, y) returns the set of scored partial parses that can be created by combining y with existing entries in C. The agenda A is ordered as described in Section 2.</p><p>1: function PARSE(x 1...N )</p><p>2:</p><p>A ← ∅ Empty agenda A</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>3:</head><p>for y ∈ TAG(x 1...N ) do 4:</p><formula xml:id="formula_2">PUSH(A, y) 5: C ← ∅ Empty chart C 6:</formula><p>while</p><formula xml:id="formula_3">C 1,N = ∅ ∧ A = ∅ do 7: y ← EXTRACT_MAX(A) 8: if y / ∈ C then 9:</formula><p>ADD(C, y)</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>10:</head><p>for y ∈ RULES(C, y) do 11:</p><p>INSERT(A, y )</p><p>12:</p><p>return C 1,N lenging, with hundreds of tags, and the correct assignment often depending on long-range dependencies. For example, in The doctor sent for the patient arrived, the category for sent depends on the final word. Recent work has made dramatic progress, using feed-forward neural networks (Lewis and Steedman, 2014b) and RNNs (Xu et al., 2015). We make several extensions to previous work on supertagging. Firstly, we use bi-directional models, to capture both previous and subsequent sentence context into supertagging decisions. Secondly, we use LSTMs, rather than RNNs. Many tagging decisions rely on long-range context, and RNNs typically struggle to account for sequences of longer than a few words <ref type="bibr" target="#b19">(Hochreiter and Schmidhuber, 1997</ref>). Finally, we use a deep architecture, to allow the modelling of complex interactions in the context.</p><p>Our supertagging model is summarized in <ref type="figure">Figure  2</ref>. Each word is mapped to an embedding vector. This vector is a concatenation of an embedding for the word (lower-cased), and embeddings for features of the word (we use 1 to 4 character prefixes and suffixes). The embedding vector is used as input to two stacked LSTMs (with depth 2), one processing the sentence left-to-right, and the other right-to-left.</p><p>The outputs from the LSTMs are projected into a further hidden layer, a bias is added, and a RELU non-linearity is applied. This layer gives a contextdependent representation of the word that is fed into a softmax over supertags.</p><p>We use a variant on the standard LSTM with coupled 'input' and 'forget' gates, and peephole connections. Each LSTM cell at position t takes three inputs: a cell state vector c t−1 and hidden state vector h t−1 from the cell at position t − 1, and x t from the layer below. It outputs h t to the layer above, and c t and h t to the cell at t + 1. c t and h t are computed as follows, where σ is the component-wise logistic sigmoid, and • is the component-wise product:</p><formula xml:id="formula_4">i t =σ(W i [c t−1 , h t−1 , x t ] + b i )<label>(3)</label></formula><formula xml:id="formula_5">˜ c t = tanh(W c [h t−1 , x t ] + b ˜ c ) (4) o t =σ(W o [˜ c t , h t−1 , x t ] + b o ) (5) c t =i t • ˜ c t + (1 − i t )c t−1 (6) h t =o t • tanh(c t )<label>(7)</label></formula><p>We train the model using stochastic gradient descent, with a minibatch size of 1, a learning rate of 0.01, and using momentum with µ = 0.7. We then fine-tune models using a larger minibatch size of 32. Gradients whose L 2 norm exceeds 5 are clipped. Training was run for 30 epochs, shuffling the order of sentences after each epoch, and we used the model parameters with the highest development supertagging accuracy. The input layer uses dropout with a rate of 0.5. All trainable parameters have L 2 regularization of Λ = 10 −6 . Word embedding are initialized using 50-dimensional pre-trained values from <ref type="bibr" target="#b31">Turian et al. (2010)</ref>. For prefix and suffix embeddings, we use randomly initialized 32-dimensional vectors-features occurring less than 3 times are replaced with an 'unknown' embedding. We add special start and end tokens to each sentence, with trainable parameters. The LSTM state size is 128 and the RELU layer has a size of 64.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Parsing Models</head><p>Our experiments focus on two parsing models:</p><p>Supertag-Factored We use the supertagging model described in Section 3 to build a supertagfactored parser, closely following the approach described in Section 2. We also add a penalty of 0.1 (tuned on development data) for every time a unary rule is applied in a parse. The attach-low heuristic is implemented by adding a small penalty of −d at every binary rule instantiation, where d is the absolute distance between the heads of the left and right children, and is a small constant. We increase the penalty to 10 for clitics, to encourage these to attach locally. Because these penalties are ≤ 0, they do not affect the A* upper bound calculations.</p><p>Dependencies We also train a model with dependency features, to investigate how much they improve accuracy beyond the supertag-factored model. We adapt a joint CCG and SRL model ( <ref type="bibr" target="#b25">Lewis et al., 2015</ref>) to CCGbank parsing, by assigning every CCGbank dependency a role based on its argument number (i.e., the first argument of every category has role ARG0). A global log-linear model is trained to maximize the marginal likelihood of the gold dependencies. We use the same features and hyperparameters as <ref type="bibr" target="#b25">Lewis et al. (2015)</ref>, except that we do not use the supertagger score feature (to separate the effect of the dependencies features from the supertagger). We choose this model because it has an A * parsing algorithm, meaning that we do not need to use aggressive beam search.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Semi-supervised Learning</head><p>A number of papers have shown that strong parsers can be improved by exploiting text without goldstandard annotations. Recent work suggests tritraining, in which the output of two parsers is intersected to create training data for a third parser, is highly effective ( <ref type="bibr" target="#b34">Weiss et al., 2015)</ref>.</p><p>We perform the first application of tri-training to a lexicalized formalism. Following Weiss et al., we parse the corpus of <ref type="bibr" target="#b8">Chelba et al. (2013)</ref> with a shiftreduce parser and a chart-based model. We use the shift-reduce parser from <ref type="bibr">Ambati et al. (2016)</ref> and our dependency model (without using a supertagger feature, to limit the correlation with our tagging model). On development sentences where the parsers produce the same supertags (40%), supertagging accuracy is 98.0%. This subset is considerably easier than general text-our CCGbank-trained supertagger is 97.4% accurate on this data-but tritraining still provides useful additional training data.</p><p>In total, we include 43 million words of text that the parsers annotate with the same supertags and 15 copies of the gold CCGbank training data. Our experiments show that tri-training improves both supertagging and parsing accuracy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">GPU Parsing</head><p>Our parser makes an unusual trade-off, by combining a complex tagging model with a deterministic parsing model. The A * parsing algorithm is extremely efficient, and the overall time required to process a sentence is dominated by the supertagger. GPUs can improve performance over CPUs by computing many vector operations in parallel. There are two major obstacles to using GPUs for parsing. First, most models use sparse rather than dense features, which are difficult to compute efficiently on GPUs. The most successful implementation we are aware of exploits the fact that the Berkeley parser is unlexicalized to run parsing operations in parallel ( <ref type="bibr" target="#b16">Hall et al., 2014</ref>). Second, most neural models have features that depend on the current parse or stack state (e.g. <ref type="bibr" target="#b9">Chen and Manning (2014)</ref>). This makes it difficult to exploit the parallelism of GPUs, because these data structures are typically built incrementally on CPU. It may be possible to write GPU-specific code that maintains the entire parse state on GPU, but we are not aware of any such implementations.</p><p>In contrast, our supertagger only uses matrix operations, and does not take any parse state as inputmeaning it is straightforward to run on a GPU. To exploit the parallelism of GPUs, we process thousands of sentences simultaneously-improving parsing efficiency by an order-of-magnitude over CPU. A major advantage of our model is that it allows all of the computationally intensive decisions to occur on GPUs. Unlike existing GPU parsers, the LSTM can be run with generic library code. <ref type="bibr">2</ref> </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Experiments</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.1">Experimental setup</head><p>We trained our parser on Sections 02-21 of CCGbank <ref type="bibr" target="#b20">(Hockenmaier and Steedman, 2007)</ref>, using Section 00 for development, and Section 23 for test. Our experiments use a supertagger beam of 10 −4 -which does not affect the final scores, but reduces overheads such as building the initial agenda. <ref type="bibr">2</ref> We use TensorFlow ( <ref type="bibr" target="#b0">Abadi et al., 2015</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>Dev  <ref type="table">Table 2</ref>: Labelled F1 for CCGbank dependencies on the CCGbank test set (Section 23).</p><p>Where results are available, we compare our work with the following models: EASYCCG, which has the same parsing model as our parser, but uses a feed-forward neural-network supertagger (NN); the C&amp;C parser <ref type="bibr" target="#b11">(Clark and Curran, 2007)</ref>, and C&amp;C+RNN ( <ref type="bibr" target="#b36">Xu et al., 2015)</ref>, which is the C&amp;C parser with an RNN supertagger. All results are for 100% coverage of the test data.</p><p>We refer to the models described in Section 4 as LSTM and DEPENDENCIES respectively. We also report the performance of LSTM+DEPENDENCIES, which combines the model scores (weighting the LSTM score by 1.8, tuned on development data).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.2">Supertagging Results</head><p>The most direct measure of the effectiveness of our LSTM and tri-training is on the supertagging task. Results are shown in <ref type="table">Table 1</ref>. The improvement of our deep LSTM over the RNN model is greater than the improvement of the RNN over C&amp;C model. Further gains follow from tri-training, improving the state-of-the-art by 1.7%.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.3">English Parsing Results</head><p>Parsing results are shown in <ref type="figure">Figure 2</ref>. Surprisingly, our CCGBank-trained LSTM outperforms any previous approach. <ref type="bibr">3</ref>   </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.4">Out-of-domain Experiments</head><p>We also evaluate on two out-of-domain datasets used by <ref type="bibr" target="#b28">Rimell and Clark (2008)</ref>, but did no development on this data. In both cases, we use Rimell and Clark's scripts for converting CCG parses to the target dependency representations. The datasets are: QUESTIONS 500 questions from TREC ( <ref type="bibr" target="#b28">Rimell and Clark, 2008)</ref>. Questions frequently contain very long range dependencies, providing an interesting test of the LSTM supertagger's ability to capture unbounded dependencies. We follow Rimell and Clark by re-training the supertagger on the concatenation of the CCGbank training data and 10 copies of the QUESTIONS training data.</p><p>BIOINFER 500 sentences from biomedical abstracts. This dataset tests the parser's robustness to a large amount of unseen vocabulary.</p><p>Results are shown in <ref type="table" target="#tab_3">Table 3</ref>. Our LSTM parser outperforms existing work on question parsing, showing that it can successfully model the longrange dependencies found in questions. Adding dependency features yields only a small improvement.</p><p>On the BIOINFER corpus, our tri-trained LSTM parser is 4.5 F1 better than the previous state-ofthe-art. Dependency features appear to be much (2011b)'s joint parsing and supertagging model, due to differences in the experimental setup. These models are 0.3 and 1.5 F1 more accurate than the C&amp;C baseline respectively, which is well within the margin of improvement obtained by our model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Parser</head><p>Sentences per second SpaCy* <ref type="bibr">4</ref> 778 Berkeley GPU* ( <ref type="bibr" target="#b16">Hall et al., 2014</ref>) 687 <ref type="bibr" target="#b9">Chen and Manning (2014)</ref>  less robust to unseen words than the LSTM tagging model, and are unhelpful. Because the parser was not trained or developed on this domain, it is likely to perform similarly well on other domains.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.5">Efficiency Experiments</head><p>In contrast to standard parsing algorithms, the efficiency of our model depends directly on the accuracy of the supertagger in guiding the search. We therefore measure the efficiency empirically. Results are shown in <ref type="table" target="#tab_5">Table 4</ref>. <ref type="bibr">5</ref> Our parser runs more slowly than EASYCCG on CPU, due to the more complex tagging model (but is 4.8 F1 more accurate). Adding dependencies substantially reduces efficiency, due to calculating sparse features. Without dependencies, the run time is dominated by the LSTM supertagger. Running the supertagger on a GPU reduces parsing times dramaticallyoutperforming SpaCy, the fastest publicly available parser ( <ref type="bibr" target="#b10">Choi et al., 2015)</ref>. Roughly half the parsing time is spent on GPU supertagging, and half on CPU parsing. To better exploit batching in the GPU, our implementation dynamically buckets sentences by length (bins of width 10), and tags batches when the bucket size reaches 3072 (the number of threads on our GPU). We are not aware of any GPU implementations of shift-reduce parsers or lexicalized chart parsers, so it is unclear if most other state-ofthe-art parsers can be adapted to exploit GPUs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Supertagger</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Accuracy</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Bidirectional RNNs 93.4 Forward LSTM only 83.5 Backward LSTM only 89.5 Bidirectional LSTMs</head><p>94.1  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Ablations</head><p>We also measure performance while removing different aspects of the full parsing model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8.1">Supertagger Model Architecture</head><p>Numerous variations are possible on our supertagging architecture. Apart from tri-training, the major differences from the previous state-of-the-art ( <ref type="bibr" target="#b36">Xu et al., 2015</ref>) are that we use LSTMs rather than RNNs, and that we use bidirectional networks rather than only a forward-directional RNN. These modifications lead to a 1.3% improvement in accuracy. <ref type="table" target="#tab_6">Table  5</ref> shows performance while ablating these changes; they all contribute substantially to tagging accuracy. <ref type="table" target="#tab_7">Table 6</ref> shows several classes of words where the LSTM model outperforms the baseline neural network that uses only local context (NN). The performance increase on unseen words is likely due to the fact that the LSTM can model more context to determine the category for a word. Unsurprisingly, this leads to a large improvement in accuracy for words taking non-local arguments. Finally, we see a large improvement in prepositional phrase attachment. This improvement is likely to be due to the deep architecture, which can better take into account the interaction between the preposition, its argument  <ref type="table">Table 7</ref>: Effect of simulating weaker grammars, by allowing the specified atomic categories to unify. * allows all atomic categories to unify, except conjunctions and punctuation. Results are on development sentences of length ≤40.</p><p>noun phrase, and its nominal or verbal attachment.</p><p>8.2 Semi-supervised learning <ref type="table" target="#tab_7">Table 6</ref> also shows cases where the semi-supervised models perform better. Accuracy improves on unseen words-showing that tri-training can be a more effective way of generalizing to unseen words than pre-trained word embeddings alone. We also see improvement in accuracy on wh-words, which we attribute to the training data containing more examples of rare categories used for wh-words in piedpiping and similar constructions. One case where performance remains weak for all models is on unseen usages-where words occur in the CCGbank training data, but not with the category required in the test data. The improvement from tri-training is limited, likely due to the weakness of the baseline parses, and new techniques will be required to correct such errors.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8.3">Effect of Grammar</head><p>A subtle but crucial point is that our method depends on the strictness of the CCGbank grammar to exclude ungrammatical derivations. Because there is no dependency model, we rely on the deterministic CCG grammar as a hard constraint. There is a trade-off between restrictive grammars which may be brittle on noisy text, and weaker grammars that may overgenerate ungrammatical sentences. We measure this trade-off by testing weaker grammars, which merge categories that are normally distinct. For example, if we merge PP and NP , then an S \NP can take either a PP or NP argument. <ref type="table">Table 7</ref> shows that relaxing the grammar significantly hurts performance; the deterministic constraints are crucial to training a high quality LSTM CCG parser. With a very relaxed grammar in which all atoms can unify, dependencies features help compensate for the weakened grammar. Future work should explore further strengthening the grammar--e.g. marking plurality on NP s to enforce plural agreement, or using slash-modalities to prevent over-generation arising from composition ( <ref type="bibr" target="#b5">Baldridge and Kruijff, 2003)</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8.4">Effect of Dependency Features</head><p>Perhaps our most surprising result is that high accuracy can be achieved with a rule-based grammar and no dependency features. We performed several experiments to verify whether the model can capture long-range dependencies, and the extent to which dependency features are required to further improve parsing performance.</p><p>Supertagging accuracy is still the bottleneck A natural question is whether further improvements to our model will require a more powerful parsing model (such as adding dependency or derivation features), or if future work should focus on the supertagger. We found that on sentences where all the supertags are correct in the final parse (51%), the F1 is very high: 97.7. On parses containing supertag errors, the F1 drops to just 80.3. This result suggests that parsing accuracy can be significantly increased by improving the supertagger, and that very high performance could be attained only using a supertagging model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>'Attach low' heuristic is surprisingly effective</head><p>Given a sequence of supertags, our grammar is still ambiguous. As explained in Section 2, we resolve these ambiguities by attaching low. To investigate the accuracy of this heuristic, we performed oracle decoding given the highest scoring supertagsand found that F1 improved by 1.3, showing that there are limits to what can be achieved with a rulebased grammar. In contrast, an 'attach high' heuristic scores 5.2 F1 less than attaching low, suggesting that these decisions are reasonably frequent, but that attaching low is much more common.</p><p>Would adding a dependency model help here? We consider several dependencies whose attachment is often ambiguous given the supertags. Results are shown in   Supertag-factored model is accurate on longrange dependencies One motivation for CCG parsing is to recover long-range dependencies. While we do not explicitly model these dependencies, they can still be extracted from the parse. Instead, we rely on the LSTM supertagger to implicitly model the dependencies-a task that becomes more challenging with longer dependencies. We investigate the accuracy of our parser for dependencies of different lengths. <ref type="figure" target="#fig_0">Figure 3</ref> shows that adding dependencies features does not improve the recovery of long-range dependencies over the LSTM alone; the LSTM accurately models long-range dependencies.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9">Related Work</head><p>Recent work has applied neural networks to parsing, mostly using neural classifiers in shift-reduce parsers ( <ref type="bibr" target="#b18">Henderson et al., 2013;</ref><ref type="bibr" target="#b9">Chen and Manning, 2014;</ref><ref type="bibr" target="#b34">Weiss et al., 2015)</ref>. Unlike our approach, none of these report both state-ofthe-art speed and accuracy. <ref type="bibr" target="#b33">Vinyals et al. (2015)</ref> in-stead propose embedding entire sentences in a vector space, and then generating parse trees as strings. Our model achieves state-of-the-art accuracy with a non-ensemble model trained on the standard training data, whereas their model requires ensembles or extra supervision to match the state of the art.</p><p>Most work on CCG parsing has either used CKY chart parsing <ref type="bibr" target="#b21">(Hockenmaier, 2003;</ref><ref type="bibr">Clark and Cur- ran, 2007;</ref><ref type="bibr" target="#b15">Fowler and Penn, 2010;</ref><ref type="bibr" target="#b3">Auli and Lopez, 2011a</ref>) or shift-reduce algorithms ( <ref type="bibr" target="#b39">Zhang and Clark, 2011;</ref><ref type="bibr" target="#b35">Xu et al., 2014;</ref><ref type="bibr" target="#b1">Ambati et al., 2015</ref>). These methods rely on beam-search to cope with the huge space of possible CCG parses. Instead, we use Lewis and Steedman (2014a)'s A * algorithm. By using a semi-supervised LSTM supertagger, we improved over Lewis and Steedman's parser by 4.8 F1.</p><p>CCG supertagging was first attempted with maximum-entropy Markov models <ref type="bibr" target="#b12">(Clark, 2002</ref>)-in practice, the combination of sparse features and a large tag set makes such models brittle. <ref type="bibr" target="#b24">Lewis and Steedman (2014b)</ref> applied feed-forward neural networks to supertagging, motivated by using pretrained work embeddings to reduce sparsity. <ref type="bibr" target="#b36">Xu et al. (2015)</ref> showed further improvements by using RNNs to condition on non-local context. Concurrently with this work, <ref type="bibr" target="#b37">Xu et al. (2016)</ref> explored bidirectional RNN models, and <ref type="bibr" target="#b32">Vaswani et al. (2016)</ref> use bidirectional LSTMs with a different training procedure.</p><p>Our tagging model is closely related to the bidirectional LSTM POS tagging model of . We see larger gains over the state-ofthe-art-likely because supertagging involves more long-range dependencies than POS tagging.</p><p>Other work has successfully applied GPUs to parsing, but has required GPU-specific code and algorithms <ref type="bibr" target="#b38">(Yi et al., 2011;</ref><ref type="bibr" target="#b22">Johnson, 2011;</ref><ref type="bibr" target="#b7">Canny et al., 2013;</ref><ref type="bibr" target="#b16">Hall et al., 2014</ref>). GPUs have also been used for machine translation ).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="10">Conclusions and Future Work</head><p>We have shown that a combination of deep learning, linguistics and classic AI search can be used to build a parser with both state-of-the-art speed and accuracy. Future work will explore using our parser to recover other representations from CCG, such as Universal Dependencies <ref type="bibr" target="#b27">(McDonald et al., 2013</ref>) or semantic roles. The major obstacle is the mismatch between these representations and CCGbank-we will therefore investigate new techniques for obtaining other representations from CCG parses. We will also explore new A * parsing algorithms that explicitly model the global parse structure using neural networks, while maintaining optimality guarantees.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: F1 on dependencies of various lengths. on the 'attach low' heuristic with current models.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>The ensemble of the LSTM</head><label></label><figDesc></figDesc><table>Model 
+
+QUESTIONS 
+BIOINFER 
+P 
+R 
+F1 
+P 
+R 
+F1 
+
+C&amp;C 
+-
+-
+86.6 77.8 71.4 74.5 
+EASYCCG 
+78.1 78.2 78.1 76.8 77.6 77.2 
+C&amp;C + RNN 
+-
+-
+-
+80.1 75.5 77.7 
+LSTM 
+87.6 87.4 87.5 80.1 80.9 80.5 
+LSTM + Dependencies 88.2 87.9 88.0 77.8 80.1 79.4 
+LSTM + Tri-training 
+-
+-
+-
+81.8 82.6 82.2 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Out-of-domain experiments. 
+
+and the Dependency model outperforms the LSTM 
+alone, showing that dependency features are cap-
+turing some generalizations that the LSTM does 
+not. However, semi-supervised learning substan-
+tially improves the LSTM, matching the accuracy of 
+the ensemble-showing that the LSTM is expressive 
+enough to compensate given sufficient data. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Sentences parsed per second on our hard-
+ware. Parsers marked * use non-CCG formalisms 
+but are the fastest available CPU and GPU parsers. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="true"><head>Table 5 : Development supertagging accuracy.</head><label>5</label><figDesc></figDesc><table>Word Class 
+NN 
+LSTM LSTM+ 
+Tri-training 
+All 
+91.32 94.14 
+94.90 
+Unseen Words 90.39 94.21 
+95.26 
+Unseen Usages 45.80 59.37 
+62.46 
+Prepositions 
+78.11 84.40 
+85.98 
+Verbs 
+82.55 87.85 
+89.24 
+Wh-words 
+90.47 92.09 
+94.16 
+Long range 
+74.80 83.99 
+86.31 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head>Table 6 :</head><label>6</label><figDesc></figDesc><table>Development supertagging accuracy on 
+several classes of words. Long range refers to words 
+taking an argument at least 5 words away. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_9" validated="false"><head>Table 8 .</head><label>8</label><figDesc></figDesc><table>Any improvements from the de-
+pendency model are small-it is difficult to improve 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_10" validated="false"><head>Table 8 :</head><label>8</label><figDesc></figDesc><table>Per-relation accuracy for several dependen-
+cies whose attachments are often ambiguous given 
+the supertags. Results are only on sentences where 
+the parsers assign the correct supertags. 
+
+</table></figure>
+
+			<note place="foot" n="1"> http://github.com/mikelewis0/EasySRL</note>
+
+			<note place="foot" n="3"> We cannot compare directly with Fowler and Penn (2010)&apos;s adaptation of the Berkeley parser to CCG, or Auli and Lopez</note>
+
+			<note place="foot" n="4"> honnibal.github.io/spaCy 5 All timing experiments use a single 3.5GHz core and (where applicable) a single NVIDIA TITAN X GPU.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgements</head><p>We thank Bharat Ram Ambati, Greg Coppola, Chloé Kiddon, Luheng He, Yannis Konstas and the anonymous reviewers for comments on an earlier version, and Mark Yatskar for helpful discussions.</p><p>This research was supported in part by the NSF <ref type="figure">(IIS-1252835)</ref>, DARPA under the DEFT program through the AFRL (FA8750-13-2-0019), an Allen Distinguished Investigator Award, and a gift from Google.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martın</forename><surname>Abadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Agarwal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Barham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Brevdo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhifeng</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Craig</forename><surname>Citro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andy</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Dean</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthieu</forename><surname>Devin</surname></persName>
+		</author>
+		<title level="m">TensorFlow: Large-scale Machine Learning on Heterogeneous Systems. Software available from tensorflow.org</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">An Incremental Algorithm for Transition-based CCG Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bharat</forename><forename type="middle">Ram</forename><surname>Ambati</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tejaswini</forename><surname>Deoskar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Johnson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Steedman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 2015 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Shift-Reduce CCG Parsing using Neural Network Models</title>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Human Language Technology Conference of the NAACL</title>
+		<editor>Bharat Ram Ambati, Tejaswini Deoskar, and Mark Steedman</editor>
+		<meeting>the Human Language Technology Conference of the NAACL</meeting>
+		<imprint>
+			<publisher>Short Papers</publisher>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">A Comparison of Loopy Belief Propagation and Dual Decomposition for Integrated CCG Supertagging and Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Auli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Lopez</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 49th Annual Meeting of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 49th Annual Meeting of the Association for Computational Linguistics: Human Language Technologies</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="volume">1</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Training a loglinear parser with loss functions via softmax-margin</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Auli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Lopez</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Multimodal Combinatory Categorial Grammar</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Baldridge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geert-Jan M</forename><surname>Kruijff</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the tenth conference on European chapter</title>
+		<meeting>the tenth conference on European chapter</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Supertagging: An approach to almost parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Srinivas</forename><surname>Bangalore</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aravind</forename><forename type="middle">K</forename><surname>Joshi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page">25</biblScope>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">A multiteraflop constituency parser using gpus</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Canny</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Hall</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Architecture</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="3" to="5" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">One Billion Word Benchmark for Measuring Progress in Statistical Language Modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ciprian</forename><surname>Chelba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qi</forename><surname>Ge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thorsten</forename><surname>Brants</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phillipp</forename><surname>Koehn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tony</forename><surname>Robinson</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2013" />
+			<pubPlace>Google</pubPlace>
+		</imprint>
+	</monogr>
+<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">A Fast and Accurate Dependency Parser using Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Christopher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2014 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="740" to="750" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">It Depends: Dependency Parser Comparison Using A Web-based Evaluation Tool</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jinho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joel</forename><surname>Choi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Amanda</forename><surname>Tetreault</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Stent</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing</title>
+		<meeting>the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing<address><addrLine>Beijing, China</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2015-07" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="387" to="396" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Widecoverage Efficient Statistical Parsing with CCG and Log-Linear Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>James R Curran</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page">33</biblScope>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Supertagging for Combinatory Categorial Grammar</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Clark</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 6th International Workshop on Tree Adjoining Grammars and Related Frameworks (TAG+ 6)</title>
+		<meeting>the 6th International Workshop on Tree Adjoining Grammars and Related Frameworks (TAG+ 6)</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="19" to="24" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Neural CRF Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Durrett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics</title>
+		<meeting>the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Transitionbased Dependency Parsing with Stack Long ShortTerm Memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Austin</forename><surname>Matthews</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Accurate Context-free Parsing with Combinatory Categorial Grammar</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">D</forename><surname>Timothy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gerald</forename><surname>Fowler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Penn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 48th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 48th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Sparser, better, faster gpu parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Hall</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Taylor</forename><surname>Berg-Kirkpatrick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 52nd Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 52nd Annual Meeting of the Association for Computational Linguistics<address><addrLine>Baltimore, Maryland</addrLine></address></meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2014-06" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="208" to="217" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Gappy Pattern Matching on GPUs for On-Demand Extraction of Hierarchical Translation Grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hua</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Lopez</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">TACL</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="87" to="100" />
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Multi-lingual Joint Parsing of Syntactic and Semantic Dependencies with a Latent Variable Model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Henderson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paola</forename><surname>Merlo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ivan</forename><surname>Titov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gabriele</forename><surname>Musillo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Long Short-term Memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">CCGbank: a Corpus of CCG derivations and Dependency Structures Extracted from the Penn Treebank</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julia</forename><surname>Hockenmaier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Steedman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page">33</biblScope>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Data and models for statistical parsing with Combinatory Categorial Grammar</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julia</forename><surname>Hockenmaier</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+		<respStmt>
+			<orgName>University of Edinburgh. College of Science and Engineering. School of Informatics</orgName>
+		</respStmt>
+	</monogr>
+<note type="report_type">Ph.D. thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Parsing in Parallel on Multiple Cores and GPUs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Australasian Language Technology Association Workshop</title>
+		<meeting>the Australasian Language Technology Association Workshop<address><addrLine>Canberra, Australia</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2011-12" />
+			<biblScope unit="page" from="29" to="37" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">A* CCG Parsing with a Supertag-factored Model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Lewis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Steedman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2014 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">Improved CCG parsing with Semi-supervised Supertagging. Transactions of the Association for Computational Linguistics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Lewis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Steedman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Joint A* CCG Parsing and Semantic Role Labelling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Lewis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luheng</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Empirical Methods in Natural Language Processing</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Finding function in form: Compositional character models for open vocabulary word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alan</forename><forename type="middle">W</forename><surname>Black</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Isabel</forename><surname>Trancoso</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ramon</forename><surname>Fermandez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Silvio</forename><surname>Amir</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luís</forename><surname>Marujo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tiago</forename><surname>Luís</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The Association for Computational Linguistics</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1520" to="1530" />
+		</imprint>
+	</monogr>
+	<note>EMNLP</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Universal Dependency Annotation for Multilingual Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joakim</forename><surname>Ryan T Mcdonald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yvonne</forename><surname>Nivre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Quirmbachbrundage</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dipanjan</forename><surname>Goldberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kuzman</forename><surname>Das</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ganchev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Keith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Hall</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oscar</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Täckström</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="92" to="97" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Adapting a Lexicalized-grammar Parser to Contrasting Domains</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Laura</forename><surname>Rimell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Clark</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Parsing with Compositional Vector Grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Bauer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Christopher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew Y</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL conference</title>
+		<meeting>the ACL conference</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+		<title level="m" type="main">The Syntactic Process</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Steedman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2000" />
+			<publisher>MIT Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Word representations: A Simple and General Method for Semi-supervised Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joseph</forename><surname>Turian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lev</forename><surname>Ratinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 48th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 48th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Supertagging With LSTMs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Vaswani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonatan</forename><surname>Bisk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenji</forename><surname>Sagae</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Musa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Human Language Technology Conference of the NAACL</title>
+		<meeting>the Human Language Technology Conference of the NAACL</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Grammar as a Foreign Language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Terry</forename><surname>Koo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Structured Training for Neural Network Transition-Based Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL 2015</title>
+		<meeting>ACL 2015</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="323" to="333" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Shift-Reduce CCG Parsing with a Dependency Model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenduan</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yue</forename><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 52nd Annual Meeting of the Association for Computational Linguistics (ACL</title>
+		<meeting>the 52nd Annual Meeting of the Association for Computational Linguistics (ACL</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+		<title level="m" type="main">CCG Supertagging with a Recurrent Neural Network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenduan</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Auli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Clark</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2015" />
+			<publisher>Short Papers</publisher>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page">250</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Shift-Reduce CCG Parsing with Recurrent Neural Networks and Expected F-Measure Training</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenduan</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Auli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Clark</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Human Language Technology Conference of the NAACL</title>
+		<meeting>the Human Language Technology Conference of the NAACL</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Efficient parallel cky parsing on gpus</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Youngmin</forename><surname>Yi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chao-Yue</forename><surname>Lai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kurt</forename><surname>Keutzer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 12th International Conference on Parsing Technologies, IWPT &apos;11</title>
+		<meeting>the 12th International Conference on Parsing Technologies, IWPT &apos;11<address><addrLine>Stroudsburg, PA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="175" to="185" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Shift-reduce CCG Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yue</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Clark</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 49th Annual Meeting of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 49th Annual Meeting of the Association for Computational Linguistics: Human Language Technologies</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="volume">1</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

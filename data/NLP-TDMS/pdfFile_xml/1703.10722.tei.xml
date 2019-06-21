@@ -1,0 +1,592 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:43+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Workshop track -ICLR 2017 FACTORIZATION TRICKS FOR LSTM NETWORKS</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oleksii</forename><surname>Kuchaiev</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">NVIDIA</orgName>
+							</affiliation>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Boris</forename><surname>Ginsburg</surname></persName>
+							<email>bginsburg@nvidia.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">NVIDIA</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Workshop track -ICLR 2017 FACTORIZATION TRICKS FOR LSTM NETWORKS</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We present two simple ways of reducing the number of parameters and accelerating the training of large Long Short-Term Memory (LSTM) networks: the first one is &quot;matrix factorization by design&quot; of LSTM matrix into the product of two smaller matrices, and the second one is partitioning of LSTM matrix, its inputs and states into the independent groups. Both approaches allow us to train large LSTM networks significantly faster to the near state-of the art perplexity while using significantly less RNN parameters.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>LSTM networks <ref type="bibr" target="#b7">(Hochreiter &amp; Schmidhuber, 1997</ref>) have been successfully used in language modeling ( <ref type="bibr" target="#b8">Jozefowicz et al., 2016;</ref><ref type="bibr" target="#b12">Shazeer et al., 2017)</ref>, speech recognition ( <ref type="bibr" target="#b16">Xiong et al., 2016)</ref>, machine translation ( , and many other tasks. However, these networks have millions of parameters, and require weeks of training on multi-GPU systems.</p><p>We introduce two modifications of LSTM cell with projection, LSTMP <ref type="bibr" target="#b11">(Sak et al., 2014)</ref>, to reduce the number of parameters and speed-up training. The first method, factorized LSTM (F-LSTM) approximates big LSTM matrix with a product of two smaller matrices. The second method, group LSTM (G-LSTM) partitions LSTM cell into the independent groups. We test F-LSTM and G-LSTM architectures on the task of language modeling using One Billion Word Benchmark ( <ref type="bibr" target="#b1">Chelba et al., 2013)</ref>. As a baseline, we used BIGLSTM model without CNN inputs described by <ref type="bibr" target="#b8">Jozefowicz et al. (2016)</ref>. We train all networks for 1 week on a DGX Station system with 4 Tesla V100 GPUs, after which BIGLSTM's evaluation perplexity was 35.1. Our G-LSTM based model got 36 and F-LSTM based model got 36.3 while using two to three times less RNN parameters.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.1">LONG SHORT-TERM MEMORY OVERVIEW</head><p>Learning long-range dependencies with Recurrent Neural Networks (RNN) is challenging due to the vanishing and exploding gradient problems ( <ref type="bibr" target="#b0">Bengio et al., 1994;</ref><ref type="bibr" target="#b10">Pascanu et al., 2013)</ref>. To address this issue, the LSTM cell has been introduced by <ref type="bibr" target="#b7">Hochreiter &amp; Schmidhuber (1997)</ref>, with the following recurrent computations:</p><formula xml:id="formula_0">LST M : h t−1 , c t−1 , x t → h t , c t .</formula><p>(1) where x t is input, h t is cell's state, and c t is cell's memory. We consider LSTM cell with projection of size p, LSTMP, where Equation 1 is computed as follows ( <ref type="bibr" target="#b11">Sak et al., 2014;</ref><ref type="bibr" target="#b17">Zaremba et al., 2014</ref>). First, cell gates (i, f, o, g) are computed:</p><formula xml:id="formula_1">   i f o g    =    sigm sigm sigm tanh    T x t h t−1<label>(2)</label></formula><p>where x t ∈ R p , h t ∈ R p , and T :</p><formula xml:id="formula_2">R 2p → R 4n is an affine transform T = W * [x t , h t−1 ] + b.</formula><p>Next state h t ∈ R p and memory c t ∈ R n are computed using following equations: c t = f c t−1 + i g; h t = P (o tanh(c t )) where P : R n → R p is a linear projection. The major part of LSTMP cell computation is in computing affine transform T because it involves multiplication with 4n × 2p matrix W . Thus we focus on reducing the number of parameters in W .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.2">RELATED WORK</head><p>The partition of layer into parallel groups have been introduced by <ref type="bibr" target="#b9">Krizhevsky et al. (2012)</ref> in AlexNet, where some convolutional layers have been divided into two groups to split the model between two GPUs. Multi-group convnets have been widely used to reduce network weights and required compute, for example by <ref type="bibr" target="#b5">Esser et al. (2016)</ref>. This multi-group approach was extended to the extreme in Xception architecture by <ref type="bibr" target="#b2">Chollet (2016)</ref>. The idea of factorization of large convolutinal layer into the stack of layers with smaller filters was used, for example, in VGG networks <ref type="bibr" target="#b14">(Simonyan &amp; Zisserman, 2014)</ref>, and in ResNet "bottleneck design" ( <ref type="bibr" target="#b6">He et al., 2016)</ref>. <ref type="bibr" target="#b4">Denil et al. (2013)</ref> have shown that it is possible to train several different deep architectures by learning only a small number of weights and predicting the rest. In case of LSTM networks, <ref type="bibr">ConvLSTM (Shi et al., 2015)</ref>, has been introduced to better exploit possible spatiotemporal correlations, which is conceptually similar to grouping.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">MODELS</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">FACTORIZED LSTM CELL</head><p>Factorized LSTM (F-LSTM) replaces matrix W by the product of two smaller matrices that essentially try to approximate W as W ≈ W 2 * W 1, where W 1 is of size 2p × r, W 2 is r × 4n, and r &lt; p &lt;= n ("factorization by design"). The key assumption here is that W can be well approximated by the matrix of rank r. Such approximation contains less LSTMP parameters than original model -(r * 2p + r * 4n) versus (2p * 4n) and, therefore, can be computed faster and synchronized faster in the case of distributed training. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">GROUP LSTM CELL</head><p>This approach is inspired by groups in Alexnet ( <ref type="bibr" target="#b9">Krizhevsky et al., 2012</ref>). We postulate that some parts of the input x t and hidden state h t can be thought of as independent feature groups. For example, if we use two groups, then both x t and h t are effectively split into two vectors concatenated together x t = (x 1 t , x 2 t ) and h t = (h 1 t , h 2 t ), with h i t only dependent on x i t , h i t−1 and cell's memory state. Therefore, for k groups Equation 2 changes to:</p><formula xml:id="formula_3">   i f o g    =       sigm sigm sigm tanh    T 1 x 1 t h 1 t−1 , ...,    sigm sigm sigm tanh    T k x k t h k t−1   <label>(3)</label></formula><p>where, T j is a group j's affine transform from R 2p/k to R 4n/k . The partitioned T will now have k * 4n * 2p k * k parameters. This cell architecture is well suited for model parallelism since every group computation is independent. An alternative interpretation of G-LSTM layers is demonstrated in  <ref type="figure" target="#fig_0">Figure 1 (c)</ref>. While this might look similar to ensemble <ref type="bibr" target="#b12">(Shazeer et al., 2017</ref>) or multi-tower ( <ref type="bibr" target="#b3">Ciregan et al., 2012</ref>) models, the key differences are: (1) input to different groups is different and assumed independent, and (2) instead of computing ensemble output, it is concatenated into independent pieces.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">EXPERIMENTS AND RESULTS</head><p>For testing we used the task of learning the joint probabilities over word sequences of arbitrary lengths n: P (w 1 , ..., w n ) = n i=1 P (w i |w 1 , ..., w i−1 ), such that "real" sentences have high probabilities compared to the random sequences of words. <ref type="figure" target="#fig_0">Figure 1 (a)</ref> shows the typical LSTM-based model, where first the words are embedded into the low dimensional dense input for RNN, then the "context" is learned using RNNs via number of steps and, finally, the softmax layer converts RNN output into the probability distribution P (w 1 , ..., w n ). We test the following models:</p><p>• BIGLSTM -model with projections but without CNN inputs from <ref type="bibr" target="#b8">Jozefowicz et al. (2016)</ref> • BIG F-LSTM F512 -with intermediate rank of 512 for LSTM matrix W ,</p><p>• BIG G-LSTM G-4, with 4 groups in both layers</p><p>• BIG G-LSTM G-16, with 16 groups in both layers.</p><p>We train all models on DGX Station with 4 GV100 GPUs for one ween using Adagrad optimizer, projection size of 1024, cell size of 8192, mini-batch of 256 per GPU, sampled softmax with 8192 samples and 0.2 learning rate. Note that the use of projection is crucial as it helps to keep down embedding and softmax layer sizes. <ref type="table" target="#tab_0">Table 1</ref> summarizes our experiments.</p><p>Judging from the training loss Plots 2 in Appendix, it is clearly visible that at the same step count, model with more parameters wins. However, given the same amount of time, factorized models train faster. While the difference between BIGLSTM and BIG G-LSTM-G2 is clearly visible, BIG G-LSTM-G2 contains almost 2 times less RNN parameters than BIGLSTM, trains faster and, as a results, achieves similar evaluation perplexity within the same training time budget (1 week).</p><p>Our code is available at https://github.com/okuchaiev/f-lm</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">FUTURE RESEARCH</head><p>While one might go further and try to approximate transform T using arbitrary feed forward neural network with 2p inputs and 4n outputs, during our initial experiments we did not see immediate benefits of doing so. Hence, it remains a topic of future research.</p><p>It might be possible to reduce the number of RNN parameters even further by stacking G-LSTM layers with increasing group counts on top of each other. In our second, smaller experiment, we replace the second layer of BIG G-LSTM-G4 network by the layer with 8 groups instead of 4, and call it BIG G-LSTM-G4-G8. We let both BIG G-LSTM-G4 and BIG G-LSTM-G4-G8 ran for 1 week on 4 GPUs each and achieved very similar perplexities. Hence, the model with "hierarchical" groups did not lose much accuracy, ran faster and got better perplexity. Such "hierarchical" group layers look intriguing as they might provide a way for learning different levels of abstractions but this remains a topic of future research.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Language model using: (a) 2 regular LSTM layers, (b) 2 F-LSTM layers, and (c) 2 G-LSTM layers with 2 group in each layer. Equations inside cells show what kind of affine transforms are computed by those cells at each time step. Here d = (x, h) for models without groups and d1 = (x 1 , h 1 ), d2 = (x 2 , h 2 ) for model with two groups; and time index dropped for clarity.</figDesc><graphic url="image-1.png" coords="2,175.93,363.53,260.15,113.39" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0"><head></head><label></label><figDesc></figDesc><graphic url="image-2.png" coords="6,109.36,110.65,393.27,283.47" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="true"><head>Table 1 : One Billion Words benchmark evaluation results after 1 week of training using one DGX Station with 4 Tesla V100 GPUs. Model Perplexity Step Num of RNN parameters Words/sec</head><label>1</label><figDesc></figDesc><table>BIGLSTM baseline 35.1 
+0.99M 
+151,060,480 
+33.8K 
+BIG F-LSTM F512 36.3 
+1.67 M 52,494,336 
+56.5K 
+BIG G-LSTM G-2 
+36 
+1.37M 
+83,951,616 
+41.7K 
+BIG G-LSTM G-4 
+40.6 
+1.128M 50,397,184 
+56K 
+BIG G-LSTM G-8 
+39.4 
+850.4K 33,619,968 
+58.5K 
+
+the </table></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+			</div>
+
+			<div type="annex">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>APPENDIX: TRAINING LOSS FOR 4 LSTM-LIKE MODELS</head><p>Figure 2: Y-axis: same for (A) and (B) -training loss log-scale, X-axis: for (A) -step, or mini-batch count, for (B) -hours (w.g. wall time) of training. BIGLSTM baseline, BIG G-LSTM-G4, BIG G-LSTM-G16, and BIG F-LSTM-F512 all trained for exactly one week. It is clearly visible, that at the same step count, the model with more parameters wins. On the other hand, factorized models can do significantly more iterations in the given amount of time and therefore get to the better results given same amount of time. (full extent of X-axis for both (A) and (B) is 1 week).</p></div>			</div>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Learning long-term dependencies with gradient descent is difficult</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Patrice</forename><surname>Simard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paolo</forename><surname>Frasconi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE transactions on neural networks</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="157" to="166" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">One billion word benchmark for measuring progress in statistical language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ciprian</forename><surname>Chelba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qi</forename><surname>Ge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thorsten</forename><surname>Brants</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phillipp</forename><surname>Koehn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tony</forename><surname>Robinson</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1312.3005</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Xception: Deep learning with depthwise separable convolutions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">François</forename><surname>Chollet</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1610.02357</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Multi-column deep neural networks for image classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Ciregan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ueli</forename><surname>Meier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Vision and Pattern Recognition (CVPR), 2012 IEEE Conference on</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="3642" to="3649" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Predicting parameters in deep learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Misha</forename><surname>Denil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Babak</forename><surname>Shakibi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Laurent</forename><surname>Dinh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nando De Freitas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="2148" to="2156" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Convolutional networks for fast, energy-efficient neuromorphic computing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Steven</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><forename type="middle">A</forename><surname>Esser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><forename type="middle">V</forename><surname>Merolla</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><forename type="middle">S</forename><surname>Arthur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rathinakumar</forename><surname>Cassidy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><surname>Appuswamy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Andreopoulos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>David</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><forename type="middle">L</forename><surname>Berg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Mckinstry</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Davis</forename><forename type="middle">R</forename><surname>Melano</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Barch</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the National Academy of Sciences</title>
+		<meeting>the National Academy of Sciences</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page">201604850</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Deep residual learning for image recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kaiming</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiangyu</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shaoqing</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Sun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The IEEE Conference on Computer Vision and Pattern Recognition (CVPR)</title>
+		<imprint>
+			<date type="published" when="2016-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Exploring the limits of language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Wu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1602.02410</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Imagenet classification with deep convolutional neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="1097" to="1105" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">On the difficulty of training recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Razvan</forename><surname>Pascanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ICML</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="1310" to="1318" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Long short-term memory recurrent neural network architectures for large scale acoustic modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hasim</forename><surname>Sak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Andrew</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Françoise</forename><surname>Senior</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Beaufays</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Interspeech</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="338" to="342" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Outrageously large neural networks: The sparsely-gated mixture-of-experts layer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Azalia</forename><surname>Mirhoseini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Krzysztof</forename><surname>Maziarz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andy</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1701.06538</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Convolutional lstm network: A machine learning approach for precipitation nowcasting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xingjian</forename><surname>Shi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhourong</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dit-Yan</forename><surname>Yeung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wai-Kin</forename><surname>Wong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang-Chun</forename><surname>Woo</surname></persName>
+		</author>
+		<ptr target="http://dl.acm.org/citation.cfm?id=2969239.2969329" />
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 28th International Conference on Neural Information Processing Systems, NIPS&apos;15</title>
+		<meeting>the 28th International Conference on Neural Information Processing Systems, NIPS&apos;15<address><addrLine>Cambridge, MA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>MIT Press</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="802" to="810" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Very deep convolutional networks for large-scale image recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karen</forename><surname>Simonyan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Zisserman</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.1556</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Google&apos;s neural machine translation system</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhifeng</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Quoc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohammad</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wolfgang</forename><surname>Norouzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maxim</forename><surname>Macherey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuan</forename><surname>Krikun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qin</forename><surname>Cao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Macherey</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.08144</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Bridging the gap between human and machine translation</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Achieving human parity in conversational speech recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wayne</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jasha</forename><surname>Droppo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuedong</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Frank</forename><surname>Seide</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Seltzer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andreas</forename><surname>Stolcke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dong</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Zweig</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1610.05256</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wojciech</forename><surname>Zaremba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.2329</idno>
+		<title level="m">Ilya Sutskever, and Oriol Vinyals. Recurrent neural network regularization</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

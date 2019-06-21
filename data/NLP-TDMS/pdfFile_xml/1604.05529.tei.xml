@@ -1,0 +1,664 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:06+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Multilingual Part-of-Speech Tagging with Bidirectional Long Short-Term Memory Models and Auxiliary Loss</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barbara</forename><surname>Plank</surname></persName>
+							<email>b.plank@rug.nl</email>
+							<affiliation key="aff0">
+								<orgName type="institution">University of Groningen</orgName>
+								<address>
+									<country key="NL">The Netherlands</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+							<email>soegaard@hum.ku.dk</email>
+							<affiliation key="aff1">
+								<orgName type="institution">University of Copenhagen</orgName>
+								<address>
+									<country key="DK">Denmark</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+							<email>yoav.goldberg@gmail.com</email>
+							<affiliation key="aff2">
+								<orgName type="institution">Ilan University</orgName>
+								<address>
+									<country key="IL">Israel</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Multilingual Part-of-Speech Tagging with Bidirectional Long Short-Term Memory Models and Auxiliary Loss</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Bidirectional long short-term memory (bi-LSTM) networks have recently proven successful for various NLP sequence mod-eling tasks, but little is known about their reliance to input representations, target languages, data set size, and label noise. We address these issues and evaluate bi-LSTMs with word, character, and unicode byte embeddings for POS tagging. We compare bi-LSTMs to traditional POS taggers across languages and data sizes. We also present a novel bi-LSTM model, which combines the POS tagging loss function with an auxiliary loss function that accounts for rare words. The model obtains state-of-the-art performance across 22 languages, and works especially well for morphologically complex languages. Our analysis suggests that bi-LSTMs are less sensitive to training data size and label corruptions (at small noise levels) than previously assumed.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Recently, bidirectional long short-term memory networks (bi-LSTM) ( <ref type="bibr" target="#b11">Graves and Schmidhuber, 2005</ref>; Hochreiter and Schmidhuber, 1997) have been used for language modelling ( <ref type="bibr" target="#b18">Ling et al., 2015)</ref>, POS tagging ( <ref type="bibr" target="#b18">Ling et al., 2015;</ref><ref type="bibr" target="#b18">Wang et al., 2015)</ref>, transition-based dependency parsing ( <ref type="bibr" target="#b1">Ballesteros et al., 2015;</ref><ref type="bibr" target="#b16">Kiperwasser and Goldberg, 2016)</ref>, fine-grained sentiment analysis ( <ref type="bibr" target="#b19">Liu et al., 2015)</ref>, syntactic chunking ( <ref type="bibr" target="#b14">Huang et al., 2015)</ref>, and semantic role labeling ( <ref type="bibr" target="#b26">Zhou and Xu, 2015)</ref>. LSTMs are recurrent neural networks (RNNs) in which layers are designed to prevent vanishing gradients. Bidirectional LSTMs make a backward and forward pass through the sequence before passing on to the next layer. For further details, see <ref type="bibr" target="#b10">(Goldberg, 2015;</ref><ref type="bibr" target="#b4">Cho, 2015)</ref>.</p><p>We consider using bi-LSTMs for POS tagging. Previous work on using deep learning-based methods for POS tagging has focused either on a single language <ref type="bibr" target="#b7">(Collobert et al., 2011;</ref><ref type="bibr" target="#b18">Wang et al., 2015</ref>) or a small set of languages ( <ref type="bibr" target="#b18">Ling et al., 2015;</ref><ref type="bibr" target="#b21">Santos and Zadrozny, 2014</ref>). Instead we evaluate our models across 22 languages. In addition, we compare performance with representations at different levels of granularity (words, characters, and bytes). These levels of representation were previously introduced in different efforts <ref type="bibr" target="#b5">(Chrupała, 2013;</ref><ref type="bibr" target="#b25">Zhang et al., 2015;</ref><ref type="bibr" target="#b18">Ling et al., 2015;</ref><ref type="bibr" target="#b21">Santos and Zadrozny, 2014;</ref><ref type="bibr" target="#b9">Gillick et al., 2016;</ref><ref type="bibr" target="#b15">Kim et al., 2015</ref>), but a comparative evaluation was missing.</p><p>Moreover, deep networks are often said to require large volumes of training data. We investigate to what extent bi-LSTMs are more sensitive to the amount of training data and label noise than standard POS taggers.</p><p>Finally, we introduce a novel model, a bi-LSTM trained with auxiliary loss. The model jointly predicts the POS and the log frequency of the word. The intuition behind this model is that the auxiliary loss, being predictive of word frequency, helps to differentiate the representations of rare and common words. We indeed observe performance gains on rare and out-of-vocabulary words. These performance gains transfer into general improvements for morphologically rich languages.</p><p>Contributions In this paper, we a) evaluate the effectiveness of different representations in biLSTMs, b) compare these models across a large set of languages and under varying conditions (data size, label noise) and c) propose a novel bi-LSTM model with auxiliary loss (LOGFREQ).</p><p>Recurrent neural networks (RNNs) <ref type="bibr" target="#b8">(Elman, 1990)</ref> allow the computation of fixed-size vector representations for word sequences of arbitrary length. An RNN is a function that reads in n vectors x 1 , ..., x n and produces an output vector h n , that depends on the entire sequence x 1 , ..., x n . The vector h n is then fed as an input to some classifier, or higher-level RNNs in stacked/hierarchical models. The entire network is trained jointly such that the hidden representation captures the important information from the sequence for the prediction task.</p><p>A bidirectional recurrent neural network (bi-RNN) ( <ref type="bibr" target="#b11">Graves and Schmidhuber, 2005</ref>) is an extension of an RNN that reads the input sequence twice, from left to right and right to left, and the encodings are concatenated. The literature uses the term bi-RNN to refer to two related architectures, which we refer to here as "context bi-RNN" and "sequence bi-RNN". In a sequence bi-RNN (bi-RNN seq ), the input is a sequence of vectors x 1:n and the output is a concatenation (•) of a forward (f ) and reverse (r) RNN each reading the sequence in a different directions:</p><formula xml:id="formula_0">v = bi-RNN seq (x 1:n ) = RNN f (x 1:n ) • RNN r (x n:1 )</formula><p>In a context bi-RNN (bi-RNN ctx ), we get an additional input i indicating a sequence position, and the resulting vectors v i result from concatenating the RNN encodings up to i:</p><formula xml:id="formula_1">v i = bi-RNN ctx (x 1:n , i) = RNN f (x 1:i ) • RNN r (x n:i )</formula><p>Thus, the state vector v i in this bi-RNN encodes information at position i and its entire sequential context. Another view of the context bi-RNN is of taking a sequence x 1:n and returning the corresponding sequence of state vectors v 1:n .</p><p>LSTMs <ref type="bibr" target="#b12">(Hochreiter and Schmidhuber, 1997</ref>) are a variant of RNNs that replace the cells of RNNs with LSTM cells that were designed to prevent vanishing gradients. Bidirectional LSTMs are the bi-RNN counterpart based on LSTMs.</p><p>Our basic bi-LSTM tagging model is a context bi-LSTM taking as input word embeddings w. We incorporate subtoken information using an hierarchical bi-LSTM architecture ( <ref type="bibr" target="#b18">Ling et al., 2015;</ref><ref type="bibr" target="#b1">Ballesteros et al., 2015</ref>). We compute subtokenlevel (either characters c or unicode byte b) embeddings of words using a sequence bi-LSTM at the lower level. This representation is then concatenated with the (learned) word embeddings vector w which forms the input to the context bi-LSTM at the next layer. This model, illustrated in <ref type="figure" target="#fig_0">Figure 1</ref> (lower part in left <ref type="figure">figure)</ref>, is inspired by <ref type="bibr">Balles- teros et al. (2015)</ref>. We also test models in which we only keep sub-token information, e.g., either both byte and character embeddings <ref type="figure" target="#fig_0">(Figure 1</ref>, right) or a single (sub-)token representation alone. w. Left: FREQBIN, our multi-task bi-LSTM that predicts at every time step the tag and the frequency class for the token.</p><p>In our novel model, cf. <ref type="figure" target="#fig_0">Figure 1</ref> left, we train the bi-LSTM tagger to predict both the tags of the sequence, as well as a label that represents the log frequency of the token as estimated from the training data. Our combined cross-entropy loss is now: L( ˆ y t , y t ) + L( ˆ y a , y a ), where t stands for a POS tag and a is the log frequency label, i.e., a = int(log(f req train (w)). Combining this log frequency objective with the tagging task can be seen as an instance of multi-task learning in which the labels are predicted jointly. The idea behind this model is to make the representation predictive for frequency, which encourages the model to not share representations between common and rare words, thus benefiting the handling of rare tokens.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Experiments</head><p>All bi-LSTM models were implemented in CNN/pycnn, 1 a flexible neural network library. For all models we use the same hyperparameters, which were set on English dev, i.e., SGD training with cross-entropy loss, no mini-batches, 20 epochs, default learning rate (0.1), 128 dimensions for word embeddings, 100 for character and byte embeddings, 100 hidden states and Gaussian noise with σ=0.2. As training is stochastic in nature, we use a fixed seed throughout. Embeddings are not initialized with pre-trained embeddings, except when reported otherwise. In that case we use offthe-shelf polyglot embeddings (Al- <ref type="bibr" target="#b0">Rfou et al., 2013</ref>). <ref type="bibr">2</ref> No further unlabeled data is considered in this paper. The code is released at: https: //github.com/bplank/bilstm-aux Taggers We want to compare POS taggers under varying conditions. We hence use three different types of taggers: our implementation of a bi-LSTM; TNT <ref type="bibr" target="#b2">(Brants, 2000</ref>)-a second order HMM with suffix trie handling for OOVs. We use TNT as it was among the best performing taggers evaluated in <ref type="bibr" target="#b13">Horsmann et al. (2015)</ref>. <ref type="bibr">3</ref> We complement the NN-based and HMM-based tagger with a CRF tagger, using a freely available implementation ( <ref type="bibr">Plank et al., 2014</ref>) based on crfsuite.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Datasets</head><p>For the multilingual experiments, we use the data from the Universal Dependencies project v1.2 (Nivre et al., 2015) (17 POS) with the canonical data splits. For languages with token segmentation ambiguity we use the provided gold segmentation. If there is more than one treebank per language, we use the treebank that has the canonical language name (e.g., Finnish instead of Finnish-FTB). We consider all languages that have at least 60k tokens and are distributed with word forms, resulting in 22 languages. We also report accuracies on WSJ (45 POS) using the standard splits <ref type="bibr" target="#b6">(Collins, 2002;</ref><ref type="bibr" target="#b20">Manning, 2011</ref>). The overview of languages is provided in <ref type="table">Table 1</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Results</head><p>Our results are given in <ref type="table" target="#tab_1">Table 2</ref>. First of all, notice that TNT performs remarkably well across the 22 languages, closely followed by CRF. The bi-LSTM tagger ( w) without lower-level bi-LSTM for subtokens falls short, outperforms the traditional taggers only on 3 languages. The bi-LSTM 2 https://sites.google.com/site/rmyeid/ projects/polyglot 3 They found TreeTagger was closely followed by HunPos, a re-implementation of TnT, and Stanford and ClearNLP were lower ranked. In an initial investigation, we compared Tnt, HunPos and TreeTagger and found Tnt to be consistently better than Treetagger, Hunpos followed closely but crashed on some languages (e.g., Arabic).  <ref type="table">ar non-IE  Semitic  he non-IE  Semitic  bg Indoeuropean  Slavic  hi Indoeuropean Indo-Iranian  cs Indoeuropean  Slavic  hr Indoeuropean Slavic  da Indoeuropean  Germanic  id non-IE  Austronesian  de Indoeuropean  Germanic  it  Indoeuropean Romance  en Indoeuropean  Germanic  nl Indoeuropean Germanic  es Indoeuropean  Romance  no Indoeuropean Germanic  eu Language isolate  pl Indoeuropean Slavic  fa Indoeuropean  Indo-Iranian pt Indoeuropean Romance  fi  non-IE  Uralic  sl Indoeuropean Slavic  fr Indoeuropean  Romance  sv Indoeuropean Germanic   Table 1</ref>: Grouping of languages.</p><p>model clearly benefits from character representations. The model using characters alone ( c) works remarkably well, it improves over TNT on 9 languages (incl. Slavic and Nordic languages). The combined word+character representation model is the best representation, outperforming the baseline on all except one language (Indonesian), providing strong results already without pre-trained embeddings. This model ( w + c) reaches the biggest improvement (more than +2% accuracy) on Hebrew and Slovene. Initializing the word embeddings (+POLYGLOT) with off-the-shelf languagespecific embeddings further improves accuracy. The only system we are aware of that evaluates on UD is <ref type="bibr" target="#b9">Gillick et al. (2016)</ref> (last column). However, note that these results are not strictly comparable as they use the earlier UD v1.1 version.</p><p>The overall best system is the multi-task bi-LSTM FREQBIN (it uses w + c and POLYGLOT initialization for w). While on macro average it is on par with bi-LSTM w + c, it obtains the best results on 12/22 languages, and it is successful in predicting POS for OOV tokens (cf. <ref type="table" target="#tab_1">Table 2</ref> OOV ACC columns), especially for languages like Arabic, Farsi, Hebrew, Finnish.</p><p>We examined simple RNNs and confirm the finding of <ref type="bibr" target="#b18">Ling et al. (2015)</ref> that they performed worse than their LSTM counterparts. Finally, the bi-LSTM tagger is competitive on WSJ, cf. Table 3.</p><p>Rare words In order to evaluate the effect of modeling sub-token information, we examine accuracy rates at different frequency rates. <ref type="figure" target="#fig_3">Figure 2</ref> shows absolute improvements in accuracy of bi-LSTM w + c over mean log frequency, for different language families. We see that especially for Slavic and non-Indoeuropean languages, having high morphologic complexity, most of the improvement is obtained in the Zipfian tail. Rare tokens benefit from the sub-token representations.    Data set size Prior work mostly used large data sets when applying neural network based approaches ( <ref type="bibr" target="#b25">Zhang et al., 2015)</ref>. We evaluate how brittle such models are with respect to their more traditional counterparts by training bi-LSTM ( w + c without Polyglot embeddings) for increas-</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>WSJ Accuracy</head><p>Convnet (Santos and Zadrozny, 2014) 97.32 Convnet reimplementation ( <ref type="bibr" target="#b18">Ling et al., 2015)</ref> 96.80 Bi-RNN ( <ref type="bibr" target="#b18">Ling et al., 2015)</ref> 95.93 Bi-LSTM ( <ref type="bibr" target="#b18">Ling et al., 2015)</ref> 97.36</p><p>Our bi-LSTM w+ c 97.22 ing amounts of training instances (number of sentences). The learning curves in <ref type="figure" target="#fig_4">Figure 3</ref> show similar trends across language families. <ref type="bibr">4</ref> TNT is better with little data, bi-LSTM is better with more data, and bi-LSTM always wins over CRF.</p><p>The bi-LSTM model performs already surprisingly well after only 500 training sentences. For non-Indoeuropean languages it is on par and above the other taggers with even less data (100 sentences). This shows that the bi-LSTMs often needs more data than the generative markovian model, but this is definitely less than what we expected.</p><p>Label Noise We investigated the susceptibility of the models to noise, by artificially corrupting training labels. Our initial results show that at low noise rates, bi-LSTMs and TNT are affected similarly, their accuracies drop to a similar degree. Only at higher noise levels (more than 30% corrupted labels), bi-LSTMs are less robust, showing higher drops in accuracy compared to TNT. This is the case for all investigated language families.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Related Work</head><p>Character embeddings were first introduced by Sutskever et al. (2011) for language modeling. Early applications include text classification <ref type="bibr" target="#b5">(Chrupała, 2013;</ref><ref type="bibr" target="#b25">Zhang et al., 2015)</ref>. Recently, these representations were successfully applied to a range of structured prediction tasks. For POS tagging, <ref type="bibr" target="#b21">Santos and Zadrozny (2014)</ref> were the first to propose character-based models. They use a convolutional neural network (CNN; or convnet) and evaluated their model on English (PTB) and Portuguese, showing that the model achieves state-of-the-art performance close to taggers using carefully designed feature templates. <ref type="bibr" target="#b18">Ling et al. (2015)</ref> extend this line and compare a novel bi-LSTM model, learning word representations through character embeddings. They evaluate their model on a language modeling and POS tagging setup, and show that bi-LSTMs outperform the CNN approach of <ref type="bibr" target="#b21">Santos and Zadrozny (2014)</ref>. Similarly, <ref type="bibr" target="#b17">Labeau et al. (2015)</ref> evaluate character embeddings for German. Bi-LSTMs for POS tagging are also reported in <ref type="bibr" target="#b18">Wang et al. (2015)</ref>, however, they only explore word embeddings, orthographic information and evaluate on WSJ only. A related study is <ref type="bibr" target="#b3">Cheng et al. (2015)</ref> who propose a multi-task RNN for named entity recognition by jointly predicting the next token and current token's name label. Our model is simpler, it uses a very coarse set of labels rather then integrating an entire language modeling task which is computationally more expensive. An interesting recent study is <ref type="bibr" target="#b9">Gillick et al. (2016)</ref>, they build a single byte-to-span model for multiple languages based on a sequence-to-sequence RNN ( <ref type="bibr" target="#b23">Sutskever et al., 2014</ref>) achieving impressive results. We would like to extend this work in their direction.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Conclusions</head><p>We evaluated token and subtoken-level representations for neural network-based part-of-speech tagging across 22 languages and proposed a novel multi-task bi-LSTM with auxiliary loss. The auxiliary loss is effective at improving the accuracy of rare words. Subtoken representations are necessary to obtain a state-of-the-art POS tagger, and character embeddings are particularly helpful for nonIndoeuropean and Slavic languages.</p><p>Combining them with word embeddings in a hierarchical network provides the best representation. The bi-LSTM tagger is as effective as the CRF and HMM taggers with already as little as 500 training sentences, but is less robust to label noise (at higher noise rates).</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Right: bi-LSTM, illustrated with b + c (bytes and characters), for w + c replace b with words w. Left: FREQBIN, our multi-task bi-LSTM that predicts at every time step the tag and the frequency class for the token.</figDesc><graphic url="image-1.png" coords="2,307.28,196.52,218.26,155.24" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>BASELINES</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Absolute improvements of bi-LSTM ( w + c) over TNT vs mean log frequency.</figDesc><graphic url="image-2.png" coords="4,72.00,497.47,218.26,122.39" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Amount of training data (number of sentences) vs tagging accuracy.</figDesc><graphic url="image-3.png" coords="5,72.00,62.81,218.27,270.56" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Tagging accuracies on UD 1.2 test sets. 
+w: words, c: characters, b: bytes. Bold/ †: best 
+accuracy/representation; +POLYGLOT: using pre-trained embeddings. FREQBIN: our multi-task model. 
+OOV ACC: accuracies on OOVs. BTS: best results in Gillick et al. (2016) (not strictly comparable). 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Comparison POS accuracy on WSJ; bi-
+LSTM: 30 epochs, σ=0.3, no POLYGLOT. 
+
+</table></figure>
+
+			<note place="foot" n="1"> https://github.com/clab/cnn</note>
+
+			<note place="foot" n="4"> We observe the same pattern with more, 40, iterations.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We thank the anonymous reviewers for their feedback. AS is funded by the ERC Starting Grant LOWLANDS No. 313695. YG is supported by The Israeli Science Foundation (grant number 1555/15) and a Google Research Award.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Polyglot: Distributed Word Representations for Multilingual NLP</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rami</forename><surname>Al-Rfou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bryan</forename><surname>Perozzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Skiena</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+	<note>In CoNLL</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Improved Transition-based Parsing by Modeling Characters instead of Words with LSTMs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Tnt: a statistical part-ofspeech tagger</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thorsten</forename><surname>Brants</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the sixth conference on Applied natural language processing</title>
+		<meeting>the sixth conference on Applied natural language processing</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Open-Domain Name Error Detection using a MultiTask RNN</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Fang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mari</forename><surname>Ostendorf</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Natural language understanding with distributed representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<idno>abs/1511.07916</idno>
+	</analytic>
+	<monogr>
+		<title level="j">ArXiv</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Text segmentation with character-level text embeddings</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Grzegorz</forename><surname>Chrupała</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Workshop on Deep Learning for Audio, Speech and Language Processing</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+	<note>ICML</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Discriminative training methods for Hidden Markov Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Natural language processing (almost) from scratch</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronan</forename><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Léon</forename><surname>Bottou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Karlen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pavel</forename><surname>Kuksa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="2493" to="2537" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Finding structure in time</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Jeffrey L Elman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Cognitive science</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="179" to="211" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Multilingual language processing from bytes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Gillick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cliff</forename><surname>Brunk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note>Oriol Vinyals, and Amarnag Subramanya</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">A primer on neural network models for natural language processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+		<idno>abs/1510.00726</idno>
+	</analytic>
+	<monogr>
+		<title level="j">ArXiv</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Framewise phoneme classification with bidirectional lstm and other neural network architectures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Networks</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="602" to="610" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Fast or accurate?-a comparative evaluation of pos tagging models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tobias</forename><surname>Horsmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolai</forename><surname>Erbs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Torsten</forename><surname>Zesch</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference of the German Society for Computational Linguistics and Language Technology</title>
+		<meeting>the International Conference of the German Society for Computational Linguistics and Language Technology</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiheng</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Yu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1508.01991</idno>
+		<title level="m">Bidirectional LSTM-CRF models for sequence tagging</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoon</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yacine</forename><surname>Jernite</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Sontag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander M</forename><surname>Rush</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1508.06615</idno>
+		<title level="m">Character-aware neural language models</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Simple and Accurate Dependency Parsing Using Bidirectional LSTM Feature Representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Kiperwasser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Goldberg</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Non-lexical neural architecture for fine-grained pos tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthieu</forename><surname>Labeau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Löser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexandre</forename><surname>Allauzen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Finding function in form: Compositional character models for open vocabulary word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alan</forename><forename type="middle">W</forename><surname>Black</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Isabel</forename><surname>Trancoso</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ramon</forename><surname>Fermandez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Silvio</forename><surname>Amir</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luis</forename><surname>Marujo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tiago</forename><surname>Luis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Finegrained opinion mining with recurrent neural networks and word embeddings</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pengfei</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shafiq</forename><surname>Joty</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Helen</forename><surname>Meng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Part-of-speech tagging from 97% to 100%: is it time for some linguistics?</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Christopher D Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computational Linguistics and Intelligent Text Processing</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Learning character-level representations for part-of-speech tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cicero</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bianca</forename><surname>Santos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zadrozny</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICML</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Generating text with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Martens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+	<note>In ICML</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Sequence to sequence learning with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc V</forename><surname>Le</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">Part-of-speech tagging with bidirectional long short-term memory recurrent neural network. pre-print</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peilu</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yao</forename><surname>Qian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Frank</forename><forename type="middle">K</forename><surname>Soong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lei</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hai</forename><surname>Zhao</surname></persName>
+		</author>
+		<idno>abs/1510.06168</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Character-level convolutional networks for text classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiang</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junbo</forename><surname>Zhao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yann</forename><surname>Lecun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="649" to="657" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">End-to-end learning of semantic role labeling using recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jie</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Xu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

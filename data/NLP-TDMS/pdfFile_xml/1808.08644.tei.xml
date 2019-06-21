@@ -1,0 +1,1063 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:45+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Predicting Semantic Relations using Global Graph Properties</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+				<date type="published" when="2018-08-27">27 Aug 2018</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuval</forename><surname>Pinter</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">School of Interactive Computing</orgName>
+								<orgName type="institution">Georgia Institute of Technology</orgName>
+								<address>
+									<settlement>Atlanta</settlement>
+									<region>GA</region>
+								</address>
+							</affiliation>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Eisenstein</surname></persName>
+							<email>jacobe@gatech.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">School of Interactive Computing</orgName>
+								<orgName type="institution">Georgia Institute of Technology</orgName>
+								<address>
+									<settlement>Atlanta</settlement>
+									<region>GA</region>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Predicting Semantic Relations using Global Graph Properties</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date type="published" when="2018-08-27">27 Aug 2018</date>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Semantic graphs, such as WordNet, are resources which curate natural language on two distinguishable layers. On the local level, individual relations between synsets (seman-tic building blocks) such as hypernymy and meronymy enhance our understanding of the words used to express their meanings. Globally , analysis of graph-theoretic properties of the entire net sheds light on the structure of human language as a whole. In this paper , we combine global and local properties of semantic graphs through the framework of Max-Margin Markov Graph Models (M3GM), a novel extension of Exponential Random Graph Model (ERGM) that scales to large multi-relational graphs. We demonstrate how such global modeling improves performance on the local task of predicting semantic relations between synsets, yielding new state-of-the-art results on the WN18RR dataset, a challenging version of WordNet link prediction in which &quot;easy&quot; reciprocal cases are removed. In addition, the M3GM model identifies multire-lational motifs that are characteristic of well-formed lexical semantic ontologies.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Semantic graphs, such as WordNet <ref type="bibr" target="#b6">(Fellbaum, 1998)</ref>, encode the structural qualities of language as a representation of human knowledge. On the local level, they describe connections between specific semantic concepts, or synsets, through individual edges representing relations such as hypernymy ('is-a') or meronymy ('is-part-of'); on the global level, they encode emergent regular properties in the induced relation graphs. Local properties have been subject to extensive study in recent years via the task of relation prediction, where individual edges are found based mostly on distributional methods that embed synsets and relations into a vector space (e.g. <ref type="bibr" target="#b29">Socher et al., 2013;</ref><ref type="bibr" target="#b3">Bordes et al., 2013;</ref><ref type="bibr" target="#b16">Neelakantan et al., 2015)</ref>.</p><p>In contrast, while the structural regularity and significance of global aspects of semantic graphs is wellattested ( <ref type="bibr" target="#b27">Sigman and Cecchi, 2002</ref>), global properties have rarely been used in prediction settings. In this paper, we show how global semantic graph features can facilitate in local tasks such as relation prediction.</p><p>To motivate this approach, consider the hypothetical hypernym graph fragments in <ref type="figure" target="#fig_0">Figure 1</ref>: in (a), the semantic concept (synset) 'catamaran' has a single hypernym, 'boat'. This is a typical property across a standard hypernym graph. In (b), the synset 'cat' has two hypernyms, an unlikely event. While a local relation prediction model might mistake the relation between 'cat' and 'boat' to be plausible, for whatever reason, a high-order graphstructure-aware model should be able to discard it based on the knowledge that a synset should not have more than one hypernym. In (c), an impossible situation arises: a cycle in the hypernym graph leads each of the participating synsets to be predicted by transitivity as its own hypernym, contrary to the relation's definition. However, a purely local model has no explicit mechanism for rejecting such an outcome.</p><p>In this paper, we examine the effect of global graph properties on the link structure via the WordNet relation prediction task. Our hypothesis is that features extracted from the entire graph can help constrain local predictions to structurally sound ones ( <ref type="bibr" target="#b8">Guo et al., 2007)</ref>. Such features are often manifested as aggregate counts of small subgraph structures, known as motifs, such as the number of nodes with two or more outgoing edges, or the number of cycles of length 3. Returning to the example in <ref type="figure" target="#fig_0">Figure 1</ref>, each of these features will be affected when graphs (b) and (c) are evaluated, respectively.</p><p>To estimate weights on local and global graph features, we build on the Exponential Random Graph Model (ERGM), a log-linear model over networks utilizing global graph features <ref type="bibr" target="#b10">(Holland and Leinhardt, 1981)</ref>. In ERGMs, the likelihood of a graph is computed by exponentiating a weighted sum of the features, and then normalizing over all possible graphs. This normalization term grows exponentially in the number of nodes, and in general cannot be decomposed into smaller parts. Approximations are therefore necessary to fit ERGMs on graphs with even a few dozen nodes, and the largest known ERGMs scale only to thousands of nodes ( <ref type="bibr" target="#b25">Schmid and Desmarais, 2017)</ref>. This is insufficient for WordNet, which has an order of 10 5 nodes.</p><p>We extend the ERGM framework in several ways. First, we replace the maximum likelihood objective with a margin-based objective, which compares the observed network against alternative networks; we call the resulting model the MaxMargin Markov Graph Model (M3GM), drawing on ideas from structured prediction ( <ref type="bibr" target="#b32">Taskar et al., 2004</ref>). The gradient of this loss is approximated by importance sampling over candidate negative edges, using a local relational model as a proposal distribution. The complexity of each epoch of estimation is thus linear in the number of edges, making it possible to scale up to the 10 5 nodes in WordNet. 1 Second, we address the multirelational nature of semantic graphs, by incorporating a combinatorial set of labeled motifs. Finally, we link graph-level relational features with distributional information, by combining the M3GM with a dyad-level model over word sense embeddings.</p><p>We train M3GM as a re-ranker, which we apply to a a strong local-feature baseline on the WN18RR dataset <ref type="bibr" target="#b5">(Dettmers et al., 2018)</ref>. This yields absolute improvements of 3-4 points on all commonly-used metrics. Model inspection reveals that M3GM assigns importance to features from all relations, and captures some interesting inter-relational properties that lend insight into the overall structure of WordNet. <ref type="bibr">2</ref> </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>Relational prediction in semantic graphs. Recent approaches to relation prediction in semantic graphs generally start by embedding the semantic concepts into a shared space and modeling relations by some operator that induces a score for an embedding pair input. We use several of these techniques as base models <ref type="bibr" target="#b19">(Nickel et al., 2011;</ref><ref type="bibr" target="#b3">Bordes et al., 2013;</ref><ref type="bibr" target="#b35">Yang et al., 2014</ref>); detailed description of these methods is postponed to Section 3.2. <ref type="bibr" target="#b29">Socher et al. (2013)</ref> generalize over the approach of <ref type="bibr" target="#b19">Nickel et al. (2011)</ref> by using a bilinear tensor which assigns multiple parameters for each relation; <ref type="bibr" target="#b26">Shi and Weninger (2017)</ref> project the node embeddings in a translational model similar to that of <ref type="bibr" target="#b3">Bordes et al. (2013)</ref>; <ref type="bibr" target="#b5">Dettmers et al. (2018)</ref> apply a convolutional neural network by reshaping synset embeddings to 2-dimensional matrices. None of these embedding-based approaches incorporate structural information; in <ref type="bibr">1</ref> Although in principle the number of edges could grow quadratically with the number of nodes, <ref type="bibr" target="#b30">Steyvers and Tenenbaum (2005)</ref> show that semantic graphs like WordNet tend to be very sparse, so that the number of observed edges grows roughly linearly with the number of nodes. <ref type="bibr">2</ref> Our code is available at http://www.github.com/yuvalpinter/m3gm. general, improvements in embedding-based methods are expected to be complementary to our approach.</p><p>Some recent works compose single edges into more intricate motifs, such as <ref type="bibr" target="#b9">Guu et al. (2015)</ref>, who define a task of path prediction and compose various functions to solve it. They find that compositionalized bilinear models perform best on WordNet. <ref type="bibr" target="#b14">Minervini et al. (2017)</ref> train link-prediction models against an adversary that produces examples which violate structural constraints such as symmetry and transitivity. Another line of work builds on local neighborhoods of relation interactions and automatic detection of relations from syntactically parsed text ( <ref type="bibr" target="#b22">Riedel et al., 2013;</ref>. <ref type="bibr" target="#b24">Schlichtkrull et al. (2017)</ref> use Graph Convolutional Networks to predict relations while considering high-order neighborhood properties of the nodes in question. In general, these methods aggregate information over local neighborhoods, but do not explicitly model structural motifs.</p><p>Our model introduces interaction features between relations (e.g., hypernyms and meronyms) for the goal of relation prediction. To our knowledge, this is the first time that relation interaction is explicitly modeled into a relation prediction task. Within the ERGM framework, <ref type="bibr" target="#b12">Lu et al. (2010)</ref> train a limited set of combinatory path features for social network link prediction.</p><p>Scaling exponential random graph models. The problem of approximating the denominator of the ERGM probability has been an active research topic for several decades. Two common approximation methods exist in the literature. In Maximum Pseudolikelihood Estimation (MPLE; <ref type="bibr" target="#b31">Strauss and Ikeda, 1990</ref>), a graph's probability is decomposed into a product of the probability for each edge, which in turn is computed based on the ERGM feature difference between the graph excluding the edge and the full graph. Monte Carlo Maximum Likelihood Estimation (MCMLE; <ref type="bibr" target="#b28">Snijders, 2002</ref>) follows a sampling logic, where a large number of graphs is randomly generated from the overall space under the intuition that the sum of their scores would give a good approximation for the total score mass. The probability for the observed graph is then estimated following normalization conditioned on the sampling distribution, and its precision increases as more samples are gathered. Recent work found that applying a parametric bootstrap can increase the reliability of MPLE, while retaining its superiority in training speed ( <ref type="bibr" target="#b25">Schmid and Desmarais, 2017)</ref>. Despite this result, we opted for an MCMLE-based approach for M3GM, mainly due to the ability to keep the number of edges constant in each sampled graph. This property is important in our setup, since local edge scores added or removed to the overall graph score can occasionally dominate the objective function, giving unintended importance to the overall edge count.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Max-Margin Markov Graph Models</head><p>Consider a graph G = (V, E), where V is a set of vertices and</p><formula xml:id="formula_0">E = {(s i , t i )} |E| i=1</formula><p>is a set of directed edges. The ERGM scoring function defines a probability over G |V | , the set of all graphs with |V | nodes. This probability is defined as a loglinear function,</p><formula xml:id="formula_1">P ERGM (G) ∝ ψ ERGM (G) = exp θ T f (G) , (1)</formula><p>where f is a feature function, from graphs to a vector of feature counts. Features are typically counts of motifs -small subgraph structures -as described in the introduction. The vector θ is the parameter to estimate. In this section we discuss our adaptation of this model to the domain of semantic graphs, leveraging their idiosyncratic properties. Semantic graphs are composed of multiple relation types, which the feature space needs to accommodate; their nodes are linguistic constructs (semantic concepts) associated with complex interpretations, which can benefit the graph representation through incorporating their embeddings in R d into a new scoring model. We then present our M3GM framework to perform reliable and efficient parameter estimation on the new model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Graph Motifs as Features</head><p>Based on common practice in ERGM feature extraction (e.g., <ref type="bibr" target="#b15">Morris et al., 2008)</ref>, we select the following graph features as a basis:</p><p>• Total edge count;</p><p>• Number of cycles of length k, for k ∈ {2, 3};</p><p>• Number of nodes with exactly k outgoing (incoming) edges, for k ∈ {1, 2, 3};</p><p>• Number of nodes with at least k outgoing (incoming) edges, for k ∈ {1, 2, 3};</p><p>• Number of paths of length 2;</p><p>• Transitivity: the proportion of length-2 paths u → v → w where an edge u → w also exists.</p><p>Semantic graphs are multigraphs, where multiple relationships (hypernymy, meronymy, derivation, etc.) are overlaid atop a common set of nodes. For each relation r in the relation inventory R, we denote its edge set as E r , and redefine E = r∈R E r , the union of all labeled edges. Some relations do not produce a connected graph, while others may coincide with each other frequently, possibly in regular but intricate patterns: for example, derivation relations tend to occur between synsets in the higher, more abstract levels of the hypernym graph. We represent this complexity by expanding the feature space to include relation-sensitive combinatory motifs. For each feature template from the basis list above, we extract features for all possible combinations of relation types existing in the graph. Depending on the feature type, these could be relation singletons, pairs, or triples; they may be order-sensitive or order-insensitive. For example:</p><p>• A combinatory 'transitivity' feature will be extracted for the proportion of paths u • A combinatory '2-outgoing' feature will be extracted for the number of nodes with exactly one derivation and one has part.</p><p>The number of features thus scales in O(|R| K ) for a feature basis which involves up to K edges in any feature, and so our 17 basis features (with K = 3) generate a combinatory feature set with roughly 3,000 features for the 11-relation version of WordNet used in our experiments (see Section 4.1).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Local Score Component</head><p>In classical ERGM application domains such as social media or biological networks, nodes tend to have little intrinsic distinction, or at least little meaningful intrinsic information that may be extracted prior to applying the model. In semantic graphs, however, the nodes represent synsets, which are associated with information that is both valuable to predicting the graph structure and approximable using unsupervised techniques such as embedding into a common d-dimensional vector space based on copious amounts of available data. We thus modify the traditional scoring function from eq. <ref type="formula">(1)</ref> to include node-specific information, by introducing a relation-specific association operator A (r) : V × V → R:</p><formula xml:id="formula_2">ψ ERGM+ (G) = = exp   θ T f (G) + r∈R (s,t)∈Er A (r) (s, t)   .<label>(2)</label></formula><p>The association operator generalizes various models from the relation prediction literature:</p><p>TransE (Bordes et al., 2013) embeds each relation r into a vector in the shared space, representing a 'difference' between sources and targets, to compute the association score under a translational objective,</p><formula xml:id="formula_3">A (r) TRANSE (s, t) = −e s + e r − e t .</formula><p>BiLin (Nickel et al., 2011) embeds relations into full-rank matrices, computing the score by a bilinear multiplication,</p><formula xml:id="formula_4">A (r) BILIN (s, t) = e T s W r e t .</formula><p>DistMult ( <ref type="bibr" target="#b35">Yang et al., 2014</ref>) is a special case of BiLin where the relation matrices are diagonal, reducing the computation to a ternary dot product,</p><formula xml:id="formula_5">A (r) DISTMULT (s, t) = e s , e r , e t = d i=1 e s i e r i e t i .</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Parameter Estimation</head><p>The probabilistic formulation of ERGM requires the computation of a normalization term that sums over all possible graphs with a given number of nodes, G N . The set of such graphs grows at a rate that is super-exponential in the number of nodes, making exact computation intractable even for networks that are orders of magnitude smaller than semantic graphs like WordNet. One solution is to approximate probability using a variant of the Monte Carlo Maximum Likelihood Estimation (MCMLE) produce,</p><formula xml:id="formula_6">log P (G) ≈ log ψ(G) − log |G |V | | M M ˜ G∼G |V | ψ( ˜ G),<label>(3)</label></formula><p>where M is the number of networks˜Gnetworks˜ networks˜G sampled from G |V | , the space of all (multirelational) edge sets on nodes V . Each˜GEach˜ Each˜G is referred to as a negative sample, and the goal of estimation is to assign low scores to these samples, in comparison with the score assigned to the observed network G. Network samples can be obtained using edge-</p><note type="other">wise negative sampling. For each edge s r − → t in the training network G, we remove it temporarily and consider T alternative edges, keeping the source s and relation r constant, and sampling a target˜ttarget˜ target˜t from a proposal distribution Q. Every such substitution produces a new graph˜Ggraph˜ graph˜G, ˜ G =G ∪ {s r − → ˜ t} \ {s r − → t}.</note><p>Large-margin objective. Rather than approximating the log probability, as in MCMLE estimation, we propose a margin loss objective: the log score for each negative sample˜Gsample˜ sample˜G should be below the log score for G by a margin of at least 1. This motivates the hinge loss,</p><formula xml:id="formula_8">L(Θ, ˜ G; G) = 1 − log ψ ERGM+ (G) + log ψ ERGM+ ( ˜ G) + ,<label>(5)</label></formula><p>where (x) + = max(0, x). Recall that the scoring function ψ ERGM+ includes both the local association score for the alternative edge and the global graph features for the resulting graph. However, it is not necessary to recompute all association scores; we need only subtract the association score for the deleted edge s r − → t, and add the association score for the sampled edge s r − → ˜ t. The overall loss function is the sum over N = |E|×T negative samples, { ˜</p><formula xml:id="formula_9">G (i) } N i=1</formula><p>, plus an L 2 regularizer on the model parameters,</p><formula xml:id="formula_10">L(Θ; G) = λ||Θ|| 2 2 + N i=1 L(Θ, ˜ G (i) ).<label>(6)</label></formula><p>Proposal distribution. The proposal distribution Q used to sample negative edges is defined to be proportional to the local association scores of edges not present in the training graph:</p><formula xml:id="formula_11">Q( ˜ t | s, r, G) ∝ 0 s r − → ˜ t ∈ G A (r) (s, ˜ t) s r − → ˜ t / ∈ G .<label>(7)</label></formula><p>By preferring edges that have high association scores, the negative sampler helps push the M3GM parameters away from likely false positives.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Relation Prediction</head><p>We evaluate M3GM on the relation graph edge prediction task. 3 Data for this task consists of a set of labeled edges, i.e. tuples of the form (s, r, t), where s and t denote source and target entities, respectively. Given an edge from an evaluation set, two prediction instances are created by hiding the source and target side, in turn. The predictor is then evaluated on its ability to predict the hidden entity, given the other entity and the relation type. 4</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">WN18RR Dataset</head><p>A popular relation prediction dataset for WordNet is the subset curated as WN18 ( <ref type="bibr" target="#b3">Bordes et al., 2013</ref><ref type="bibr" target="#b2">Bordes et al., , 2014</ref>), containing 18 relations for about 41,000 synsets extracted from WordNet 3.0. It has been noted that this dataset suffers from considerable leakage: edges from reciprocal relations such as hypernym / hyponym appear in one direction in the training set and in the opposite direction in dev / test <ref type="bibr" target="#b29">(Socher et al., 2013;</ref><ref type="bibr" target="#b5">Dettmers et al., 2018)</ref>. This allows trivial rulebased baselines to achieve high performance. To alleviate this concern, Dettmers et al. <ref type="formula" target="#formula_2">(2018)</ref> released the WN18RR set, removing seven relations altogether. However, even this dataset retains four symmetric relation types: also see, derivationally related form, similar to, and verb group. These symmetric relations can be exploited by defaulting to a simple rule-based predictor.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Metrics</head><p>We report the following metrics, common in ranking tasks and in relation prediction in particular: MR, the Mean Rank of the desired entity; MRR, Mean Reciprocal Rank, the main evaluation metric; and H@k, the proportion of Hits (true entities) found in the top k of the lists, for k ∈ {1, 10}.</p><p>Unlike some prior work, we do not type-restrict the possible relation predictions (so, e.g., a verb group link may select a noun, and that would count against the model).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Systems</head><p>We evaluate a single-rule baseline, three association models, and two variants of the M3GM re-ranker trained on top of the best-performing association baseline.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3.1">RULE</head><p>We include a single-rule baseline that predicts a relation between s and t in the evaluation set if the same relation was encountered between t and s in the training set. All other models revert to this baseline for the four symmetric relations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3.2">Association Models</head><p>The next group of systems compute local scores for entity-relation triplets. They all encode entities into embeddings e. Each of these systems, in addition to being evaluated as a baseline, is also used for computing association scores in M3GM, both in the proposal distribution (see Section 3.3) and for creating lists to be re-ranked (see below): TRANSE, BILIN, DISTMULT. For detailed descriptions, see Section 3.2.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3.3">Max-Margin Markov Graph Model</head><p>The M3GM is applied as a re-ranker. For each relation and source (target), the top K candidate targets (sources) are retrieved based on the local association scores. Each candidate edge is introduced into the graph, and the score ψ ERGM+ (G) is used to re-rank the top-K list.</p><p>We add a variant to this protocol where the graph score and association score are weighted by α and 1 − α, repsectively, before being summed. We tune a separate α r for each relation type, using the development set's mean reciprocal rank (MRR). These hyperparameter values offer further insight into where the M3GM signal benefits relation prediction most (see Section 6).</p><p>Since we do not apply the model to the symmetric relations (scored by the RULE baseline), they are excluded from the sampling protocol described in eq. <ref type="formula" target="#formula_8">(5)</ref>, although their edges do contribute to the combinatory graph feature vector f .</p><p>Our default setting backpropagates loss into only the graph weight vector θ. We experiment with a model variant which backpropagates into the association model and synset embeddings as well.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Synset Embeddings</head><p>For the association component of our model, we require embedding representations for WordNet synsets. While unsupervised word embedding techniques go a long way in representing wordforms <ref type="bibr" target="#b4">(Collobert et al., 2011;</ref><ref type="bibr" target="#b13">Mikolov et al., 2013;</ref><ref type="bibr" target="#b20">Pennington et al., 2014</ref>), they are not immediately applicable to the semantically-precise domain of synsets. We explore two methods of transforming pre-trained word embeddings into synset embeddings.</p><p>Averaging. A straightforward way of using word embeddings to create synset embeddings is to collect the words representing the synset as surface form within the WordNet dataset and average their embeddings <ref type="bibr" target="#b29">(Socher et al., 2013</ref>). We apply this method to pre-trained GloVe embeddings ( <ref type="bibr" target="#b20">Pennington et al., 2014</ref>) and pre-trained FastText embeddings ( <ref type="bibr" target="#b0">Bojanowski et al., 2017)</ref>, averaging over the set of all wordforms in all lemmas for each synset, and performing a caseinsensitive query on the embedding dictionary. For example, the synset 'determine.v.01' lists the following lemmas: 'determine', 'find', 'find out', 'ascertain'. Its vector is initialized as</p><formula xml:id="formula_12">1 5 (e determine + 2 · e f ind + e out + e ascertain ).</formula><p>AutoExtend retrofitting + Mimick. AutoExtend is a method developed specifically for embedding WordNet synsets ( <ref type="bibr" target="#b23">Rothe and Schütze, 2015)</ref>, in which pre-trained word embeddings are retrofitted to the tripartite relation graph connecting wordforms, lemmas, and synsets. The resulting synset embeddings occupy the same space as the word embeddings. However, some WordNet senses are not represented in the underlying set of pre-trained word embeddings. <ref type="bibr">5</ref> To handle these cases, we trained a character-based model called MIMICK, which learns to predict embeddings for out-of-vocabulary items based on their spellings ( <ref type="bibr" target="#b21">Pinter et al., 2017</ref>). We do not modify the spelling conventions of WordNet synsets before passing them to Mimick, so e.g. 'mask.n.02' (the second synset corresponding to 'mask' as a noun) acts as the input character sequence as is.</p><p>Random initialization. In preliminary experiments, we attempted training the association models using randomly-initialized embeddings. These proved to be substantially weaker than distributionally-informed embeddings and we do not report their performance in the results section. We view this finding as strong evidence to support  the necessity of a distributional signal in a typelevel semantic setup.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5">Setup</head><p>Following tuning experiments, we train the association models on synset embeddings with d = 300, using a negative log-likelihood loss function over 10 negative samples and iterating over symmetric relations once every five epochs. We optimize the loss using AdaGrad with η = 0.01, and perform early stopping based on the development set mean reciprocal rank. M3GM is trained in four epochs using AdaGrad with η = 0.1. We set M3GM's rerank list size K = 100 and, following tuning, the regularization parameter λ = 0.01 and negative sample count per edge T = 10. Our models are all implemented in DyNet ( <ref type="bibr">Neubig et al., 2017</ref>).  provements when re-ranking the predictions from DISTMULT and BILIN. The M3GM training procedure is not useful in fine-tuning the association model via backpropagation: this degrades the association scores for true edges in the evaluation set, dragging the reranked results along with them to about a 2-point drop relative to the untuned variant. <ref type="table" target="#tab_3">Table 2</ref> shows that our main results transfer onto the test set, with even a slightly larger margin. This could be the result of the greater edge density of the combined training and dev graphs, which enhance the global coherence of the graph structure captured by M3GM features. To support this theory, we tested the M3GM model trained on only the training set, and its test set performance was roughly one point worse on all metrics, as compared with the model trained on the training+dev data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Results</head><p>Synset embedding initialization. We trained association models initialized on AutoExtend+Mimick vectors (see Section 4.4). Their performance, inferior to averaged FastText vectors by about 1-2 MRR points on the dev set, is somewhat at odds with findings from previous experiments on WordNet ( <ref type="bibr" target="#b9">Guu et al., 2015</ref>). We believe the decisive factor in our result is the size of the training corpus used to create FastText embeddings, along with the increase in resulting vocabulary coverage. Out of 124,819 lemma tokens participating in 41,105 synsets, 118,051 had embeddings available (94.6%; type-level coverage 88.1%). Only 530 synsets (1.3%) finished this initialization process with no embedding and were assigned random vectors. AutoExtend, fit for embeddings from <ref type="bibr" target="#b13">Mikolov et al. (2013)</ref> which were trained on a smaller corpus, offers a weaker signal: 13,377 synsets (32%) had no vector and  needed Mimick initialization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Graph Analysis</head><p>As a consequence of the empirical experiment, we aim to find out what M3GM has learned about WordNet. <ref type="table" target="#tab_4">Table 3</ref> presents a sample of topweighted motifs. Lines 1 and 2 demonstrate that the model prefers a broad scattering of targets for the member meronym and has part relations 6 , which are flat and top-downwards hierarchical, respectively, while line 4 shows that a multitude of unique hypernyms is undesired, as expected from a bottom-upwards hierarchical relation. Line 5 enforces the asymmetry of the hypernym relation. Lines 3, 6, and 7 hint at deeper interactions between the different relation types. Line 3 shows that the model assigns positive weights to hypernyms which have derivationally-related forms, suggesting that the derivational equivalence classes in the graph tend to exist in the higher, more abstract levels of the hypernym hierarchy, as noted in Section 3.1. Line 6 captures a semantic conflict: synsets located in the lower, specific levels of the graph can be specified either as instances of abstract concepts 7 , or as members of less specific concrete classes, but not as both. Line 7 may have captured a nodal property -since part of is a relation which holds between nouns, and verb group holds between verbs, this negative weight assignment may be the manifestation of a part-of-speech uniqueness constraint. In addition,   <ref type="table">Table 5</ref>: Graph score weights found for relations on the dev set. Zero means graph score is not considered at all for this relation, one means only it is considered.</p><p>in features 3 and 7 we see the importance of symmetric relations (here derivationally related form and verb group, respectively), which manage to be represented in the graph model despite not being directly trained on. <ref type="table" target="#tab_6">Table 4</ref> presents examples of relation targets successfully re-ranked thanks to these features. The first false connection created a new unique hypernym, 'garden lettuce', downgraded by the graph score through incrementing the count of negatively-weighted feature 4. In the second case, 'vienna' was brought from rank 10 to rank 1 since it incremented the count for the positivelyweighted feature 2, whereas all targets ranked above it by the local model were already has parts, mostly of 'europe'.</p><p>The α r values weighing the importance of M3GM scores in the overall function, found per relation through grid search over the development set, are presented in <ref type="table">Table 5</ref>. It appears that for all but two relations, the best-performing model preferred the signal from the graph features to that from the association model (α r &gt; 0.5). Based on the surface properties of the different relation graphs, the decisive factor seems to be that synset domain topic of and has part pertain mostly to very common concepts, offering good local signal from the synset embeddings, whereas the rest include many long-tail, low-frequency synsets that require help from global features to detect regularity. This paper presents a novel method for reasoning about semantic graphs like WordNet, combining the distributional coherence between individual entity pairs with the structural coherence of network motifs. Applied as a re-ranker, this method substantially improves performance on link prediction. Our analysis of results from <ref type="table" target="#tab_4">Table 3</ref>, lines 6 and 7, suggests that adding graph motifs which qualify their adjacent nodes in terms of syntactic function or semantic category may prove useful.</p><p>From a broader perspective, <ref type="bibr">M3GM</ref> can do more as a probabilistic model than predict individual edges. For example, consider the problem of linking a new entity into a semantic graph, given only the vector embedding. This task involves adding multiple edges simultaneously, while maintaining structural coherence. Our model is capable of scoring bundles of new edges, and in future work, we plan to explore the possibility of combining M3GM with a search algorithm, to automatically extend existing knowledge graphs by linking in one or more new entities.</p><p>We also plan to explore multilingual applications. To some extent, the structural parameters estimated by <ref type="bibr">M3GM</ref> are not specific to English: for example, hypernymy cannot be symmetric in any language. If the structural parameters estimated from English WordNet are transferable to other languages, then the combination of <ref type="bibr">M3GM</ref> and multilingual word embeddings could facilitate the creation and extension of large-scale semantic resources across many languages <ref type="bibr" target="#b7">(Fellbaum and Vossen, 2012;</ref><ref type="bibr" target="#b1">Bond and Foster, 2013;</ref><ref type="bibr" target="#b11">Lafourcade, 2007)</ref>.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Probable (a) and improbable (b-c) structures in a hypothetical hypernym graph.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 1 :</head><label>1</label><figDesc></figDesc><table>Results on development set (all metrics ex-
+cept MR are x100). M3GM lines use TRANSE as their 
+association model. In M3GM αr , the graph component 
+is tuned post-hoc against the local component per rela-
+tion. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 1 presents</head><label>1</label><figDesc></figDesc><table>the results on the development 
+set. Lines 1-3 depict the results for local mod-
+els using averaged FastText embedding initializa-
+tion, showing that the best performance in terms of 
+MRR and top-rank hits is achieved by TRANSE. 
+Mean Rank does not align with the other metrics; 
+this is an interpretable tradeoff, as both BILIN 
+and DISTMULT have an inherent preference for 
+correlated synset embeddings, giving a stronger 
+fallback for cases where the relation embedding 
+is completely off, but allowing less freedom for 
+separating strong cases from correlated false posi-
+tives, compared to a translational objective. 
+
+Effect of global score. There is a clear advan-
+tage to re-ranking the top local candidates using 
+the score signal from the M3GM model (line 4). 
+These results are further improved when the graph 
+score is weighted against the association compo-
+nent per relation (line 5). We obtain similar im-
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Main results on test set.  † These mod-
+els were not re-implemented, and are reported as in 
+Nguyen et al. (2018) and in Dettmers et al. (2018). 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Select heavyweight features (motifs) follow-
+ing best dev set training using M3GM. Circled nodes 
+count towards the motif. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Successful M3GM re-ranking examples. 
+
+Relation r 
+αr 
+Relation r 
+αr 
+
+mem. of domain usage 
+0.78 hypernym 
+0.64 
+mem. of domain region 0.77 domain topic of 0.38 
+member meronym 
+0.67 has part 
+0.33 
+instance hypernym 
+0.65 
+
+</table></figure>
+
+			<note place="foot" n="3"> Sometimes referred to as Knowledge Base Completion, e.g. in Socher et al. (2013). 4 We follow prior work in excluding the following from the ranked lists: the known entity (no self loops); entities from the training set which fit the instance; other entities in the evaluation set.</note>
+
+			<note place="foot" n="5"> We use the out-of-the-box vectors supplied in http://www.cis.lmu.de/ ˜ sascha/AutoExtend.</note>
+
+			<note place="foot" n="6"> Example edges: &apos;America&apos; → &apos;American&apos;, &apos;face&apos; → &apos;mouth&apos;, respectively. 7 Example instance hypernym edge: &apos;Rome&apos; → &apos;national capital&apos;.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We would like to thank the anonymous reviewers for their helpful comments. We discussed fast motif-counting algorithms with Polo Chau and Oded Green, and received early feedback from Jordan Boyd-Graber, Erica Briscoe, Martin Hyatt, Bryan Leslie Lee, Martha Palmer, and Oren Tsur. This research was funded by the Defense Threat Research Agency under award HDTRA1-15-1-0019.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Enriching word vectors with subword information</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Piotr</forename><surname>Bojanowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edouard</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Transactions of the Association for Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="page" from="135" to="146" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Linking and extending an open multilingual wordnet</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Francis</forename><surname>Bond</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Foster</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 51st Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 51st Annual Meeting of the Association for Computational Linguistics<address><addrLine>Long Papers</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1352" to="1362" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">A semantic matching energy function for learning with multi-relationa Machine Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xavier</forename><surname>Glorot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="volume">94</biblScope>
+			<biblScope unit="page" from="233" to="259" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Translating embeddings for modeling multi-relational data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Usunier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alberto</forename><surname>Garciaduran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oksana</forename><surname>Yakhnenko</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<editor>C. J. C. Burges, L. Bottou, M. Welling, Z. Ghahramani, and K. Q. Weinberger</editor>
+		<imprint>
+			<publisher>Curran Associates, Inc</publisher>
+			<date type="published" when="2013" />
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="page" from="2787" to="2795" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Natural language processing (almost) from scratch</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronan</forename><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Léon</forename><surname>Bottou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Karlen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pavel</forename><surname>Kuksa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="2493" to="2537" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Convolutional 2d knowledge graph embeddings</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Dettmers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minervini</forename><surname>Pasquale</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stenetorp</forename><surname>Pontus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Riedel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 32th AAAI Conference on Artificial Intelligence</title>
+		<meeting>the 32th AAAI Conference on Artificial Intelligence</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">WordNet: An Electronic Lexical Database</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christiane</forename><surname>Fellbaum</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1998" />
+			<publisher>Bradford Books</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Challenges for a multilingual wordnet. Language Resources and Evaluation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christiane</forename><surname>Fellbaum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Piek</forename><surname>Vossen</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="volume">46</biblScope>
+			<biblScope unit="page" from="313" to="326" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Recovering temporally rewiring networks: A model-based approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fan</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Hanneke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenjie</forename><surname>Fu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><forename type="middle">P</forename><surname>Xing</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 24th international conference on Machine learning</title>
+		<meeting>the 24th international conference on Machine learning</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="321" to="328" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Traversing knowledge graphs in vector space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kelvin</forename><surname>Guu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Miller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing<address><addrLine>Lisbon, Portugal</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="318" to="327" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">An exponential family of probability distributions for directed graphs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Paul</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samuel</forename><surname>Holland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Leinhardt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of the american Statistical association</title>
+		<imprint>
+			<biblScope unit="volume">76</biblScope>
+			<biblScope unit="issue">373</biblScope>
+			<biblScope unit="page" from="33" to="50" />
+			<date type="published" when="1981" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Making people play for lexical acquisition with the jeuxdemots prototype</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mathieu Lafourcade</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SNLP&apos;07: 7th international symposium on natural language processing</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page">7</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Supervised link prediction using multiple sources</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Berkant</forename><surname>Savas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Inderjit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Dhillon</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">2010 IEEE International Conference on Data Mining</title>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="923" to="928" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Efficient estimation of word representations in vector space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of International Conference on Learning Representations</title>
+		<meeting>International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Adversarial sets for regularising neural link predictors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pasquale</forename><surname>Minervini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thomas</forename><surname>Demeester</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Rocktäschel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Riedel</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.07596</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Specification of exponential-family random graph models: terms and computational aspects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martina</forename><surname>Morris</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><forename type="middle">S</forename><surname>Handcock</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><forename type="middle">R</forename><surname>Hunter</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of statistical software</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page">1548</biblScope>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Compositional vector space models for knowledge base inference</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arvind</forename><surname>Neelakantan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Benjamin</forename><surname>Roth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">2015 aaai spring symposium series</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Graham</forename><surname>Neubig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Austin</forename><surname>Matthews</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Waleed</forename><surname>Ammar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antonios</forename><surname>Anastasopoulos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Chiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Clothiaux</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Trevor</forename><surname>Cohn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Duh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Manaal</forename><surname>Faruqui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cynthia</forename><surname>Gan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Garrette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yangfeng</forename><surname>Ji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lingpeng</forename><surname>Kong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adhiguna</forename><surname>Kuncoro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gaurav</forename><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chaitanya</forename><surname>Malaviya</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Michel</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1701.03980</idno>
+		<title level="m">Swabha Swayamdipta, and Pengcheng Yin. 2017. Dynet: The dynamic neural network toolkit</title>
+		<meeting><address><addrLine>Yusuke Oda, Matthew Richardson, Naomi Saphra</addrLine></address></meeting>
+		<imprint/>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">A novel embedding model for knowledge base completion based on convolutional neural network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tu</forename><forename type="middle">Dinh</forename><surname>Dai Quoc Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dat</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dinh</forename><surname>Quoc Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Phung</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2018 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 2018 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies<address><addrLine>New Orleans, Louisiana</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2018" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="327" to="333" />
+		</imprint>
+	</monogr>
+	<note>Short Papers</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">A three-way model for collective learning on multi-relational data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maximilian</forename><surname>Nickel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hans-Peter</forename><surname>Volker Tresp</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kriegel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In ICML</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="page" from="809" to="816" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2014 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1532" to="1543" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Mimicking word embeddings using subword rnns</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuval</forename><surname>Pinter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert</forename><surname>Guthrie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Eisenstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2017 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="102" to="112" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Relation extraction with matrix factorization and universal schemas</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Riedel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Limin</forename><surname>Yao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Benjamin</forename><forename type="middle">M</forename><surname>Marlin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2013 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 2013 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies<address><addrLine>Atlanta, Georgia</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="74" to="84" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">AutoExtend: Extending Word Embeddings to Embeddings for Synset</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sascha</forename><surname>Rothe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hinrich</forename><surname>Schütze</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing</title>
+		<meeting>the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing<address><addrLine>Beijing, China</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1793" to="1803" />
+		</imprint>
+	</monogr>
+	<note>Long Papers)</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Modeling relational data with graph convolutional networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Schlichtkrull</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thomas</forename><forename type="middle">N</forename><surname>Kipf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><surname>Bloem</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rianne</forename><surname>Van Den</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ivan</forename><surname>Berg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Max</forename><surname>Titov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Welling</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">stat</title>
+		<imprint>
+			<biblScope unit="volume">1050</biblScope>
+			<biblScope unit="page">17</biblScope>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Christian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bruce</forename><forename type="middle">A</forename><surname>Schmid</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Desmarais</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1708.02598</idno>
+		<title level="m">Exponential random graph models with big networks: Maximum pseudolikelihood estimation and the parametric bootstrap</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Proje: Embedding projection for knowledge graph completion</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Baoxu</forename><surname>Shi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Weninger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="page" from="1236" to="1242" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Global organization of the wordnet lexicon</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mariano</forename><surname>Sigman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guillermo</forename><forename type="middle">A</forename><surname>Cecchi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings of the National Academy of Sciences</title>
+		<imprint>
+			<biblScope unit="volume">99</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="1742" to="1747" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Markov chain monte carlo estimation of exponential random graph models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">B</forename><surname>Tom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Snijders</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Social Structure</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="1" to="40" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Reasoning with neural tensor networks for knowledge base completion</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><forename type="middle">Y</forename><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems 26</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+		<title level="m" type="main">The large-scale structure of semantic networks: Statistical analyses and a model of semantic growth. Cognitive science</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Steyvers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joshua</forename><forename type="middle">B</forename><surname>Tenenbaum</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="page" from="41" to="78" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Pseudolikelihood estimation for social networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Strauss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Ikeda</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of the American Statistical Association</title>
+		<imprint>
+			<biblScope unit="volume">85</biblScope>
+			<biblScope unit="issue">409</biblScope>
+			<biblScope unit="page" from="204" to="212" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Max-margin markov networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ben</forename><surname>Taskar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carlos</forename><surname>Guestrin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daphne</forename><surname>Koller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<editor>S. Thrun, L. K. Saul, and B. Schölkopf</editor>
+		<imprint>
+			<publisher>MIT Press</publisher>
+			<date type="published" when="2004" />
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="page" from="25" to="32" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Observed versus latent features for knowledge base and text inference</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kristina</forename><surname>Toutanova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 3rd Workshop on Continuous Vector Space Models and their Compositionality</title>
+		<meeting>the 3rd Workshop on Continuous Vector Space Models and their Compositionality<address><addrLine>Beijing, China</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="57" to="66" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Representing text for joint embedding of text and knowledge bases</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kristina</forename><surname>Toutanova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Patrick</forename><surname>Pantel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hoifung</forename><surname>Poon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pallavi</forename><surname>Choudhury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Gamon</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="page" from="1499" to="1509" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title level="m" type="main">Embedding entities and relations for learning and inference in knowledge bases</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bishan</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wen-Tau</forename><surname>Yih</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodong</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Deng</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6575</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

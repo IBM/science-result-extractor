@@ -1,0 +1,734 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:42+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Ruminating Reader: Reasoning with Gated Multi-Hop Attention</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yichen</forename><surname>Gong</surname></persName>
+							<email>yichen.gong@nyu.edu</email>
+							<affiliation key="aff0">
+								<orgName type="institution">New York University</orgName>
+								<address>
+									<settlement>New York</settlement>
+									<region>NY</region>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samuel</forename><forename type="middle">R</forename><surname>Bowman</surname></persName>
+							<email>bowman@nyu.edu</email>
+							<affiliation key="aff0">
+								<orgName type="institution">New York University</orgName>
+								<address>
+									<settlement>New York</settlement>
+									<region>NY</region>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Ruminating Reader: Reasoning with Gated Multi-Hop Attention</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>To answer the question in machine comprehension (MC) task, the models need to establish the interaction between the question and the context. To tackle the problem that the single-pass model cannot reflect on and correct its answer, we present Ruminating Reader. Ruminating Reader adds a second pass of attention and a novel information fusion component to the Bi-Directional Attention Flow model (BIDAF). We propose novel layer structures that construct an query-aware context vector representation and fuse encoding representation with intermediate representation on top of BIDAF model. We show that a multi-hop attention mechanism can be applied to a bi-directional attention structure. In experiments on SQuAD, we find that the Reader outper-forms the BIDAF baseline by a substantial margin, and matches or surpasses the performance of all other published systems.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>The majority of recorded human knowledge is circulated in unstructured natural language. It is tremendously valuable to allow machines to read and comprehend the text knowledge. Machine comprehension (MC)-especially in the form of question answering (QA)-is therefore attracting a significant amount of attention from the machine learning community. Recently introduced large-scale datasets like CNN/Daily Mail <ref type="bibr">(Her- mann et al., 2015)</ref>, the Stanford Question Answering Dataset (SQuAD; <ref type="bibr" target="#b9">Rajpurkar et al., 2016</ref>) and the Microsoft MAchine Reading COmprehension Dataset (MS-MARCO; <ref type="bibr" target="#b7">Nguyen et al., 2016</ref>) have  allow data-driven methods, including deep learning, to become viable.</p><p>Recent approaches toward solving machine comprehension tasks using neural networks can be viewed as falling into two broad categories: single-pass reasoners and multiple-pass reasoners. Single-pass models read a question and a source text once and often adopt the differentiable attention mechanism that emphasizes important parts of the context related to the question. BIDAF ( <ref type="bibr" target="#b10">Seo et al., 2017</ref>) represents one of the state-of-the-art single-pass models in Machine Comprehension. BIDAF uses a bi-directional attention matrix which calculates the correlations between each word pair in context and query to build query-aware context representation. However, BIDAF and some similar models miss some questions because they don't have the capacity to reflect on problematic candidate answers and revise their decisions.</p><p>When humans are reading a text with the goal of answering a question, they tend to read it multiple times to get a better understanding of the context and question, and to give a better response.</p><p>With this intuition, recent multi-pass models revisit the question and the context passage (or ruminate) to infer the relations between the context, the question and the answer.</p><p>We propose an extension of BIDAF, called Ruminating Reader, which uses a second pass of reading and reasoning to allow it to learn to avoid mistakes and to ensure that it is able to effectively use the full context when selecting an answer. In addition to adding a second pass, we also introduce two novel layer types, the ruminate layers, which use gating mechanisms to fuse the obtained from the first and second passes. We observe a surprising phenomenon that when an LSTM layer in the context ruminate layer takes same input in each timestep, it can produce useful representation for the gates. In addition, we introduce an answer-question similarity loss to penalize overlap between question and predicted answer, a common feature in the errors of our base model. This allows us to achieve an F1 score of 79.5 and Exact Match (EM) score of 70.6 on hidden test set, <ref type="bibr">1</ref> an improvement of 2.2 F1 score and 2.9 EM on BIDAF. <ref type="figure" target="#fig_1">Figure 1</ref> shows a high-level comparison between BIDAF and Ruminating Reader. This paper is organized as follows: In Section 2 we define the problem to be solved and introduce the SQuAD task. In Section 3 we introduce Ruminating Reader, focusing on the informationextracting and information-digesting components and how they integrate. Section 4 discusses related work. Section 5 presents the experimental setting, results and analysis. Section 6 concludes. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Question Answering</head><p>The task of the Ruminate Reader is to answer a question by reading and understanding a paragraph of text and selecting a span of words within the context. Formally, the Training and development data consist of tuples (Q, P, A), where Q = (q 1 , ..., q i , ...q |Q| ) is the question, a sequence of words with length |Q|, C = (c 1 , ...c j , ..., c |C| ) is the context, a sequence of words with length |C|, and A = (a b , a e ) is the answer span marking the beginning and end indices of the the answer in the context (1 &lt;= a b &lt;= a e &lt;= |C|).</p><p>SQuAD The SQuAD corpus is built using 536 articles randomly selected from English Wikipedia. Images, figures, tables are stripped and any paragraphs shorter than 500 characters are discarded. Unlike other datasets that such as CNN/Daily Mail whose questions are synthesized, <ref type="bibr" target="#b9">Rajpurkar et al. (2016)</ref> uses a crowdsourcing platform to generate realistic question and answer pairs. SQuAD contains 107,785 question-answer pairs. The typical context length spans from 50 tokens to 250 tokens. The typical length of a question is around 10 tokens. The answer be any span of words from the context, resulting in O(|C| 2 ) possible outputs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Our Model</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Ruminating Reader</head><p>In this section, we review the BIDAF model ( <ref type="bibr" target="#b10">Seo et al., 2017</ref>) and introduce our extension, the Ruminating Reader.</p><p>Our additions to the base model are motivated by the intuition that adding an additional pass of reading will allow the model to better integrate information from the question and answer and to better weigh possible answers, and that by interpolating the results of the second pass with those of the first pass through gating, we can prevent the additional complexity that we add to the model from substantially increasing the difficulty of training. The structure of our model is shown in <ref type="figure" target="#fig_2">Figure 2</ref> and explained in the following sections.</p><p>Character Embedding Layer Just as in the base BIDAF model, the character embedding layer maps each word to a high dimensional vector using character features. It does so using a convolutional neural network with max pooling over learned character vectors ( <ref type="bibr" target="#b5">Lee et al., 2017;</ref><ref type="bibr" target="#b4">Kim et al., 2016</ref>). Thus we have a context character representation M ∈ R f ×C and a query representation N ∈ R f ×Q , where C is the sequence length of the context, Q is the sequence length of the query and f is the number of 1D convolutional neural network filters.</p><p>Word Embedding Layer Again as in the base model, the word embedding layer uses pretrained word vectors (the 6B GloVe vectors of <ref type="bibr" target="#b8">Pennington et al., 2014</ref>) to map the word into a high dimensional vector space. We do not update the word embeddings during training. The character embedding and the word embedding are concatenated and passed into a two-layer highway network <ref type="bibr">(Sri- vastava et al., 2015</ref>) to obtain a d dimensional vector representation of each single word. Hence, we have a context representation H ∈ R d×C and a query representation U ∈ R d×Q .</p><p>Sequence Encoding Layers As in BIDAF, we use two LSTM RNNs (Hochreiter and Schmidhuber, 1997) with d-dimensional outputs to encode the context and query representations in both directions. Therefore, we obtain a context encoding matrix C ∈ R 2d×C , and a query encoding matrix Q ∈ R 2d×Q .</p><p>Attention Flow Layer As in BIDAF, the attention flow layer constructs a query-aware context representation G from inputs C and Q. This layer takes two steps. In the first step, an interaction matrix I ∈ R C×Q is computed, which indicates the affinities between each context word encoding and each query word encoding. I cq indicates the correlation between the c-th word in context and q-th word in query. The interaction matrix is computed by</p><formula xml:id="formula_0">I cq = w (I) [C c ; Q q ; C c • Q q ] (1)</formula><p>where w I ∈ R 6d is a trainable parameter, C c is c-th column of context encoding and Q q is q-th column of query encoding, • is elementwise multiplication, and <ref type="bibr">[; ]</ref> is vector concatenation.</p><p>Context-to-query Attention As in BIDAF, the context-to-query attention component generates, for each context word, an attention-weighted sum of query word encodings. Let˜QLet˜ Let˜Q ∈ R 2d×C represent the context-to-query attention matrix. For column c iñ Q is defined by˜Qby˜ by˜Q c = (a cq Q q ), where a is the attention weight. a is computed by a c = sof tmax(I c ) ∈ R Q .</p><p>Query-to-context Attention Query-to-context attention indicates the most relevant context words to query. The most relevant word vector representation is an attention-weighted sum defined by˜c by˜ by˜c = b c C c where b, is an attention weight which is calculated by b = sof tmax(max col (I)) ∈ R C . ˜ c is replicated C times across the column, therefore giving˜Cgiving˜ giving˜C ∈ R 2d×C .</p><p>We then obtain the final query-aware context representation by</p><formula xml:id="formula_1">G c = [C c ; ˜ Q c ; C c • ˜ Q c ; C c • ˜ C c ]<label>(2)</label></formula><p>where</p><formula xml:id="formula_2">G c ∈ R 8d×C .</formula><p>Summarization Layer We propose summarization layer which produces a vector representation that summarizes the information in the queryaware context representation. The input to summarization layer is G. We use one bi-directional LSTM network to model the learned information. We select the final states from both directions and concatenate them together as s = [s f ; s b ] . where s ∈ R 2d represents the representation summarized from the reading of context and query, s f is the final state of LSTM in forward direction, and s b is the final state of LSTM in backward direction.</p><p>Query Ruminate Layer The query ruminate layer fuses the summarization vector representation with the query encoding Q, helping reformulate the query representation in order to maximize the chance of retrieving the correct answer. The input to this layer is s tiled Q times (S Q ∈ R 2d×Q ). A gating function then fuses this with the existing query encoding:</p><formula xml:id="formula_3">z i = tanh(W 1 Qz S Qi + W 2 Qz Q i + b Qz ) (3) f i = σ(W 1 Qf S Qi + W 2 Qf Q i + b Qf ) (4) ˜ Q i = f i • Q i + (1 − f i ) • z i<label>(5)</label></formula><p>where</p><formula xml:id="formula_4">W 1 Qz , W 2 Qz , W 1 Qf , W 2</formula><p>Qf ∈ R 2d×2d and b Qz , b Qf ∈ R 2d are trainable parameters, S Qi is the i-th column of the S Q , Q i is the i-th column of Q.</p><p>Context Ruminate Layer Context ruminate layer digests the summarization and integrates it with the context encoding C to facilitate answer extraction. In this layer, we tile s C times and we have S C ∈ R 2d×C . To incorporate the positional information into this relatively long tiled sequence, we feed it into an additional bidirectional LSTM with output size d in each direction. This approach, while somewhat inefficient, proves to be an valuable addition to the model and allows it to better track position information, loosely following the positional encoding strategy of <ref type="bibr" target="#b14">Sukhbaatar et al. (2015)</ref>. Hence we obtaiñ S C ∈ R 2d×C , which is fused with context encoding C via a gate:</p><formula xml:id="formula_5">z i = tanh(W 1 Cz˜S Cz˜ Cz˜S Ci + W 2 Cz C i + b Cz ) (6) f i = σ(W 1 Cf˜S Cf˜ Cf˜S Ci + W 2 Cf C i + b Cf ) (7) ˜ C i = f i • C i + (1 − f i ) • z i<label>(8)</label></formula><p>where</p><formula xml:id="formula_6">W 1 Cz , W 2 Cz , W 1 Cf , W 2 Cf ∈ R 2d×2d and b Cz , b Cf ∈ R 2d are trainable parameters, ˜</formula><p>S Ci is the i-th column of the˜Sthe˜ the˜S C , C i is the i-th column of C.</p><p>Context: The Broncos took an early lead in Super Bowl 50 and never trailed. Newton was limited by Denver's defense, which sacked him seven times and forced him into three turnovers, including a fumble which they recovered for a touchdown. Denver linebacker Von Miller was named Super Bowl MVP, recording five solo tackles, 2 sacks, and two forced fumbles.</p><p>Question: Which Newton turnover resulted in seven points for Denver?</p><p>Ground Truth: {a fumble, a fumble, Fumble} Prediction: three turnovers <ref type="table">Table 1</ref>: An error of the type that motivated the answer-question similarity loss.</p><p>Second Hop Attention Flow Layer We take˜Q take˜ take˜Q ∈ R 2d×Q and˜Cand˜ and˜C ∈ R 2d×C as the input to another attention flow layer with the same structure as described above, yielding</p><formula xml:id="formula_7">G (2) ∈ R 8d×C .</formula><p>Modeling Layer We use two layers of bidirectional LSTM with output size d in each direction to aggregate the information in G <ref type="bibr">(2)</ref> , yielding a pre-output matrix M s ∈ R 2d×C .</p><p>Output Layer As in BIDAF, our output layer independently models the probability of each word being selected as the start or end of an answer span. We calculate the probability distribution of the start index of the answer span by</p><formula xml:id="formula_8">p s = sof tmax(w p 1 [G; M s ])<label>(9)</label></formula><p>where w (p 1 ) ∈ R 10d is a trainable parameter. We pass the matrix M s to another bi-directional LSTM with output size d in single direction yielding M e . We obtain the probability distribution of the end index of the answer span by</p><formula xml:id="formula_9">p e = sof tmax(w (p 2 ) [G; M e ])<label>(10)</label></formula><p>Training Loss We define the training loss as the sum of three components: negative log likelihood loss, L2 regularization loss, and a novel answerquestion similarity loss.</p><p>Answer-Question Similarity Loss We observe that a version of our model trained only on the two standard loss terms often selects answers that overlap substantially in content with their corresponding questions, and that this nearly always results in an error. A sample error of this kind is shown in <ref type="table">Table 1</ref>. This motivates an additional loss term at training time: We penalize the similarity between the question and the selected answer. Formally, the answer question similarity loss is defined as</p><formula xml:id="formula_10">s = Argmax(p 1 )<label>(11)</label></formula><formula xml:id="formula_11">e = Argmax(p 2 ) (12) q BoW = Sum row (Q) Q<label>(13)</label></formula><formula xml:id="formula_12">AQSL(θ) = cos(C s , q BoW ) + cos(C e , q BoW )<label>(14)</label></formula><p>where s refers to the start index of answer span, e refers to the end index of the answer span, q BoW is the bag of words representation of query encoding, cos(a, b) is the cosine similarity between a and b, C s and C e are the s-th and e-th vector representation of context encoding.</p><p>Prediction During prediction, we use a local search strategy that for token indices a and a , we maximize p s a × p e a , where 0 ≤ a − a ≤ 15 . Dynamic programming is applied during search, resulting in O(C) time complexity.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Related Work</head><p>Recently, both QA and Cloze-style machine comprehension tasks like CNN/Daily Mail have seen fast progress. Much of this recent work has been based on end-to-end trained neural network models, and within that, most have used recurrent neural networks with soft attention ( <ref type="bibr">Bahdanau et al., 2015)</ref>, which emphasizes one part of the data over the others. These models can be coarsely divided into two categories: single-pass and multi-pass reasoners.</p><p>Most papers on single-pass reasoning systems propose novel ways to use the attention mechanism: <ref type="bibr" target="#b16">Wang and Jiang (2016)</ref> propose match-LSTM to model the interaction between context and query, as well as introducing the use of a pointer network ( <ref type="bibr" target="#b15">Vinyals et al., 2015)</ref> to extract the answer span from the context. <ref type="bibr" target="#b19">Xiong et al. (2017)</ref> propose the Dynamic Coattention Network, which uses co-dependent representations of the question and the context, and iteratively updates the start and end indices to recover from local maxima and to find the optimal answer span.  propose the Multi-Perspective Context Matching model that matches the encoded context with query by combining various matching strategies, aggregates matching vector with bidirectional LSTM, and predict start and end positions. In order to merge the entity score during its multiple appearence, <ref type="bibr" target="#b3">Kadlec et al. (2016)</ref> propose attention-sum reader who computes dot product between context and query encoding, does a softmax operation over context and sums the probability over the same entity to favor the frequent entities over rare ones. <ref type="bibr">Chen et al. (2016)</ref> propose to use a bilinear term to calculate the attentional alignment between context and query.</p><p>Among multi-hop reasoning systems: <ref type="bibr" target="#b1">Hill et al. (2015)</ref> apply attention on window-based memory, by extending multi-hop end-to-end memory network <ref type="bibr" target="#b14">(Sukhbaatar et al., 2015)</ref>. <ref type="bibr">Dhin- gra et al. (2016)</ref> extend attention-sum reader to multi-turn reasoning with an added gating mechanism. The Iterative Alternative (IA) reader <ref type="bibr">(Sor- doni et al., 2016</ref>) produces query glimpse and document glimpse in each iterations and uses both glimpses to update recurrent state in each iteration. <ref type="bibr" target="#b11">Shen et al. (2017)</ref> propose a multi-hop attention model that used reinforcement learning to dynamically determine when to stop digesting intermediate information and produce an answer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Evaluation</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Implementation details</head><p>Our model configuration closely follows that of <ref type="bibr" target="#b10">Seo et al. (2017)</ref> did: In the character encoding layer, we use 100 filters of width 5. In the remainder of the model, we set the hidden layer dimension (d) to 100. We use pretrained 100D GloVe vectors (6B-token version) as word embeddings. Out-of-vocobulary tokens are represented by an UNK symbol in the word embedding layer, but treated normally by the character embedding layer. The BiLSTMs in context and query encoding layers share same weights. We use the AdaDelta optimizer <ref type="bibr" target="#b22">(Zeiler, 2012</ref>) for optimization.</p><p>We selected hyperparameter values through random search <ref type="bibr">(Bergstra and Bengio, 2012</ref>  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Unpublished</head><p>applied to all forward connections in the CNN, the LSTMs, and all feedforward layers. A typical model run converges in about 40k steps. This takes two days using Tensorflow ( <ref type="bibr">Abadi et al., 2015</ref>) and a single NVIDIA K80 GPU .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Evaluation Method</head><p>Rajpurkar et al. <ref type="formula" target="#formula_1">(2016)</ref> provide an official evaluation script that allows us to measure F1 score and EM score by comparing the prediction and ground truth answers. Three answers are provided for each question. The prediction is compared to each of the answer and best score is selected. F1 score is defined by recall and precision of words and EM score, as Exact Match score, is defined as the score of 100% accuracy in prediction. We do not use any kind of ensembling, and compare our results primarily with other single-model (non-ensemble) results. The test set performance is evaluated at CodaLab by administrator.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Ablation Variant</head><p>Dev F1 EM</p><p>1. BIDAF 77.3 67.7 2. BIDAF w/ L2 Reg., AQSL, LS 77.7 68.6 3. RR w/o query ruminate layer 78.7 69.6 4. RR w/o context ruminate layer 78.9 70.0 5. RR w/ BiLSTM in QRL 79.4 70.4</p><note type="other">6. RR w/o BiLSTM in CRL 74.0 64.2 7. RR w/o query input at s,f in QRL 78.8 70.1 8. RR w/o context input at s,f in CRL 78.9 70.3 9. RR w/o query input in QRL 63.3 54.1 10. RR w/o context input in CRL 27.0 9.4 11. RR w/o summ. input in QRL 79.2 70.1 12. RR w/o summ. input in CRL 79.2 70.3</note><p>Ruminating Reader 79.5 70.6 <ref type="table">Table 3</ref>: Layer ablation results. The order of the listing corresponds to the description in Appendix A.1. CRL refers to context ruminate layer and QRL refers to query ruminate layer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Results</head><p>At the time of submission, our model is tied in accuracy on the hidden test set with the bestperforming published single model ( <ref type="bibr" target="#b23">Zhang et al., 2017)</ref>. We achieve an F1 score of 79.5 and EM score of 70.6. The current leaderboard is displayed in <ref type="table" target="#tab_1">Table 2</ref>. The leaderboard is listed in descending order of F1 score, but if an entry's F1 score is better than the adjacent entry's, while its EM score is worse, then these two entries are considered tied.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Analysis</head><p>Layer Ablation Analysis To analyze how each component contribute to the model, we run a layer ablation experiment. We present results for twelve versions of the model on the development set, each missing some or all of the major components of the full Ruminating Reader. The precise definition of each of the twelve ablated models can be found in Appendix A.1.</p><p>The results of the ablation experiment are shown in <ref type="table">Table 3</ref>. The ablation experiments show how each component contribute to the model. Experiments 3 and 4 show that the two ruminate layers are both important and helpful in contributing performance. It is worth noting that the BiLSTM in the context ruminate layer contributes substantially to model performance. We find this somewhat surprising, since it takes the same input in each timestep, but it nonetheless successfully digests the summarization information representation and produces a useful input for the gating component. Experiments 7 and 8 show that the <ref type="figure">Figure 3</ref>: The visualization of first hop (top) and second hop (bottom) attention interaction matrix. We use coolwarm colormap, where red is close to 1 and blue is close to 0. In the question "What is the name of the trophy given to anyone who plays on the winning team in a super Bowl?", the key words name, trophy, given, who are strongly attended to in the first hop. modeled summarization vector representation can provide information to gates reasonably well. The drop in performance in both experiments 9 and 10 shows that the key information for new query and context representation are the are first stage query and context encodings. Experiments 11 and 12 shows that the summarization vector representation does help the later stage of reasoning. From <ref type="figure">Figure 3</ref> we see that though the structures of two hops of attention flow layer are the same, they function quite differently in typical cases. The first hop attention appears to be primarily concerned with identifying the key informative word (or words, as here) in the query. Though in <ref type="figure">Figure 3</ref> four key words are signified, one or two words are attended to in the first hop in the common case. The second hop is then responsible for finding candidate answers that are relevant to those key words and generating a query-aware context representation. We observe the first hop attention shows a consistent attention pattern across context words, suggesting that there may be room to make the first hop component more efficient in future work.</p><p>From <ref type="figure" target="#fig_3">Figure 4</ref>, we see the gate value on both query ruminate layer and context ruminate layer shows that the gates are working to fuse information to original query encoding and context encoding. We observe that in most of the case the gates in ruminate layers uses more information from encoding than from summarization representation. The observation matches our expectation that the gates modify and improve on the encoding representation.</p><p>We also provide a comparison of F1 score between BIDAF and Ruminating Reader on question with different ground truth answer length and different types of questions in <ref type="figure" target="#fig_4">Figure 5</ref>. Exact match score is highly correlated with F1 score so we omit it for clarity. We observe that the Ruminating Reader outperforms BIDAF on most of the questions with respect of different answer length. On the question with long answer length, of 5, 8 and 9, Ruminating Reader outperforms BIDAF by a great margin. Questions with longer reference answers appear to be more difficult to answer. In addition, the Ruminating Reader does better on each type of question. Both models work best for when questions-these question are answerable by temporal expressions, which are relatively easy to recognize. The Why questions are hardest to answer-they tend to have long answers with no purely lexical cues marking their beginnings or ends. Ruminating Reader outperforms BIDAF model on why questions by a substantial margin. Performance Breakdown Following <ref type="bibr" target="#b23">Zhang et al. (2017)</ref>, we break down Ruminating Reader's 79.5% F1 score on the development set into three sub-scores, representing failures, partial successes, and successes. On 13.5% of development set examples, Ruminate Reader fails, yielding 0% F1. On 70.6% of examples, Ruminate Reader achieves a perfect F1 score. On the remaining 15.9%, Ruminate Reader got only partial matches (i.e., answers that partially overlapped with reference answers), with an average F1 score of 56.0%. Comparing to the jNet ( <ref type="bibr" target="#b23">Zhang et al., 2017</ref>) whose success answers occupy 69.1% of all answers, failure score answers 14.9% and partial success 16.01% with an average F1 score of 58.0%, our model works better on increasing successes and reducing failures.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Conclusion</head><p>We propose the Ruminating Reader, an extension to the BIDAF model with two-hop attention. The model surpasses the original BIDAF model's performance on Stanford Question Answering Dataset (SQuAD) by a large margin, and ties with the best published system. These results and our qualitative analysis both suggest that the model successfully fuses the information from two passes of reading using gating and uses the result to identify appropriate answers to Wikipedia questions. An ablation experiment shows that each of components of this complex model contribute substantially. In future work, we aim to find ways to simplify this model without impacting performance, to explore the possibility of yet deeper models, and to expand our study to machine comprehension tasks more broadly.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>(</head><label></label><figDesc>a) The high-level structure of BIDAF. (b) The high-level structure of Ruminating Reader.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: The high-level comparison between BIDAF and Ruminating Reader.</figDesc><graphic url="image-2.png" coords="1,309.83,360.31,213.16,179.66" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: The model structure of our Ruminating Reader.</figDesc><graphic url="image-3.png" coords="2,309.83,62.81,213.16,307.01" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Visualizations of gate values for the query (top) and context (bottom) ruminate layers. The order of words is the same as in Figure 3. We use coolwarm colormap, where red means the gate uses more information from intermediate representation, and blue from encoding representation.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: An analysis according to answer length of questions and question types. The top graph shows the comparison of F1 score between Ruminating Reader and the BIDAF model on the development set by answer length. The blue line shows the distribution of questions by answer length. The bottom graph shows a corresponding comparison BIDAF by question type (wh-word).</figDesc><graphic url="image-8.png" coords="8,74.55,62.81,213.17,279.79" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head></head><label></label><figDesc>). Batch size is 30. Learning rate starts at 0.5, and decreases to 0.2 once the model stops improv- ing. The L2-regularization weight is 1e-4, AQSL weight is 1 and dropout with a drop rate of 0.2 is</figDesc><table>Model 
+
+Test 
+F1 
+EM 
+
+Logistic Regression a 
+51.0 
+40.4 
+Dynamic Chunk Reader b 
+70.956 62.499 
+Fine-grained Gating c 
+73.327 62.446 
+Match-LSTM d 
+73.743 64.744 
+Dynamic Coattention Network e 75.896 66.233 
+Bidirectional Attention Flow f 77.323 67.974 
+RaSoR g 
+77.696 69.642 
+Multi-perspective Matching h 
+77.771 68.877 
+FastQAExt i 
+78.857 70.849 
+Document Reader j 
+79.353 70.733 
+ReasoNet k 
+79.364 70.555 
+jNet l 
+79.821 70.607 
+Interactive AoA Reader 
+
+ ‡ 
+
+79.937 71.153 
+QFASE 
+
+ ‡ 
+
+79.989 71.898 
+r-net 
+
+ ‡ 
+
+80.717 72.338 
+
+Ruminating Reader 
+79.456 70.639 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>The Official SQuAD leaderboard 
+performance on test set for single model sec-
+tion from April 23, 2017, the time of submis-
+sion. There are other unpublished systems 
+shown on leaderboard, including Document 
+Reader and r-net. 
+
+a Rajpurkar et al. (2016); b Yu et al. (2016); 
+c Yang et al. (2017); d Wang and Jiang (2016); 
+e Xiong et al. (2017); f Seo et al. (2017); 
+g Lee et al. (2016); h Wang et al. (2016); 
+i Weissenborn et al. (2017); j Chen et al. (2017); 
+k Shen et al. (2017); l Zhang et al. (2017); 
+
+ ‡ 
+
+</table></figure>
+
+			<note place="foot" n="1"> The latest results are listed at https://rajpurkar. github.io/SQuAD-explorer/</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We thank Pranav Rajpurkar for testing Ruminate Reader on SQuAD hidden test set.</p></div>
+			</div>
+
+			<div type="annex">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A Appendix</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.1 Layer Ablation Experiments setup</head><p>In this section we show the setup of layer ablation experiment details in <ref type="table">Table 3.</ref> 1. Vanilla BIDAF 2. Ruminating Reader without context and query ruminate layer. Therefore, the model is equivalent to original BIDAF model with L2-regurization, answer-question similarity penalization and local search prediction feature.</p><p>3. Ruminating Reader without query ruminate layer. The query encoding Q is directly fed into the second hop attention flow layer.</p><p>4. Ruminating Reader without context ruminate layer. The context encoding C is directly connected to the second hop attention flow layer without digesting newly acquired information.</p><p>5. Ruminating Reader with BiLSTM modeling in query ruminate layer. Formally, we have˜S have˜ have˜S Q = BiLST M (S Q ) in query ruminate layer. Therefore, the query ruminate layer is defined by</p><p>6. Ruminating Reader without BiLSTM modeling in context ruminate layer. Formally, we have˜Shave˜ have˜S C = S C in query ruminate layer and all other components remains the same.</p><p>7. Ruminating Reader without query input at z, f in query ruminate layer. While all other components remain the same as in Ruminating Reader, the gate in query ruminate layer is defined by</p><p>8. Ruminating Reader without context input at z, f in context ruminate layer. While all other components remain the same as in Ruminating Reader, the gate in context ruminate layer is defined by</p><p>9. Ruminating Reader without query input in query ruminate layer. In this version, we discard query encoding input Q in the gate of query ruminate layer. Formally, the gate in Query Ruminate layer is</p><p>10. Ruminating Reader without context encoding input in context ruminate layer. We ablate the context encoding input C in the gate of context ruminate layer. Therefore, the gate in context ruminate layer is</p><p>11. Ruminating Reader without summarization information input in query ruminate layer. In case that the summarization do not help the encoding, while on the other hand, the gate contributes to the learning, we design the experiment that allows to eliminate the influence of summarization. We discard the summarization input in query ruminate layer.</p><p>Formally, the gate in query ruminate layer is defined as</p><p>12. Ruminating Reader without summarization information input in context ruminate layer. The summarization information is not included in z i , f i</p></div>			</div>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Teaching Machines to Read and Comprehend</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karl</forename><surname>Moritz Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomás</forename><surname>Kocisk´ykocisk´y</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lasse</forename><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Will</forename><surname>Kay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mustafa</forename><surname>Suleyman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. NIPS</title>
+		<meeting>NIPS</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">The Goldilocks Principle: Reading Children&apos;s Books with Explicit Memory Representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Felix</forename><surname>Hill</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ICLR</title>
+		<meeting>ICLR</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Long Short-Term Memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Text Understanding with the Attention Sum Reader Network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rudolf</forename><surname>Kadlec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Schmid</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ondrej</forename><surname>Bajgar</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Character-Aware Neural Language Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoon</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yacine</forename><surname>Jernite</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Sontag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander M</forename><surname>Rush</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. AAAI</title>
+		<meeting>AAAI</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Fully Character-Level Neural Machine Translation without Explicit Segmentation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thomas</forename><surname>Hofmann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Learning Recurrent Span Representations for Extractive Question Answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shimi</forename><surname>Salant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tom</forename><surname>Kwiatkowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ankur</forename><surname>Parikh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dipanjan</forename><surname>Das</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename><surname>Berant</surname></persName>
+		</author>
+		<idno>ArXiv:1611.01436</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">MS MARCO: A Human Generated MAchine Reading COmprehension Dataset</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tri</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mir</forename><surname>Rosenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xia</forename><surname>Song</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Saurabh</forename><surname>Tiwary</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rangan</forename><surname>Majumder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Deng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. CoCo@NIPS</title>
+		<meeting>CoCo@NIPS</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Glove: Global Vectors for Word Representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">SQuAD -100, 000+ Questions for Machine Comprehension of Text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pranav</forename><surname>Rajpurkar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Konstantin</forename><surname>Lopyrev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Bidirectional Attention Flow for Machine Comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minjoon</forename><surname>Seo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aniruddha</forename><surname>Kembhavi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ali</forename><surname>Farhadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hannaneh</forename><surname>Hajishirzi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ICLR</title>
+		<meeting>ICLR</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">ReasoNet: Learning to Stop Reading in Machine Comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yelong</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Po-Sen</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Weizhu</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. NIPS</title>
+		<meeting>NIPS</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Iterative Alternating Neural Attention for Machine Reading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Sordoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phillip</forename><surname>Bachman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note>In CoRR</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Highway Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh Kumar</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Greff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ICML</title>
+		<meeting>ICML</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">End-To-End Memory Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sainbayar</forename><surname>Sukhbaatar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arthur</forename><surname>Szlam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rob</forename><surname>Fergus</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. NIPS</title>
+		<meeting>NIPS</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Meire</forename><surname>Fortunato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Navdeep</forename><surname>Jaitly</surname></persName>
+		</author>
+		<title level="m">Proc. NIPS</title>
+		<meeting>NIPS</meeting>
+		<imprint>
+			<publisher>Pointer Networks</publisher>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shuohang</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jing</forename><surname>Jiang</surname></persName>
+		</author>
+		<idno>ArXiv:1608.07905</idno>
+		<title level="m">Machine Comprehension Using Match-LSTM and Answer Pointer</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Multi-Perspective Context Matching for Machine Comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiguo</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Haitao</forename><surname>Mi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wael</forename><surname>Hamza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Radu</forename><surname>Florian</surname></persName>
+		</author>
+		<idno>ArXiv:1612.04211</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title level="m" type="main">Making Neural QA as Simple as Possible but not Simpler</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dirk</forename><surname>Weissenborn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Georg</forename><surname>Wiese</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Laura</forename><surname>Seiffe</surname></persName>
+		</author>
+		<idno>ArXiv:1703.04816</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Dynamic Coattention Networks For Question Answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ICLR</title>
+		<meeting>ICLR</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Words or Characters? Fine-grained Gating for Reading Comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhilin</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bhuwan</forename><surname>Dhingra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ye</forename><surname>Yuan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junjie</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>William W Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ICLR</title>
+		<meeting>ICLR</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">End-to-End Answer Chunk Extraction and Ranking for Reading Comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yang</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazi</forename><surname>Hasan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mo</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bing</forename><surname>Xiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Zhou</surname></persName>
+		</author>
+		<idno>ArXiv:1610.09996</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">ADADELTA: An Adaptive Learning Rate Method</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Matthew D Zeiler</surname></persName>
+		</author>
+		<idno>ArXiv:1212.5701</idno>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Exploring Question Understanding and Adaptation in Neural-Network-Based Question Answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junbei</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodan</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qian</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lirong</forename><surname>Dai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hui</forename><surname>Jiang</surname></persName>
+		</author>
+		<idno>ArXiv:1703.04617</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

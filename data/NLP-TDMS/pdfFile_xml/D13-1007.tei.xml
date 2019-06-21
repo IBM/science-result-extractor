@@ -1,0 +1,960 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:08+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">A Log-Linear Model for Unsupervised Text Normalization</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher>Association for Computational Linguistics</publisher>
+				<availability status="unknown"><p>Copyright Association for Computational Linguistics</p>
+				</availability>
+				<date>18-21 October 2013. 2013</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yi</forename><surname>Yang</surname></persName>
+							<email>yiyang@gatech.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department" key="dep1">School of Interactive Computing</orgName>
+								<orgName type="department" key="dep2">School of Interactive Computing Georgia Institute of Technology</orgName>
+								<orgName type="institution">Georgia Institute of Technology</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Eisenstein</surname></persName>
+							<email>jacobe@gatech.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department" key="dep1">School of Interactive Computing</orgName>
+								<orgName type="department" key="dep2">School of Interactive Computing Georgia Institute of Technology</orgName>
+								<orgName type="institution">Georgia Institute of Technology</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">A Log-Linear Model for Unsupervised Text Normalization</title>
+					</analytic>
+					<monogr>
+						<title level="m">Proceedings of the 2013 Conference on Empirical Methods in Natural Language Processing</title>
+						<meeting>the 2013 Conference on Empirical Methods in Natural Language Processing <address><addrLine>Seattle, Washington, USA</addrLine></address>
+						</meeting>
+						<imprint>
+							<publisher>Association for Computational Linguistics</publisher>
+							<biblScope unit="page" from="61" to="72"/>
+							<date type="published">18-21 October 2013. 2013</date>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We present a unified unsupervised statistical model for text normalization. The relationship between standard and non-standard tokens is characterized by a log-linear model, permitting arbitrary features. The weights of these features are trained in a maximum-likelihood framework, employing a novel sequential Monte Carlo training algorithm to overcome the large label space, which would be impractical for traditional dynamic programming solutions. This model is implemented in a normalization system called UNLOL, which achieves the best known results on two normalization datasets, outper-forming more complex systems. We use the output of UNLOL to automatically normalize a large corpus of social media text, revealing a set of coherent orthographic styles that underlie online language variation.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Social media language can differ substantially from other written text. Many of the attempts to characterize and overcome this variation have focused on normalization: transforming social media language into text that better matches standard datasets <ref type="bibr" target="#b32">(Sproat et al., 2001;</ref><ref type="bibr" target="#b27">Liu et al., 2011</ref>). Because there is little available training data, and because social media language changes rapidly <ref type="bibr" target="#b15">(Eisenstein, 2013b)</ref>, fully supervised training is generally not considered appropriate for this task. However, due to the extremely high-dimensional output space -arbitrary sequences of words across the vocabulary -it is a very challenging problem for unsupervised learning. Perhaps it is for these reasons that the most successful systems are pipeline architectures that cobble together a diverse array of techniques and resources, including statistical language models, dependency parsers, string edit distances, off-the-shelf spellcheckers, and curated slang dictionaries ( <ref type="bibr" target="#b27">Liu et al., 2011;</ref><ref type="bibr" target="#b20">Han and Baldwin, 2011;</ref><ref type="bibr" target="#b21">Han et al., 2013)</ref>.</p><p>We propose a different approach, performing normalization in a maximum-likelihood framework. There are two main sources of information to be exploited: local context, and surface similarity between the observed strings and normalization candidates. We treat the local context using standard language modeling techniques; we treat string similarity with a log-linear model that includes features for both surface similarity and word-word pairs.</p><p>Because labeled examples of normalized text are not available, this model cannot be trained in the standard supervised fashion. Nor can we apply dynamic programming techniques for unsupervised training of locally-normalized conditional models <ref type="bibr" target="#b3">(Berg-Kirkpatrick et al., 2010)</ref>, as their complexity is quadratic in the size of label space; in normalization, the label space is the vocabulary itself, with at least 10 4 elements. Instead, we present a new training approach using Monte Carlo techniques to compute an approximate gradient on the feature weights. This training method may be applicable in other unsupervised learning problems with a large label space.</p><p>This model is implemented in a normalization system called UNLOL (unsupervised normalization in a LOg-Linear model). It is a lightweight proba-bilistic approach, relying only on a language model for the target domain; it can be adapted to new corpora text or new domains easily and quickly. Our evaluations show that UNLOL outperforms the state-of-the-art on standard normalization datasets.</p><p>In addition, we demonstrate the linguistic insights that can be obtained from normalization, using UNLOL to identify classes of orthographic transformations that form coherent linguistic styles.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Background</head><p>The text normalization task was introduced by <ref type="bibr" target="#b32">Sproat et al. (2001)</ref>, and attained popularity in the context of SMS messages <ref type="bibr" target="#b9">(Choudhury et al., 2007b</ref>). It has become still more salient in the era of widespread social media, particularly Twitter. Han and Baldwin (2011) formally define a normalization task for Twitter, focusing on normalizations between single tokens, and excluding multi-word tokens like lol (laugh out loud). The normalization task has been criticized by <ref type="bibr" target="#b15">Eisenstein (2013b)</ref>, who argues that it strips away important social meanings. In recent work, normalization has been shown to yield improvements for part-of-speech tagging ( <ref type="bibr" target="#b21">Han et al., 2013</ref>), parsing ( <ref type="bibr" target="#b35">Zhang et al., 2013)</ref>, and machine translation <ref type="bibr" target="#b22">(Hassan and Menezes, 2013)</ref>. As we will show in Section 7, accurate automated normalization can also improve our understanding of the nature of social media language.</p><p>Supervised methods Early work on normalization focused on labeled SMS datasets, using approaches such as noisy-channel modeling <ref type="bibr">(Choud- hury et al., 2007a</ref>) and machine translation <ref type="bibr" target="#b1">(Aw et al., 2006</ref>), as well as hybrid combinations of spelling correction and speech recognition ( <ref type="bibr" target="#b23">Kobus et al., 2008;</ref><ref type="bibr" target="#b2">Beaufort et al., 2010)</ref>. This work sought to balance language models (favoring words that fit in context) with transformation models (favoring words that are similar to the observed text). Our approach can also be seen as a noisy channel model, but unlike this prior work, no labeled data is required.</p><p>Unsupervised methods <ref type="bibr" target="#b11">Cook and Stevenson (2009)</ref> manually identify several word formation types within a noisy channel framework. They parametrize each formation type with a small number of scalar values, so that all legal transformations of a given type are equally likely. The scalar parameters are then estimated using expectation maximization. This work stands apart from most of the other unsupervised models, which are pipelines. <ref type="bibr" target="#b10">Contractor et al. (2010)</ref> use string edit distance to identify closely-related candidate orthographic forms and then decode the message using a language model. <ref type="bibr" target="#b18">Gouws et al. (2011)</ref> refine this approach by mining an "exception dictionary" of stronglyassociated word pairs such as you/u. Like <ref type="bibr">Con- tractor et al. (2010)</ref>, we apply string edit distance, and like <ref type="bibr" target="#b18">Gouws et al. (2011)</ref>, we capture strongly related word pairs. However, rather than applying these properties as filtering steps in a pipeline, we add them as features in a unified log-linear model. Recent approaches have sought to improve accuracy by bringing more external resources and complex architectures to bear. <ref type="bibr" target="#b20">Han and Baldwin (2011)</ref> begin with a set of string similarity metrics, and then apply dependency parsing to identify contextuallysimilar words. <ref type="bibr" target="#b27">Liu et al. (2011)</ref> extract noisy training pairs from the search snippets that result from carefully designed queries to Google, and then train a conditional random field ( <ref type="bibr" target="#b24">Lafferty et al., 2001</ref>) to estimate a character-based translation model. They later extend this work by adding a model of visual priming, an off-the-shelf spell-checker, and local context ( <ref type="bibr" target="#b28">Liu et al., 2012a</ref>). <ref type="bibr" target="#b22">Hassan and Menezes (2013)</ref> use a random walk framework to capture contextual similarity, which they then interpolate with an edit distance metric. Rather than seeking additional external resources or designing more complex metrics of context and similarity, we propose a unified statistical model, which learns feature weights in a maximum-likelihood framework.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Approach</head><p>Our approach is motivated by the following criteria:</p><p>• Unsupervised. We want to be able to train a model without labeled data. At present, labeled data for Twitter normalization is available only in small quantities. Moreover, as social media language is undergoing rapid change <ref type="bibr" target="#b15">(Eisenstein, 2013b)</ref>, labeled datasets may become stale and increasingly ill-suited to new spellings and words.</p><p>• Low-resource.</p><p>Other unsupervised approaches take advantage of resources such as slang dictionaries and spell checkers ( <ref type="bibr" target="#b20">Han and Baldwin, 2011;</ref><ref type="bibr" target="#b27">Liu et al., 2011</ref>). Resources that characterize the current state of internet language risk becoming outdated; in this paper we investigate whether high-quality normalization is possible without any such resources.</p><p>• Featurized. The relationship between any pair of words can be characterized in a number of different ways, ranging from simple characterlevel rules (e.g., going/goin) to larger substitutions (e.g., someone/sum1), and even to patterns that are lexically restricted (e.g., you/u, to/2). For these reasons, we seek a model that permits many overlapping features to describe candidate word pairs. These features may include simple string edit distance metrics, as well as lexical features that memorize specific pairs of standard and nonstandard words.</p><p>• Context-driven. Learning potentially arbitrary word-to-word transformations without supervision would be impossible without the strong additional cue of local context. For example, in the phrase</p><p>give me suttin to believe in, even a reader who has never before seen the word suttin may recognize it as a phonetic transcription of something. The relatively high string edit distance is overcome by the strong contextual preference for the word something over orthographically closer alternatives such as button or suiting. We can apply an arbitrary target language model, leveraging large amounts of unlabeled data and catering to the desired linguistic characteristics of the normalized content.</p><p>• Holistic. While several prior approachessuch as normalization dictionaries -operate at the token level, our approach reasons over the scope of the entire message. The necessity for such holistic, joint inference and learning can be seen by changing the example above to:</p><p>gimme suttin 2 beleive innnn.</p><p>None of these tokens are standard (except 2, which appears in a nonstandard sense here), so without joint inference, it would not be possible to use context to help normalize suttin.</p><p>Only by jointly reasoning over the entire message can we obtain the correct normalization.</p><p>These desiderata point towards a featurized sequence model, which must be trained without labeled examples. While there is prior work on training sequence models without supervision <ref type="bibr" target="#b31">(Smith and Eisner, 2005;</ref><ref type="bibr" target="#b3">Berg-Kirkpatrick et al., 2010)</ref>, there is an additional complication not faced by models for tasks such as part-of-speech tagging and named entity recognition: the potential label space of standard words is large, on the order of at least 10 4 . Naive application of Viterbi decoding -which is a component of training for both Contrastive Estimation ( <ref type="bibr" target="#b31">Smith and Eisner, 2005</ref>) and the locally-normalized sequence labeling model of <ref type="bibr" target="#b3">Berg-Kirkpatrick et al. (2010)</ref> -will be stymied by Viterbi's quadratic complexity in the dimension of the label space. While various pruning heuristics may be applied, we instead look to Sequential Monte Carlo (SMC), a randomized algorithm which approximates the necessary feature expectations through weighted samples.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Model</head><p>Given a set of source-language sentences S = {s 1 , s 2 , . . .} (e.g., Tweets), our goal is to transduce them into target-language sentences T = {t 1 , t 2 , . . .} (standard English). We are given a target language model P (t), which can be estimated from some large set of unlabeled target-language sentences. We denote the vocabularies of source language and target language as ν S and ν T respectively.</p><p>We define a log-linear model that scores source and target strings, with the form</p><formula xml:id="formula_0">P (s|t; θ) ∝ exp θ T f (s, t) .<label>(1)</label></formula><p>The desired conditional probability P (t|s) can be obtained by combining this model with the target language model, P (t|s) ∝ P (s|t; θ)P (t). Since no labeled data is available, the parameters θ must be estimated by maximizing the log-likelihood of the source-language data. We define the log-likelihood θ (s) for a source-language sentence s as follows:</p><formula xml:id="formula_1">θ (s) = log P (s) = log t P (s|t; θ)P (t)</formula><p>We would like to maximize this objective by making gradient-based updates.</p><formula xml:id="formula_2">∂ θ (s) ∂θ = 1 P (s) t P (t) ∂ ∂θ P (s|t; θ) = t P (t|s) f (s, t) − s P (s |t)f (s , t) = E t|s [f (s, t) − E s |t [f (s , t)]]<label>(2)</label></formula><p>We are left with a difference in expected feature counts, as is typical in log-linear models. However, unlike the supervised case, here both terms are expectations: the outer expectation is over all target sequences (given the observed source sequence), and the nested expectation is over all source sequences, given the target sequence. As the space of possible target sequences t grows exponentially in the length of the source sequence, it will not be practical to compute this expectation directly.</p><p>Dynamic programming is the typical solution for computing feature expectations, and can be applied to sequence models when the feature function decomposes locally. There are two reasons this will not work in our case. First, while the forwardbackward algorithm would enable us to compute E t|s , it would not give us the nested expectation E t|s <ref type="bibr">[E s |t ]</ref>; this is the classic challenge in training globally-normalized log-linear models without labeled data <ref type="bibr" target="#b31">(Smith and Eisner, 2005</ref>). Second, both forward-backward and the Viterbi algorithm have time complexity that is quadratic in the dimension of the label space, at least 10 4 or 10 5 . As we will show, Sequential Monte Carlo (SMC) algorithms have a number of advantages in this setting: they permit the efficient computation of both the outer and inner expectations, they are trivially parallelizable, and the number of samples provides an intuitive tuning tradeoff between accuracy and speed.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Sequential Monte Carlo approximation</head><p>Sequential Monte Carlo algorithms are a class of sampling-based algorithms in which latent variables are sampled sequentially <ref type="bibr" target="#b7">(Cappe et al., 2007)</ref>. They are particularly well-suited to sequence models, though they can be applied more broadly. SMC algorithms maintain a set of weighted hypotheses; the weights correspond to probabilities, and in our case, the hypotheses correspond to target language word sequences. Specifically, we approximate the conditional probability,</p><formula xml:id="formula_3">P (t 1:n |s 1:n ) ≈ K k=1 ω k n δ t k 1:n (t 1:n ),</formula><p>where ω k n is the normalized weight of sample k at word n (˜ ω k n is the unnormalized weight), and δ t k 1:n is a delta function centered at t k 1:n . At each step, and for each hypothesis k, a new target word is sampled from a proposal distribution, and the weight of the hypothesis is then updated. We maintain feature counts for each hypothesis, and approximate the expectation by taking a weighted average using the hypothesis weights. The proposal distribution will be described in detail later.</p><p>We make a Markov assumption, so that the emission probability P (s|t) decomposes across the elements of the sentence P (s|t) = N n P (s n |t n ). This means that the feature functions f (s, t) must decompose on each s n , t n pair. We can then rewrite (1) as</p><formula xml:id="formula_4">P (s|t; θ) = N n exp θ T f (s n , t n ) Z(t n ) (3) Z(t n ) = s exp θ T f (s, t n ) .<label>(4)</label></formula><p>In addition, we assume that the target language model P (t) can be written as an N-gram language model, P (t) = n P (t n |t n−1 , . . . t n−k+1 ). With these assumptions, we can view normalization as a finite state-space model in which the target language model defines the prior distribution of the process and Equation 3 defines the likelihood function. We are able to compute the the posterior probability P (t|s) using sequential importance sampling, a member of the SMC family.</p><p>The crucial idea in sequential importance sampling is to update the hypotheses t k 1:n and their weights ω k n so that they approximate the posterior distribution at the next time step, P (t 1:n+1 |s 1:n+1 ).</p><p>Assuming the proposal distribution has the form Q(t k 1:n |s 1:n ), the importance weights are given by ω k n ∝ P (t k 1:n |s 1:n ) Q(t k 1:n |s 1:n )</p><p>In order to update the hypotheses recursively, we rewrite P (t 1:n |s 1:n ) as: P (t 1:n |s 1:n ) = P (s n |t 1:n , s 1:n−1 )P (t 1:n |s 1:n−1 ) P (s n |s 1:n−1 ) = P (s n |t n )P (t n |t 1:n−1 , s 1:n−1 )P (t 1:n−1 |s 1:n−1 ) P (s n |s 1:n−1 ) ∝P (s n |t n )P (t n |t n−1 )P (t 1:n−1 |s 1:n−1 ), assuming a bigram language model. We further assume the proposal distribution Q can be factored as: Q(t 1:n |s 1:n ) =Q(t n |t 1:n−1 , s 1:n )Q(t 1:n−1 |s 1:n−1 ) =Q(t n |t n−1 , s n )Q(t 1:n−1 |s 1:n−1 ).</p><p>Then the unnormalized importance weights simplify to a recurrence:</p><formula xml:id="formula_7">˜ ω k n =</formula><p>P (s n |t k n )P (t k n |t k n−1 )P (t k 1:n−1 |s 1:n−1 ) Q(t n |t n−1 , s n )Q(t k 1:n−1 |s 1:n−1 )</p><formula xml:id="formula_8">=ω k n−1 P (s n |t k n )P (t k n |t k n−1 ) Q(t n |t n−1 , s n )<label>(7)</label></formula><p>Therefore, we can approximate the posterior distribution P (t n |s 1:n ) ≈ K k=1 ω k n δ t k n (t n ), and compute the outer expectation as follows:</p><formula xml:id="formula_10">E t|s [f (s, t)] = K k=1 ω k N N n=1 f (s n , t k n )<label>(9)</label></formula><p>We compute the nested expectation using a nonsequential Monte Carlo approximation, assuming we can draw s ,k ∼ P (s|t k n ).</p><formula xml:id="formula_11">E s|t k [f (s, t k )] = 1 L N n=1 L =1 f (s ,k n , t k n )</formula><p>This gives the overall gradient computation:</p><formula xml:id="formula_12">E t|s [f (s, t) − E s |t [f (s , t)]] = 1 K k=1˜ωk=1˜ k=1˜ω k N K k=1˜ω k=1˜ k=1˜ω k N × N n=1 f (s n , t k n ) − 1 L L =1 f (s ,k n , t k n )<label>(10)</label></formula><p>where we sample t k n and update ω k n while moving from left-to-right, and sample s ,k n at each n. Note that although the sequential importance sampler moves left-to-right like a filter, we use only the final weights ω N to compute the expectation. Thus, the resulting expectation is based on the distribution P (s 1:N |t 1:N ), so that no backwards "smoothing" pass ( <ref type="bibr" target="#b17">Godsill et al., 2004</ref>) is needed to eliminate bias. Other applications of sequential Monte Carlo make use of resampling <ref type="bibr" target="#b7">(Cappe et al., 2007)</ref> to avoid degeneration of the hypothesis weights, but we found this to be unnecessary due to the short length of Twitter messages.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Proposal distribution</head><p>The major computational challenge for dynamic programming approaches to normalization is the large label space, equal to the size of the target vocabulary. It may appear that all we have gained by applying sequential Monte Carlo is to convert a computational problem into a statistical one: a naive sampling approach will have little hope of finding the small high-probability region of the highdimensional label space. However, sequential importance sampling allows us to address this issue through the proposal distribution, from which we sample the candidate words t n . Careful design of the proposal distribution can guide sampling towards the high-probability space. In the asymptotic limit of an infinite number of samples, any non-pathological proposal distribution will ultimately arrive at the desired estimate, but a good proposal distribution can greatly reduce the number of samples needed. <ref type="bibr" target="#b12">Doucet et al. (2001)</ref> note that the optimal proposal -which minimizes the variance of the importance weights conditional on t 1:n−1 and s 1:nhas the following form:</p><formula xml:id="formula_13">Q(t k n |s n , t k n−1 ) = P (s n |t k n )P (t k n |t k n−1 ) t P (s n |t )P (t |t k n−1 )<label>(11)</label></formula><p>Sampling from this proposal requires computing the normalized distribution P (s n |t k n ); similarly, the update of the hypothesis weights (Equation 8) requires the calculation of Q in its normalized form. In each case, the total cost is the product of the vocabulary sizes, O(#|ν T |#|ν S |), which is not tractable as the vocabularies become large.</p><p>In low-dimensional settings, a convenient solution is to set the proposal distribution equal to the transition distribution, Q(t k n |s n , t k n−1 ) = P (t k n |t k n−1 , . . . , t k n−k+1 ). This choice is called the "bootstrap filter," and it has the advantage that the weights ω (k) are exactly identical to the product of emission likelihoods n P (s n |t k n ). The complexity of computing the hypothesis weights is thus O(#|ν S |). However, because this proposal ignores the emission likelihood, the bootstrap filter has very little hope of finding a high-probability sample in high-entropy contexts.</p><p>We strike a middle ground between efficiency and accuracy, using a proposal distribution that is closely related to the overall likelihood, yet is tractable to sample and compute:</p><formula xml:id="formula_14">Q(t k n |s n , t k n−1 ) def = P (s n |t k n )Z(t k n )P (t k n |t k n−1 ) t P (s n |t )Z(t )P (t |t k n−1 ) = exp θ T f (s n , t n ) P (t k n |t k n−1 ) t exp θ T f (s n , t ) P (t |t k n−1 )<label>(12)</label></formula><p>Here, we simply replace the likelihood distribution in (11) by its unnormalized version.</p><p>To update the unnormalized hypothesis weights˜ω weights˜ weights˜ω k n , we have˜ω</p><formula xml:id="formula_15">have˜ have˜ω k n =ω k n−1 t exp θ T f (s n , t ) P (t |t k n−1 ) Z(t k n )<label>(13)</label></formula><p>The numerator requires summing over all elements in ν T and the denominator Z(t k n ) requires summing over all elements in ν S , for a total cost of O(#|ν T | + #|ν S |).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Decoding</head><p>Given an input source sentence s, the decoding problem is to find a target sentence t that maximizes P (t|s) ∝ P (s|t)P (t) = N n P (s n |t n )P (t n |t n−1 ).</p><p>Feature name Description word-word pair A set of binary features for each source/target word pair s, t string similarity A set of binary features indicating whether s is one of the top N string similar nonstandard words of t, for N ∈ {5, 10, 25, 50, 100, 250, 500, 1000} <ref type="table">Table 1</ref>: The feature set for our log-linear model</p><p>As with learning, we cannot apply the usual dynamic programming algorithm (Viterbi), because of its quadratic cost in the size of the target language vocabulary. This must be multiplied by the cost of computing the normalized probability P (s n |t n ), resulting in a prohibitive time complexity of O(#|ν S |#|ν T | 2 N ).</p><p>We consider two approximate decoding algorithms. The first is to simply apply the proposal distribution, with linear complexity in the size of the two vocabularies. However, this decoder is not identical to P (t|s), because of the extra factor of Z(t) in the numerator. Alternatively, we can apply the proposal distribution for selecting target word candidates, then apply the Viterbi algorithm only within these candidates. The total cost is O(#|ν S |T 2 N ), where T is the number of target word candidates we consider; this will asymptotically approach P (t|s) as T → #|ν T |. Our evaluations use the more expensive proposal+Viterbi decoding, but accuracy with the more efficient proposal-based decoding is very similar.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Features</head><p>Our system uses the feature types described in Table 1. The word pair features are designed to capture lexical conventions, e.g. you/u. We only consider word pair features that fired during training. The string similarity features rely on the similarity function proposed by <ref type="bibr" target="#b10">Contractor et al. (2010)</ref>, which has proven effective for normalization in prior work. We bin this similarity to create binary features indicating whether a string s is in the top-N most similar strings to t; this binning yields substantial speed improvements without negatively impacting accuracy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Implementation and data</head><p>The model and inference described in the previous section are implemented in a software system for normalizing text on twitter, called UNLOL: unsupervised normalization in a LOgLinear model. The final system can process roughly 10,000 Tweets per hour. We now describe some implementation details.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Normalization candidates</head><p>Most tokens in tweets do not require normalization. The question of how to identify which words are to be normalized is still an open problem. Following Han and Baldwin (2011), we build a dictionary of words which are permissible in the target domain, and make no attempt to normalize source strings that match these words. As with other comparable approaches, we are therefore unable to normalize strings like ill into I'll. Our set of "in-vocabulary" (IV) words is based on the GNU aspell dictionary (v0.60.6), containing 97,070 words. From this dictionary, we follow <ref type="bibr" target="#b28">Liu et al. (2012a)</ref> and remove all the words with a count of less than 20 in the Edinburgh Twitter corpus <ref type="bibr" target="#b30">(Petrovi´cPetrovi´c et al., 2010</ref>) -resulting in a total of 52,449 target words. All single characters except a and i are excluded, and rt is treated as in-vocabulary. For all in-vocabulary words, we define P (s n |t n ) = δ(s n , t n ), taking the value of zero when s n = t n . This effectively prevents our model from attempting to normalize these words.</p><p>In addition to words that are in the target vocabulary, there are many other strings that should not be normalized, such as names and multiword shortenings (e.g. going to/gonna). <ref type="bibr">1</ref> We follow prior work and assume that the set of normalization candidates is known in advance during test set decoding <ref type="bibr" target="#b21">(Han et al., 2013)</ref>. However, the unlabeled training data has no such information. Thus, during training we attempt to normalize all tokens that (1) are not in our lexicon of IV words, and (2) are composed of letters, numbers and the apostrophe. This set includes contractions like "gonna" and "gotta", which would not appear in the test set, but are nonetheless normalized during training. For each OOV token, we conduct a pre-normalization step by reducing any repetitions of more than two letters in the nonstandard words to exactly two letters (e.g., cooool → cool).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Language modeling</head><p>The Kneser-Ney smoothed trigram target language model is estimated with the SRILM toolkit Stolcke (2002), using Tweets from the Edinburgh Twitter corpus that contain no OOV words besides hashtags and username mentions (following <ref type="figure">(Han et al.,  2013)</ref>). We use this language model for both training and decoding. We occasionally find training contexts in which the trigram t n , t n−1 , t n−2 is unobserved in the language model data; features resulting from such trigrams are not considered when computing the weight gradients.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Parameters</head><p>The Monte Carlo approximations require two parameters: the number of samples for sequential Monte Carlo (K), and the number of samples for the non-sequential sampler of the nested expectation (L, from Equation 10). The theory of Monte Carlo approximation states that the quality of the approximation should only improve as the number of samples increases; we obtained good results with K = 10 and L = 1, and found relatively little improvement by increasing these values. The number of hypotheses considered by the decoder is set to T = 10; again, the performance should only improve with T , as we more closely approximate full Viterbi decoding.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Experiments</head><p>Datasets We use two existing labeled Twitter datasets to evaluate our approach. The first dataset -which we call LWWL11, based on the names of its authors Liu et al. (2011) -contains 3,802 individual "nonstandard" words (i.e., words that are not in the target vocabulary) and their normalized forms. The rest of the message in which the words is appear is not available. As this corpus does not provide linguistic context, its decoding must use a unigram target language model. The second dataset -which is called LexNorm1.1 by its authors Han and Baldwin (2011) -contains 549 complete tweets with 1,184 nonstandard tokens (558 unique word types).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Method</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Dataset</head><p>Precision Recall F-measure ( <ref type="bibr" target="#b27">Liu et al. 2011</ref>  In this corpus, we can decode with a trigram language model.</p><p>Close analysis of LexNorm1.1 revealed some inconsistencies in annotation (for example, y'all and 2 are sometimes normalized to you and to, but are left unnormalized in other cases). In addition, several annotations disagree with existing resources on internet language and dialectal English. For example, smh is normalized to somehow in LexNorm1.1, but internetslang.com and urbandictionary.com assert that it stands for shake my head, and this is evident from examples such as smh at this girl. Similarly, finna is normalized to finally in LexNorm1.1, but from the literature on African American English <ref type="bibr" target="#b19">(Green, 2002)</ref>, it corresponds to fixing to (e.g., i'm finna go home). To address these issues, we have produced a new version of this dataset, which we call LexNorm1.2 (after consulting with the creators of LexNorm1.1). LexNorm1.2 differs from version 1.1 in the annotations for 172 of the 2140 OOV words. We evaluate on LexNorm1.1 to compare with prior work, but we also present results on LexNorm1.2 in the hope that it will become standard in future work on normalization in English. The dataset is available at http://www.cc.gatech.edu/ ~jeisenst/lexnorm.v1.2.tgz.</p><p>To obtain unlabeled training data, we randomly sample 50 tweets from the Edinburgh Twitter corpus Petrovi´c <ref type="bibr" target="#b30">Petrovi´c et al. (2010)</ref> for each OOV word. Some OOV words appear less than 50 times in the corpus, so we obtained more training tweets for them through the Twitter search API.</p><p>Metrics Prior work on these datasets has assumed perfect detection of words requiring normalization, and has focused on finding the correct normalization for these <ref type="bibr">words (Han and Baldwin, 2011;</ref><ref type="bibr" target="#b21">Han et al., 2013)</ref>. Recall has been defined as the proportion of words requiring normalization which are normalized correctly; precision is defined as the proportion of normalizations which are correct.</p><p>Results We run our training algorithm for two iterations (pass the training data twice). The results are presented in <ref type="table" target="#tab_1">Table 2</ref>. Our system, UNLOL, achieves the highest published F-measure on both datasets. Performance on LexNorm1.2 is very similar to LexNorm1.1, despite the fact that roughly 8% of the examples were relabeled.</p><p>In the normalization task that we consider, the tokens to be normalized are specified in advance. This is the same task specification as in the prior work against which we compare. At test time, our system attempts normalizes all such tokens; every error is thus both a false positive and false negative, so precision equals to recall for this task; this is also true for Han and Baldwin (2011) and <ref type="bibr" target="#b27">Liu et al. (2011)</ref>.</p><p>It is possible to trade recall for precision by refusing to normalize words when the system's confidence falls below a threshold. A good setting of this threshold can improve the F-measure, but we did not report these results because we have no development set for parameter tuning.</p><p>Regularization One potential concern is that the number of non-zero feature weights will continually increase until the memory cost becomes overwhelming. Although we did not run up against mem- Figure 1: Effect of L1 regularization on the F-measure and the number of features with non-zero weights ory limitations in the experiments producing the results in <ref type="table" target="#tab_1">Table 2</ref>, this issue can be addressed through the application of L1 regularization, which produces sparse weight vectors by adding a penalty of λ||θ|| 1 to the log-likelihood. We perform online optimization of the L1-regularized log-likelihood by applying the truncated gradient method ( <ref type="bibr" target="#b25">Langford et al., 2009)</ref>. We use an exponential decreasing learning rate η k = η 0 α k/N , where k is the iteration counter and N is the size of training data. We set η 0 = 1 and α = 0.5. Experiments were run until 300,000 training instances were observed, with a final learning rate of less than 1/32. As shown in <ref type="figure">Figure 1</ref>, a small amount of regularization can dramatically decrease the number of active features without harming performance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Analysis</head><p>We apply our normalization system to investigate the orthographic processes underlying language variation in social media. Using a dataset of 400,000 English language tweets, sampled from the month of August in each year from 2009 to 2012, we apply UNLOL to automatically normalize each token.</p><p>We then treat these normalizations as labeled training data, and examine the Levenshtein alignment between the source and target tokens. This alignment gives approximate character-level transduction rules to explain each OOV token. We then examine which rules are used by each author, constructing a matrix of authors and rules. <ref type="bibr">2</ref> Factorization of the author-rule matrix reveals sets of rules that tend to be used together; we might call these rulesets "orthographic styles." We apply non-negative matrix factorization ( <ref type="bibr" target="#b26">Lee and Seung, 2001)</ref>, which characterizes each author by a vector of k style loadings, and simultaneously constructs k style dictionaries, which each put weight on different orthographic rules. Because the loadings are constrained to be non-negative, the factorization can be seen as sparsely assigning varying amounts of each style to each author. We choose the factorization that minimizes the Frobenius norm of the reconstruction error, using the NIMFA software package (http://nimfa.biolab.si/).</p><p>The resulting styles are shown in <ref type="table" target="#tab_3">Table 3</ref>, for k = 10; other values of k give similar overall results with more or less detail. The styles incorporate a number of linguistic phenomena, including: expressive lengthening (styles 7-9; see Brody and Diakopoulos, 2011); g-and t-dropping (style 5, see Eisenstein 2013a) ; th-stopping (style 6); and the dropping of several word-final vowels (styles 1-3). Some of these styles, such as t-dropping and th-stopping, have direct analogues in spoken language varieties <ref type="bibr" target="#b34">(Tagliamonte and Temple, 2005;</ref><ref type="bibr" target="#b19">Green, 2002</ref>), while others, like expressive lengthening, seem more unique to social media. The relationships between these orthographic styles and social variables such as geography and demograph-style rules examples 1. you; o-dropping y/_ ou/_u *y/ * _ o/_ u, yu, 2day, knw, gud, yur, wud, yuh, u've, toda, everthing, everwhere, ourself 2. e-dropping, u/o be/b_ e/_ o/u e*/_ * b, r, luv, cum, hav, mayb, bn, remembr, btween, gunna, gud 3. a-dropping a/_ *a/ * _ re/r_ ar/_r r, tht, wht, yrs, bck, strt, gurantee, elementry, wr, rlly, wher, rdy, preciate, neway 4. g-dropping g*/_ * ng/n_ g/_ goin, talkin, watchin, feelin, makin 5. t-dropping t*/_ * st/s_ t/_ jus, bc, shh, wha, gota, wea, mus, firts, jes, subsistutes 6. th-stopping h/_ *t/ * d th/d_ t/d dat, de, skool, fone, dese, dha, shid, dhat, dat's 7. (kd)-lengthening i_/id _/k _/d _*/k * idk, fuckk, okk, backk, workk, badd, andd, goodd, bedd, elidgible, pidgeon 8. o-lengthening o_/oo _*/o * _/o soo, noo, doo, oohh, loove, thoo, helloo 9. e-lengthening _/i e_/ee _/e _*/e * mee, ive, retweet, bestie, lovee, nicee, heey, likee, iphone, homie, ii, damnit 10. a-adding _/a __/ma _/m _*/a * ima, outta, needa, shoulda, woulda, mm, comming, tomm, boutt, ppreciate ics must be left to future research, but they offer a promising generalization of prior work that has focused almost exclusively on exclusively on lexical variation ( <ref type="bibr" target="#b0">Argamon et al., 2007;</ref><ref type="bibr">Eisenstein et al., 2010;</ref>, with a few exceptions for character-level features ( <ref type="bibr" target="#b4">Brody and Diakopoulos, 2011;</ref><ref type="bibr" target="#b6">Burger et al., 2011</ref>). Note that style 10 is largely the result of mistaken normalizations. The tokens ima, outta, and needa all refer to multi-word expressions in standard English, and are thus outside the scope of the normalization task as defined by <ref type="bibr" target="#b21">Han et al. (2013)</ref>. UNLOL has produced incorrect single-token normalizations for these terms: i/ima, out/outta, and need/needa. But while these normalizations are wrong, the resulting style nonetheless captures a coherent orthographic phenomenon.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Conclusion</head><p>We have presented a unified, unsupervised statistical model for normalizing social media text, attaining the best reported performance on the two standard normalization datasets. The power of our approach comes from flexible modeling of word-to-word relationships through features, while exploiting contextual regularity to train the corresponding feature weights without labeled data. The primary technical challenge was overcoming the large label space of the normalization task; we accomplish this using sequential Monte Carlo. Future work may consider whether sequential Monte Carlo can offer similar advantages in other unsupervised NLP tasks. An additional benefit of our joint statistical approach is that it may be combined with other downstream language processing tasks, such as part-of-speech tagging ( <ref type="bibr" target="#b16">Gimpel et al., 2011</ref>) and named entity resolution ( <ref type="bibr" target="#b29">Liu et al., 2012b</ref>).</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 : Empirical results</head><label>2</label><figDesc></figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 3 : Orthographic styles induced from automatically normalized Twitter text</head><label>3</label><figDesc></figDesc><table></table></figure>
+
+			<note place="foot" n="1"> Whether multiword shortenings should be normalized is arguable, but they are outside the scope of current normalization datasets (Han and Baldwin, 2011).</note>
+
+			<note place="foot" n="2"> We tried adding these rules as features and retraining the normalization system, but this hurt performance.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We thank the reviewers for thoughtful comments on our submission. This work also benefitted from discussions with Timothy Baldwin, Paul Cook, Frank Dellaert, Arnoud Doucet, Micha Elsner, and Sharon Goldwater. It was supported by NSF SOCS-1111142.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Mining the blogosphere: age, gender, and the varieties of self-expression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Argamon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Koppel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Pennebaker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">First Monday</title>
+		<imprint>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page">12</biblScope>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">A phrase-based statistical model for SMS text normalization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aiti</forename><surname>Aw</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Min</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Juan</forename><surname>Xiao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Su</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="33" to="40" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">A hybrid rule/model-based finite-state framework for normalizing sms messages</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Beaufort</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sophie</forename><surname>Roekhaut</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="770" to="779" />
+		</imprint>
+	</monogr>
+	<note>Louise-Amélie Cougnon, and Cédrick Fairon</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Painless unsupervised learning with features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Taylor</forename><surname>Berg-Kirkpatrick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexandre</forename><surname>Bouchard-Côté</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Denero</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NAACL</title>
+		<meeting>NAACL</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="582" to="590" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samuel</forename><surname>Brody</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicholas</forename><surname>Diakopoulos</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">using word lengthening to detect sentiment in microblogs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Cooooooooooooooollllllllllllll!!!!!!!!!!!!!!</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Discriminating gender on twitter</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><forename type="middle">D</forename><surname>Burger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><forename type="middle">C</forename><surname>Henderson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">George</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guido</forename><surname>Zarrella</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">An overview of existing methods and recent advances in sequential monte carlo</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Olivier</forename><surname>Cappe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Simon</forename><forename type="middle">J</forename><surname>Godsill</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><surname>Moulines</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings of the IEEE</title>
+		<imprint>
+			<biblScope unit="volume">95</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="899" to="924" />
+			<date type="published" when="2007-05" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Investigation and modeling of the structure of texting language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Choudhury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Saraf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Jain</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mukherjee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Sarkar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Basu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">International Journal on Document Analysis and Recognition</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="157" to="174" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Investigation and modeling of the structure of texting language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Monojit</forename><surname>Choudhury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rahul</forename><surname>Saraf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vijit</forename><surname>Jain</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Animesh</forename><surname>Mukherjee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sudeshna</forename><surname>Sarkar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anupam</forename><surname>Basu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">International Journal of Document Analysis and Recognition (IJDAR)</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">3-4</biblScope>
+			<biblScope unit="page" from="157" to="174" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Unsupervised cleansing of noisy text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danish</forename><surname>Contractor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Tanveer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Faruquie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Venkata</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Subramaniam</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of COLING</title>
+		<meeting>COLING</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="189" to="196" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">An unsupervised model for text message normalization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Cook</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Suzanne</forename><surname>Stevenson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Workshop on Computational Approaches to Linguistic Creativity, CALC &apos;09</title>
+		<meeting>the Workshop on Computational Approaches to Linguistic Creativity, CALC &apos;09<address><addrLine>Stroudsburg, PA, USA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="71" to="78" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Particle filters for state estimation of jump markov linear systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Doucet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">J</forename><surname>Gordon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Krishnamurthy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<editor>Noah A. Smith, and Eric P. Xing</editor>
+		<meeting>EMNLP<address><addrLine>March. Jacob Eisenstein, Brendan O&apos;Connor</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="volume">49</biblScope>
+			<biblScope unit="page" from="613" to="624" />
+		</imprint>
+	</monogr>
+	<note>A latent variable model for geographic lexical variation</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Discovering sociolinguistic associations with structured sparsity</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Eisenstein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><forename type="middle">P</forename><surname>Xing</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Phonological factors in social media writing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Eisenstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the NAACL Workshop on Language Analysis in Social Media</title>
+		<meeting>the NAACL Workshop on Language Analysis in Social Media</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">What to do about bad language on the internet</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Eisenstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NAACL</title>
+		<meeting>NAACL</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="359" to="369" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Part-of-speech tagging for twitter: annotation, features, and experiments</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Gimpel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nathan</forename><surname>Schneider</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O&amp;apos;</forename><surname>Brendan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dipanjan</forename><surname>Connor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Das</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Mills</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Eisenstein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dani</forename><surname>Heilman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Yogatama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Flanigan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Monte carlo smoothing for non-linear time series</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Simon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arnaud</forename><surname>Godsill</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Doucet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>West</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In Journal of the American Statistical Association</title>
+		<imprint>
+			<biblScope unit="page" from="156" to="168" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Unsupervised mining of lexical variants from noisy text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephan</forename><surname>Gouws</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dirk</forename><surname>Hovy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Donald</forename><surname>Metzler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the First Workshop on Unsupervised Learning in NLP, EMNLP &apos;11</title>
+		<meeting>the First Workshop on Unsupervised Learning in NLP, EMNLP &apos;11</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">African American English: A Linguistic Introduction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lisa</forename><forename type="middle">J</forename><surname>Green</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2002-09" />
+			<publisher>Cambridge University Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Lexical normalisation of short text messages: makn sens a #twitter</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bo</forename><surname>Han</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Baldwin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="368" to="378" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Lexical normalization for social media text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bo</forename><surname>Han</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Cook</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Baldwin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Intelligent Systems and Technology</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page">5</biblScope>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Social text normalization using contextual graph random walks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hany</forename><surname>Hassan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arul</forename><surname>Menezes</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Normalizing sms: are two metaphors better than one?</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Catherine</forename><surname>Kobus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">François</forename><surname>Yvon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Géraldine</forename><surname>Damnati</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of COLING</title>
+		<meeting>COLING</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="441" to="448" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Conditional random fields: Probabilistic models for segmenting and labeling sequence data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><forename type="middle">D</forename><surname>Lafferty</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fernando</forename><forename type="middle">C N</forename><surname>Pereira</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICML</title>
+		<meeting>ICML</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="282" to="289" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Sparse online learning via truncated gradient</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Langford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lihong</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tong</forename><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="page" from="777" to="801" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Algorithms for NonNegative Matrix Factorization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">D</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">S</forename><surname>Seung</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems (NIPS)</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="page" from="556" to="562" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Insertion, deletion, or substitution?: normalizing text messages without pre-categorization nor supervision</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fei</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fuliang</forename><surname>Weng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bingqing</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yang</forename><surname>Liu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="71" to="76" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">A broadcoverage normalization system for social media language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fei</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fuliang</forename><surname>Weng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiao</forename><surname>Jiang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="1035" to="1044" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Joint inference of named entity recognition and normalization for tweets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaohua</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiangyang</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhongyang</forename><surname>Fu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Furu</forename><surname>Wei</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">The edinburgh twitter corpus</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Saša</forename><surname>Petrovi´cpetrovi´c</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miles</forename><surname>Osborne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Lavrenko</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the NAACL HLT Workshop on Computational Linguistics in a World of Social Media</title>
+		<meeting>the NAACL HLT Workshop on Computational Linguistics in a World of Social Media</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="25" to="26" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Contrastive estimation: training log-linear models on unlabeled data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Noah</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Smith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Eisner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 43rd Annual Meeting on Association for Computational Linguistics, ACL &apos;05</title>
+		<meeting>the 43rd Annual Meeting on Association for Computational Linguistics, ACL &apos;05<address><addrLine>Stroudsburg, PA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="354" to="362" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Normalization of non-standard words</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Sproat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">W</forename><surname>Black</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ostendorf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Richards</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Speech &amp; Language</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="287" to="333" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">SRILM -an extensible language modeling toolkit</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andreas</forename><surname>Stolcke</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICSLP</title>
+		<meeting>ICSLP</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="901" to="904" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">New perspectives on an ol&apos; variable: (t,d) in british english</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sali</forename><surname>Tagliamonte</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rosalind</forename><surname>Temple</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Language Variation and Change</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="page" from="281" to="302" />
+			<date type="published" when="2005-09" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Adaptive parsercentric text normalization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Congle</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tyler</forename><surname>Baldwin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Howard</forename><surname>Ho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Benny</forename><surname>Kimelfeld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yunyao</forename><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1159" to="1168" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

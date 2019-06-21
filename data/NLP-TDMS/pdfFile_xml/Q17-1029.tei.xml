@@ -1,0 +1,1025 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:06+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">In-Order Transition-based Constituent Parsing</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiangming</forename><surname>Liu</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Singapore University of Technology and Design</orgName>
+								<address>
+									<addrLine>8 Somapah Road</addrLine>
+									<postCode>487372</postCode>
+									<settlement>Singapore</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yue</forename><surname>Zhang</surname></persName>
+							<email>yuezhang@sutd.edu.sg</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Singapore University of Technology and Design</orgName>
+								<address>
+									<addrLine>8 Somapah Road</addrLine>
+									<postCode>487372</postCode>
+									<settlement>Singapore</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">In-Order Transition-based Constituent Parsing</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Both bottom-up and top-down strategies have been used for neural transition-based constituent parsing. The parsing strategies differ in terms of the order in which they recognize productions in the derivation tree, where bottom-up strategies and top-down strategies take post-order and pre-order traversal over trees, respectively. Bottom-up parsers benefit from rich features from readily built partial parses, but lack lookahead guidance in the parsing process; top-down parsers benefit from non-local guidance for local decisions, but rely on a strong encoder over the input to predict a constituent hierarchy before its construction. To mitigate both issues, we propose a novel parsing system based on in-order traversal over syntactic trees, designing a set of transition actions to find a compromise between bottom-up constituent information and top-down lookahead information. Based on stack-LSTM, our psycholinguistically motivated constituent parsing system achieves 91.8 F 1 on the WSJ benchmark. Furthermore, the system achieves 93.6 F 1 with supervised reranking and 94.2 F 1 with semi-supervised reranking, which are the best results on the WSJ benchmark.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Transition-based constituent parsing employs sequences of local transition actions to construct constituent trees over sentences. There are two popular transition-based constituent parsing systems, namely bottom-up parsing <ref type="bibr" target="#b24">(Sagae and Lavie, 2005;</ref><ref type="bibr" target="#b36">Zhang and Clark, 2009;</ref><ref type="bibr" target="#b37">Zhu et al., 2013;</ref><ref type="bibr" target="#b33">Watanabe and Sumita, 2015)</ref> and top-down parsing <ref type="bibr" target="#b16">Kuncoro et al., 2017</ref>). The parsing strategies differ in terms of the order in which they recognize productions in the derivation tree.</p><p>The process of bottom-up parsing can be regarded as post-order traversal over a constituent tree. For example, given the sentence in <ref type="figure" target="#fig_0">Figure  1</ref>, a bottom-up shift-reduce parser takes the action sequence in <ref type="table" target="#tab_2">Table 2</ref>(a) <ref type="bibr">1</ref> to build the output, where the word sequence "The little boy" is first read, and then an NP recognized for the word sequence. After the system reads the verb "likes" and its subsequent NP, a VP is recognized. The full order of recognition for the tree nodes is</p><formula xml:id="formula_0">3 → 4 → 5 → 2 → 7 → 9 → 10 → 8 → 6 → 11 → 1</formula><p>. When making local decisions, rich information is available from readily built partial trees ( <ref type="bibr" target="#b37">Zhu et al., 2013;</ref><ref type="bibr" target="#b33">Watanabe and Sumita, 2015;</ref><ref type="bibr" target="#b8">Cross and Huang, 2016)</ref>, which contributes to local disambiguation. However, there is lack of top-down guidance from lookahead information, which can be useful <ref type="bibr" target="#b14">(Johnson, 1998;</ref><ref type="bibr" target="#b20">Roark and Johnson, 1999;</ref><ref type="bibr" target="#b3">Charniak, 2000;</ref><ref type="bibr" target="#b18">Liu and Zhang, 2017)</ref>. In addition, binarization must be applied to trees, as shown in <ref type="figure" target="#fig_0">Figure 1</ref>(b), to ensure a constant number of actions ( <ref type="bibr" target="#b24">Sagae and Lavie, 2005</ref>), and to take advantage of lexical head information <ref type="bibr" target="#b7">(Collins, 2003)</ref>. However, such binarization requires a set of language-specific rules, which hampers adaptation of parsing to other languages.</p><p>On the other hand, the process of top-down parsing can be regarded as pre-order traversal over a tree. Given the sentence in <ref type="figure" target="#fig_0">Figure 1</ref>, a top-down shift-reduce parser takes the action sequence in <ref type="table" target="#tab_2">Table 2</ref>(b) to build the output, where an S is first made and then an NP is generated. After that, the system makes a decision to read the word sequence "The little boy" to complete the NP. The full order of recognition for the tree nodes is</p><formula xml:id="formula_1">1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11</formula><p>. The top-down lookahead guidance contributes to non-local disambiguation. However, it is difficult to generate a constituent before its sub constituents have been realized, since no explicit features can be extracted from their subtree structures. Thanks to the use of recurrent neural networks, which make it possible to represent a sentence globally before syntactic tree construction, seminal work of neural top-down parsing directly generates bracketed constituent trees using sequence-to-sequence models ( <ref type="bibr" target="#b30">Vinyals et al., 2015</ref> (c) in-order system <ref type="figure">Figure 2</ref>: Action sequences of three types of transition constituent parsing system. Details of the action system are introduced in Section 2.1, Section 2.2 and Section 3, respectively.</p><p>transition-based parsing. In this paper, we propose a novel transition system for constituent parsing, mitigating issues of both bottom-up and top-down systems by finding a compromise between bottom-up constituent information and top-down lookahead information. The process of the proposed constituent parsing can be regarded as in-order traversal over a tree. Given the sentence in <ref type="figure" target="#fig_0">Figure 1</ref>, the system takes the action sequence in <ref type="table" target="#tab_2">Table 2</ref>(c) to build the output. The system reads the word "The" and then projects an NP, which is based on bottom-up evidence. After this, based on the projected NP, the system reads the word sequence "little boy", with top-down guidance from NP. Similarly, based on the completed constituent "(NP The little boy)", the system projects an S, with the bottom-up evidence. With the S and the word "likes", the system projects an VP, which can serve as top-down guidance. The full order of recognition for the tree nodes is</p><formula xml:id="formula_2">3 → 2 → 4 → 5 → 1 → 7 → 6 → 9 → 8 → 10 → 11</formula><p>. Compared to post-order traversal, in-order traversal can potentially resolve non-local ambiguity better by top-down guidance. Compared to pre-order traversal, in-order traversal can potentially resolve local ambiguity better by bottom-up evidence. Furthermore, in-order traversal is psycholinguistically motivated <ref type="bibr" target="#b21">(Roark et al., 2009;</ref><ref type="bibr" target="#b28">Steedman, 2000</ref>). Empirically, a human reader comprehends sentences by giving lookahead guesses for constituents.</p><p>For example, when reading a word "likes", a human reader could guess that it could be a start of a constituent VP, instead of waiting to read the object "red tomatoes", which is the procedure of a bottom-up system. We compare our system with the two baseline systems (i.e. a top-down system and a bottomup system) under the same neural transition-based framework of . Our final models outperform both of the bottom-up and top-down transition-based constituent parsing by achieving a 91.8 F 1 in English and a 86.1 F 1 in Chinese for greedy fully-supervised parsing, respectively. Furthermore, our final model obtains a 93.6 F 1 with supervised reranking <ref type="bibr" target="#b6">(Choe and Charniak, 2016</ref>) and a 94.2 F 1 with semi-supervised reranking, achieving the state-of-the-art results on constituent parsing on the English benchmark. By converting to Stanford dependencies, our final model achieves the state-ofthe-art results on dependency parsing by obtaining a 96.2% UAS and a 95.2% LAS. To our knowledge, we are the first to systematically compare top-down and bottom-up constituent parsing under the same neural framework. We release our code at https://github.com/LeonCrashCode/ InOrderParser.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Transition-based constituent parsing</head><p>Transition-based constituent parsing takes a leftto-right scan of the input sentence, where a stack is used to maintain partially constructed phrasestructures, while the input words are stored in a buffer. Formally, a state is defined as <ref type="bibr">[σ, i, f ]</ref>, where σ is the stack, i is the front index of the buffer, and f is a boolean value showing that the parsing is finished. At each step, a transition action is applied to consume an input word or construct a new phrasestructure. Different parsing systems employ their own sets of actions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Bottom-up system</head><p>We take the bottom-up system of <ref type="bibr" target="#b24">Sagae and Lavie (2005)</ref> as our bottom-up baseline. Given a state, the set of transition actions are:</p><p>• SHIFT: pop the front word from the buffer, and push it onto the stack.</p><p>• REDUCE-L/R-X: pop the top two constituents off the stack, combine them into a new constituent with label X, and push the new constituent onto the stack.</p><p>• UNARY-X: pop the top constituent off the stack, raise it to a new constituent with label X, and push the new constituent onto the stack.</p><p>• FINISH: pop the root node off the stack and end parsing.</p><p>The bottom-up parser can be summarized as the deductive system in <ref type="figure" target="#fig_1">Figure 3</ref>(a). Given the sentence with the binarized syntactic tree in <ref type="figure" target="#fig_0">Figure  1</ref>(b), the sequence of actions SHIFT, SHIFT, SHIFT, REDUCE-R-NP, REDUCE-R-NP, SHIFT, SHIFT, SHIFT, REDUCE-R-NP, REDUCE-L-VP, SHIFT, REDUCE-L-S, REDUCE-R-S and FINISH, can be used to construct its constituent tree.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Top-down system</head><p>We take the top-down system of  as our top-down baseline. Given a state, the set of transition actions are:</p><p>• SHIFT: pop the front word from the buffer, and push it onto the stack.</p><p>• NT-X: open a nonterminal with label X on top of the stack.</p><p>• REDUCE: repeatedly pop completed subtrees or terminal symbols from the stack until an open nonterminal is encountered, and then this open NT is popped and used as the label of a new constituent that has the popped subtrees as</p><formula xml:id="formula_3">415 SHIFT [σ, i, f alse] [σ|w i , i + 1, f alse] REDUCE-L/R-X [σ|s 1 |s 0 , i, f alse] [σ|X s 1 s 0 , i, f alse] Unary-X [σ|s 0 , i, f alse] [σ|X s 0 , i, f alse] FINISH [σ, i, f alse] [σ, i, true] (a) bottom-up system SHIFT [σ, i, /] [σ|w i , i + 1, /] NT-X [σ, i, /] (σ|X, i, /] REDUCE [σ|X|s j |...|s 0 , i, /] [σ|X s j ...s 0 , i, /] (b) top-down system SHIFT [σ, i, f alse] [σ|w i , i + 1, f alse] PJ-X [σ|s 0 , i, f alse] (σ|s 0 |X, i, f alse] REDUCE [σ|s j |X|s j−1 |...|s 0 , i, f alse] [σ|X s j s j−1 ...s 0 , i, f alse] FINISH [σ, i, f alse] [σ, i, true]</formula><p>(c) in-order system its children. This new completed constituent is pushed onto the stack as a single composite item.</p><p>The deduction system for the process is shown in <ref type="figure" target="#fig_1">Figure 3</ref>(b) 2 . Given the sentence in <ref type="figure" target="#fig_0">Figure 1</ref>, the sequence of actions NT-S, NT-NP, SHIFT, SHIFT, SHIFT, REDUCE, NT-VP, SHIFT, NT-NP, SHIFT, SHIFT, REDUCE, REDUCE, SHIFT and REDUCE, can be used to construct its constituent tree.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">In-order system</head><p>We propose a novel in-order system for transitionbased constituent parsing. Similar to the bottom-up and top-down systems, the in-order system maintains a stack and a buffer for representing a state. The set of transition actions are defined as:</p><p>• SHIFT: pop the front word from the buffer, and push it onto the stack.</p><p>• PJ-X: project a nonterminal with label X on top of the stack.</p><p>• REDUCE: repeatedly pop completed subtrees or terminal symbols from the stack until a projected nonterminal encountered, and then this projected nonterminal is popped and used as the label of a new constituent. Furthermore, one more item on the top of stack is popped and inserted as the leftmost child of the new constituent. The popped subtrees are inserted as the rest of the children. This new completed constituent is pushed onto the stack as a single composite item.</p><p>• FINISH: pop the root node off the stack and end parsing.</p><p>The deduction system for the process is shown in <ref type="figure" target="#fig_1">Figure 3</ref>(c). Given the sentence in <ref type="figure" target="#fig_0">Figure 1</ref>, the sequence of actions SHIFT, PJ-NP, SHIFT, SHIFT, REDUCE, PJ-S, SHIFT, PJ-VP, SHIFT, PJ-NP, SHIFT, REDUCE, REDUCE, SHIFT, REDUCE, FIN-ISH can be used to construct its constituent tree.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Variants</head><p>The in-order system can be generalized into variants by modifying k, the number of leftmost nodes traced before the parent node. For example, given the tree "(S a b c d)", the traversal is "a S b c d" if k = 1 while the traversal is "a b S c d" if k = 2. We name each variant with a certain k value as k-in-order systems. In this paper, we only investigate the in-order system with k = 1, the 1-inorder system. Note that the top-down parser can be regarded as a special case of a generalized version of the in-order parser with k = 0, and the bottom-up parser can be regarded as a special case with k = ∞. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Neural parsing model</head><p>We employ the stack-LSTM parsing model of  for the three types of transition-based parsing systems in Section 2.1, 2.2 and 3, respectively, where a stack-LSTM is used to represent the stack, a stack-LSTM is used to represent the buffer, and a vanilla LSTM is used to represent the action history, as shown in <ref type="figure" target="#fig_2">Figure 4</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Word representation</head><p>We follow <ref type="bibr" target="#b11">Dyer et al. (2015)</ref>, representing each word using three different types of embeddings, including pretrained word embedding, e w i , which is not fine-tuned during the training of the parser, randomly initialized embeddings e w i , which is finetuned, and the randomly initialized part-of-speech embeddings, which is fine-tuned. The three embeddings are concatenated, and then fed to nonlinear layer to derive the final word embedding:</p><formula xml:id="formula_4">x i = f (W input [e p i ; e w i ; e w i ] + b input ),</formula><p>where W input and b input are model parameters, w i and p i denote the form and the POS tag of the ith input word, respectively, and f is an nonlinear function. In this paper, we use ReLu for f . is for binarized trees, where "NP-r*" means that "little boy" is a non-completed noun phrase with head "boy".</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Stack representation</head><p>We employ a bidirectional LSTM as the composition function to represent constituents on stack 3 . For top-down parsing and in-order parsing, following , as shown in <ref type="figure" target="#fig_3">Figure 5</ref>(a), the composition representation s comp is computed as:</p><formula xml:id="formula_5">s comp = (LSTM f wd [e nt , s 0 , ..., s m ]; LSTM bwd [e nt , s m , ..., s 0 ]),</formula><p>where e nt is the representation of a non-terminal,</p><formula xml:id="formula_6">s j , j ∈ [0, m]</formula><p>is the jth child node, and m is the number of the child nodes. For bottom-up parsing, we make use of the head information in the composition function by requiring the order that the head node is always before the non-head node in the bidirectional LSTM, as shown in <ref type="figure" target="#fig_3">Figure 5</ref>(b) <ref type="bibr">4</ref> . The bi-narized composition is computed as:</p><formula xml:id="formula_7">s bcomp = (LSTM f wd [e nt , s h , s o ]; LSTM bwd [e nt , s o , s h ]),</formula><p>where s h and s o is the representation of the head and the non-head node, respectively.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Greedy action classification</head><p>Given a sentence w 0 , w 1 , ..., w n−1 , where w i is the ith word, and n is the length of the sentence, our parser makes local action classification decisions incrementally. For the kth parsing state like [s j , ..., s 1 , s 0 , i, false], the probability distribution of the current action p is:</p><formula xml:id="formula_8">p = SOFTMAX(W [h stk ; h buf ; h ah ] + b),<label>(*)</label></formula><p>where W and b are model parameters, the representation of stack information h stk is:</p><formula xml:id="formula_9">h stk = stack-LSTM[s 0 , s 1 , ..., s j ],</formula><p>the representation of buffer information h buf is:</p><formula xml:id="formula_10">h buf = stack-LSTM[x i , x i+1 , ..., x n ],</formula><p>x is the word representation, and the representation of action history h ah is:</p><formula xml:id="formula_11">h ah = LSTM[e act k−1 , e act k−2 , ..., e act 0 ],</formula><p>where e act k−1 is the representation of action in the k-1th parsing state. Training Our models are trained to minimize a cross-entropy loss objective with an l 2 regularization term, defined by</p><formula xml:id="formula_12">L(θ) = − i j log p a ij + λ 2 ||θ|| 2 ,</formula><p>where θ is the set of parameters, p a ij is the probability of the jth action in the ith training example given by the model and λ is a regularization hyperparameter (λ = 10 −6 ). We use stochastic gradient descent with a 0.1 initialized learning rate with a 0.05 learning rate decay. <ref type="table" target="#tab_2">Value  LSTM layer  2  Word embedding dim  32  English pretrained word embedding dim  100  Chinese pretrained word embedding dim  80  POS tag embedding dim  12  Action embedding dim  16  Stack-LSTM input dim  128  Stack-LSTM hidden dim  128   Table 1</ref>: Hyper-parameters.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Parameter</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Experiments</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Data</head><p>We empirically compare our bottom-up, top-down and in-order parsers. The experiments are carried out on both English and Chinese. For English data, we use the standard benchmark of WSJ sections in PTB ( <ref type="bibr" target="#b19">Marcus et al., 1993)</ref>, where the Sections 2-21 are taken for training data, Section 22 for development data and Section 23 for testing both dependency parsing and constituency parsing. We adopt the pretrained English word embeddings generated on the AFP portion of English Gigaword.</p><p>For Chinese data, we use Version 5.1 of the Penn Chinese Treebank (CTB) ( <ref type="bibr" target="#b35">Xue et al., 2005</ref>). We use articles 001-270 and 440-1151 for training, articles 301-325 for system development, and articles 271-300 for final performance evaluation. We adopt the pretrained Chinese word embeddings generated on the complete Chinese Gigaword corpus.</p><p>The POS tags in both the English data and the Chinese data are automatically assigned the same as the work of , using Stanford tagger. We follow the work of <ref type="bibr" target="#b6">Choe and Charniak (2016)</ref> and adopt the AFP portion of the English Gigaword as the extra resources for the semi-supervised reranking.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Settings</head><p>Hyper-parameters For both English and Chinese experiments, we use the same hyper-parameters as the work of  without further optimization, as shown in <ref type="table">Table 1</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Reranking experiments</head><p>Following the same reranking setting of  and <ref type="bibr" target="#b6">Choe and Charniak (2016)</ref>, we obtain 100 samples from our bottom-up, top-down, and in-order model (Sec-    <ref type="table" target="#tab_2">Table 2</ref> shows the development results of the three parsing systems. The bottom-up system performs slightly better than the top-down system. The inorder system outperforms both the bottom-up and the top-down system. <ref type="table" target="#tab_3">Table 3</ref> shows the parsing results on the English test dataset. We find that the bottom-up parser and the top-down parser have similar results under the greedy setting, and the in-order parser outperforms both of them. Also, with supervised reranking, the in-order parser achieves the best results. English constituent results We compare our models with previous work, as shown in Table 4. With the fully-supervise setting <ref type="bibr">5</ref> , the inorder parser outperforms the state-of-the-art discrete parser ( <ref type="bibr" target="#b26">Shindo et al., 2012;</ref><ref type="bibr" target="#b37">Zhu et al., 2013)</ref>, the state-of-the-art neural parsers (Cross and Huang, <ref type="bibr">Model</ref> F 1 fully-supervise <ref type="bibr" target="#b27">Socher et al. (2013)</ref> 90.4 <ref type="bibr" target="#b37">Zhu et al. (2013)</ref> 90.4 <ref type="bibr" target="#b30">Vinyals et al. (2015)</ref> 90.7 <ref type="bibr" target="#b33">Watanabe and</ref><ref type="bibr">Sumita (2015) 90.7 Shindo et al. (2012)</ref> 91.1 <ref type="bibr" target="#b10">Durrett and Klein (2015)</ref> 91.1  91.2 Cross and Huang <ref type="formula">(2016)</ref> 91.3 Liu and Zhang <ref type="formula">(2017)</ref> 91.7 Top-down parser 91.2 Bottom-up parser 91.3 In-order parser 91.8 reranking <ref type="bibr" target="#b13">Huang (2008)</ref> 91.7 <ref type="bibr" target="#b3">Charniak and</ref><ref type="bibr">Johnson (2005) 91.5 Choe and</ref><ref type="bibr" target="#b6">Charniak (2016)</ref> 92.6 Dyer et al. <ref type="formula">(2016)</ref> 93.3 <ref type="bibr" target="#b16">Kuncoro et al. (2017)</ref> 93.6 Top-down parser 93.3 Bottom-up parser 93.3 In-order parser 93.6 semi-supervised reranking <ref type="bibr" target="#b6">Choe and Charniak (2016)</ref> 93.8 In-order parser 94.2 2016; <ref type="bibr" target="#b33">Watanabe and Sumita, 2015)</ref> and the state-ofthe-art hybrid parsers ( <ref type="bibr" target="#b10">Durrett and Klein, 2015;</ref><ref type="bibr" target="#b18">Liu and Zhang, 2017)</ref>, achieving state-of-the-art results. With the reranking setting, the in-order parser outperforms the best discrete parser <ref type="bibr" target="#b13">(Huang, 2008)</ref> and has the same performance as <ref type="bibr" target="#b16">Kuncoro et al. (2017)</ref>, which extends the work of  by adding a gated attention mechanism on composition functions. With the semi-supervised setting, the inorder parser outperforms the best semi-supervised parser <ref type="bibr" target="#b6">(Choe and Charniak, 2016</ref>) by achieving 94.2 F 1 (the oracle is 97.9 F 1 ).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Development experiments</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Results</head><p>English dependency results As shown in <ref type="table" target="#tab_5">Table  5</ref>, by converting to Stanford Dependencies, without additional training data, our models achieve a similar performance with the state-of-the-art system <ref type="bibr" target="#b6">(Choe and Charniak, 2016)</ref>; with the same additional training data, our models achieve new stateof-the-art results on dependency parsing by achieving 96.2% UAS and 95.2% LAS on standard benchmark.</p><p>Chinese constituent results <ref type="table">Table 6</ref> shows the final results on the Chinese test dataset. The in-Model UAS LAS Kiperwasser and Goldberg (2016) † 93.9 91.9 <ref type="bibr" target="#b5">Cheng et al. (2016</ref><ref type="bibr">) † 94.1 91.5 Andor et al. (2016</ref> 94.6 92.8  -re 95.6 94.4 Dozat and Manning (2017) † 95.7 94.0 <ref type="bibr" target="#b16">Kuncoro et al. (2017)</ref> -re 95.7 94.5 <ref type="bibr" target="#b6">Choe and Charniak (2016)</ref>   <ref type="formula">(2016)</ref> 86.9 Top-down parser 86.9 Bottom-up parser 87.5 In-order parser 88.0 semi-supervision <ref type="bibr" target="#b37">Zhu et al. (2013)</ref> 85.6 <ref type="bibr" target="#b31">Wang and Xue (2014)</ref> 86.3  86.6 <ref type="table">Table 6</ref>: Final results on test set of CTB.</p><note type="other">-sre 95.9 94.1 In-order parser 94.5 93.4 In-order parser -re 95.9 94.9 In-order parser -sre 96.2 95.2</note><p>order parser achieves the best results under the fullysupervised setting. With the supervised reranking, the in-order parser outperforms the state-of-the-art models by achieving 88.0 F 1 (the oracle is 93.47 F 1 ).</p><p>Chinese dependency results As shown in <ref type="table" target="#tab_6">Table  7</ref>, by converting the results to dependencies 6 , our final model achieves the best results among transitionbased parsing, and obtains comparable results to the state-of-the-art graph-based models.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>UAS LAS  85.5 84.0  87.7 86.2 Kiperwasser and Goldberg (2016) 87.6 86.1 <ref type="bibr" target="#b5">Cheng et al. (2016)</ref> † 88.1 85.7 Dozat and Manning (2017) † 89.3 88.2 In-order parser 87.4 86.4 In-order parser -re 89.4 88.4 </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Analysis</head><p>We analyze the results of Section 23 in WSJ given by our model (i.e. in-order parser) and two baseline models (i.e. the bottom-up parser and the top-down parser) against the sentence length, the span length and the constituent type, respectively. <ref type="figure">Figure 6</ref> shows the F 1 scores of the three parsers on sentences of different lengths. Compared to the topdown parser, the bottom-up parser performs better on the short sentences with the length falling in the range . This is likely because the bottomup parser takes advantages of rich local features from partially-built trees, which are useful for parsing short sentences. However, these local structures are can be insufficient for parsing long sentences due to error propagation. On the other hand, the top-down parser obtains better results on long sentences with the length falling in the range <ref type="bibr">[40]</ref><ref type="bibr">[41]</ref><ref type="bibr">[42]</ref><ref type="bibr">[43]</ref><ref type="bibr">[44]</ref><ref type="bibr">[45]</ref><ref type="bibr">[46]</ref><ref type="bibr">[47]</ref><ref type="bibr">[48]</ref><ref type="bibr">[49]</ref><ref type="bibr">[50]</ref>. This is because, as the length of sentences increase, lookahead features become rich and they could be correctly represented by the LSTM, which is beneficial for parsing non-local structures. We find that the in-order parser performs the best for both short and long sentences, showing the advantages of integrating bottom-up and top-down information. <ref type="figure">Figure 7</ref> shows the F 1 scores of the three parsers on spans of different lengths. The trend of performances of the two baseline parsers are similar. Compared to the baseline parsers, the in-order parser obtains significant improvement on long spans. Linguistically, it is because the in-order traversal, (over  Top-down parser Bottom-up parser In-order parser a tree) allows constituent types of spans to be correctly projected based on the information of the beginning (leftmost nodes) of the spans. Then the projected constituents constrain long span construction, which is different from the top-down parser, generating constituent types of spans without trace of the spans.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Influence of sentence length</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Influence of span length</head><p>6.3 Influence of constituent type <ref type="table" target="#tab_6">Table 7</ref> shows the F 1 scores of the three parsers on frequent constituent types. The bottom-up parser performs better than the top-down parser on constituent types including NP, S, SBAR, QP. We find that the prediction of these constituent types requires, explicitly, modeling of bottom-up structures. In other words, bottom-up information is necessary for us to know if the span can be a noun phrase (NP) or sentence (S), for example. On the other hand, the top-down parser has better performance on WHNP, which is likely because a WHNP starts with a certain question word, making the prediction easy without bottom-up information. The in-order parser performs the best on all constituent types, demonstrating that the in-order parser can benefit from both bottom-up and top-down information.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.4">Examples</head><p>We give output examples from the test set to qualitatively compare the performances of the three parsers using the fully-supervised model without reranking, as shown in <ref type="table">Table 9</ref>. For example, given the Sentence #2006, the bottom-up and the in-order parsers give both correct results. However, the top-down parser makes an incorrect decision to generate an S, leading to subsequent incorrect decisions on VP to complete S. Sentence pattern ambiguity allows topdown guidance to over-parsing the sentence by recognizing the word "Plans" as a verb, while more bottom-up information is useful for the local disambiguation. Given the Sentence #308, the bottom-up parser prefers construction of local constituents such as "once producers and customers", ignoring the possible clause SBAR, however, which is captured by the in-order parser. The parser projects a constituent SBAR from the word "stick" and continues to complete the clause, showing that top-down lookahead information is necessary for non-local disambiguation. The in-order parser gives the correct output for the Sentence #2066 and the Sentence #308, showing that it can benefit from bottom-up and top-down information. Sent #2066 Employee Benefit Plans Inc. -Gold (NP Employee Benefit Plans Inc. -) Top-down (S (NP Employee Benefit ) (VP Plans (NP Inc. ) -) ) Bottom-up (NP Employee Benefit Plans Inc. -) In-order (NP Employee Benefit Plans Inc. -) Sent #308</p><p>... whether the new posted prices will stick once producers and customers start to haggle . Gold ... (VP will (VP stick (SBAR once (S (NP producers and customers ) (VP start (S ...) ) ) ) ) ) ... Top-down ... (VP will (VP stick (SBAR once (S (NP producers and customers ) (VP start (S ...) ) ) ) ) ) ... Bottom-up ... (VP will (VP stick (NP once producers and customers ) ) ) ... <ref type="figure">(VP start (S ...)</ref> ) ... In-order ... (VP will (VP stick (SBAR once (S (NP producers and customers ) (VP start (S ...) ) ) ) ) ) ... Sent #1715 This has both made investors uneasy and the corporations more vulnerable . Gold (S (NP This) (VP has (VP both made (S (S investors uneasy) and (S the corporations ...)))) .) Top-down (S (S (NP This) (VP has (S (NP both) (VP made investors uneasy)))) and (S the corporations ...) .) Bottom-up (S (S (NP This) (VP has (S both (VP made investors uneasy)))) and (S the corporations ...) .) In-order (S (NP This) (VP has both (VP made (S (S investors uneasy) and (S the corporations ...)))) .) <ref type="table">Table 9</ref>: Output examples of the three parsers on the English test set. Incorrect constituents are marked in red.</p><p>In the Sentence #1715, there are coordinated objects such as "investors uneasy" and "the corporations more vulnerable". All of the three parsers can recognize coordination. However, the top-down and the bottom-up parsers incorrectly recognize the "This has both made investors uneasy" as a complete sentence. The top-down parser incorrectly generates S, marked in red, at a early stage, leaving no choice but to follow this incorrect non-terminal. The bottom-up parser without lookahead information makes incorrect local decisions. By contrast, the in-order parser reads the word "and" and projects a non-terminal S for coordination after completing "(S investors uneasy)". On the other hand, the inorder parser is confused by projecting for the word "made" or the word "both" into an VP, which we think could be addressed by using a in-order system variant with k=2 described in Section 3.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Related work</head><p>Our work is related to left corner parsing. <ref type="bibr" target="#b23">Rosenkrantz and Lewis (1970)</ref> formalize this in automata theory, which have appeared frequently in the compiler literature. <ref type="bibr" target="#b20">Roark and Johnson (1999)</ref> apply the strategy into parsing. Typical works investigate the transformation of syntactic trees based on left-corner rules <ref type="bibr" target="#b22">(Roark, 2001;</ref><ref type="bibr" target="#b25">Schuler et al., 2010;</ref><ref type="bibr" target="#b29">Van Schijndel and Schuler, 2013)</ref>. In contrast, we propose a novel general transition-based in-order constituent parsing system.</p><p>Neural networks have achieved the state-of-theart for parsing under various grammar formalisms, including dependency (Dozat and Manning, 2017), constituent <ref type="bibr" target="#b16">Kuncoro et al., 2017)</ref>, and CCG parsing <ref type="bibr" target="#b34">(Xu, 2016;</ref><ref type="bibr" target="#b17">Lewis et al., 2016)</ref>. Seminal work employs transition-based methods <ref type="bibr" target="#b4">(Chen and Manning, 2014)</ref>. This method has been extended by investigating more complex representations of configurations for constituent parsing ( <ref type="bibr" target="#b33">Watanabe and Sumita, 2015;</ref>.  employ stack-LSTM onto the top-down system, which is the same as our topdown parser. <ref type="bibr" target="#b33">Watanabe and Sumita (2015)</ref> employ tree-LSTM to model the complex representation in the stack in bottom-up system. We are the first to investigate in-order traversal by designing a novel transition-based system under the same neural structure model framework.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Conclusion</head><p>We proposed a novel psycho-linguistically motivated constituent parsing system based on the inorder traversal over syntactic trees, aiming to find a compromise between bottom-up constituent information and top-down lookahead information. On the standard WSJ benchmark, our in-order system outperforms bottom-up parsing on a non-local ambiguity and top-down parsing on local decision. The resulting parser achieves the state-of-the-art constituent parsing results by obtaining 94.2 F 1 and dependency parsing results by obtaining 96.2% UAS and 95.2% LAS.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>422</head></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Syntactic trees of the sentence "The little boy likes red tomatoes.". (a) syntactic tree; (b) binarized syntactic tree, where r and l mean the head is the right branch and the left branch, respectively, and * means this constituent is not completed.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Different transition systems. The start state is [φ, 0, f alse] and the final state is [σ, n, true].</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Framework of our transition-based parsers.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: The composition function. (a) is for unbinarized trees and (b) is for binarized trees, where "NP-r*" means that "little boy" is a non-completed noun phrase with head "boy".</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 6 :Figure 7 :</head><label>67</label><figDesc>Figure 6: F 1 score against sentence length. (the number of words in a sentence, in bins of size 10, where 20 contains sentences with lengths in [10, 20).)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head></head><label></label><figDesc>418 Model LR LP F 1 Top-down parser 91.59 91.66 91.62 Bottom-up parser 91.89 91.83 91.86 In-order parser 91.98 91.86 91.92</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 2 : Development results (%) on WSJ 22.</head><label>2</label><figDesc></figDesc><table>Model 
+F 1 
+fully-supervise 
+Top-down parser 
+91.2 
+Bottom-up parser 91.3 
+In-order parser 
+91.8 
+rerank 
+Top-down parser 
+93.3 
+Bottom-up parser 93.3 
+In-order parser 
+93.6 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Final results (%) on WSJ Section 23. 
+
+tion 4), respectively, with an exponentiation strat-
+egy (α = 0.8), by using the probability distribu-
+tion of action (equation *). We adopt the reranker of 
+Choe and Charniak (2016) as both our English fully-
+supervised reranker and semi-supervised reranker, 
+and the generative reranker of Dyer et al. (2016) as 
+our Chinese supervised reranker. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Final results (%) on WSJ Section 23. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Stanford Dependency accuracy (%) on 
+WSJ Section 23.  † means graph-based parsing. "-re" 
+means fully-supervised reranking and "-sre" means 
+semi-supervised reranking. 
+
+Parser 
+F 1 
+fully-supervision 
+Zhu et al. (2013) 
+83.2 
+Wang et al. (2015) 
+83.2 
+Dyer et al. (2016) 
+84.6 
+Liu and Zhang (2017) 
+85.5 
+Top-down parser 
+84.6 
+Bottom-up parser 
+85.7 
+In-order parser 
+86.1 
+rerank 
+Charniak and Johnson (2005) 82.3 
+Dyer et al. </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 7 :</head><label>7</label><figDesc></figDesc><table>Dependency accuracy (%) on CTB test set. 
+ † means graph-based parsing. "-re" means super-
+vised reranking. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="true"><head>Table 8 : Comparison on different phrases types.</head><label>8</label><figDesc></figDesc><table>10 
+20 
+30 
+40 
+50 
+60 
+86 
+
+88 
+
+90 
+
+92 
+
+94 
+
+Sentence length 
+
+F 
+1 (%) 
+</table></figure>
+
+			<note place="foot" n="1"> The action sequence is taken on unbinarized trees.</note>
+
+			<note place="foot" n="2"> Due to unary decisions, with exception of the top-down system, we use completed marks to make the finish decisions.</note>
+
+			<note place="foot" n="3"> To be fair, we use a bidirectional LSTM as composition function for all parsing systems 4 A bidirectional LSTM consists of two LSTMs, making it balanced for composition. However, they have different parameters so that one represents information of head-first while other represents information of head-last.</note>
+
+			<note place="foot" n="5"> Here, we only consider the work of a single model.</note>
+
+			<note place="foot" n="6"> The Penn2Malt tool is used with Chinese head rules https://stp.lingfil.uu.se/ nivre/research/Penn2Malt.html.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We thank the anonymous reviewers for their detailed and constructive comments and the action editor Brian Roark. Yue Zhang is the corresponding author.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Globally normalized transition-based neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Andor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aliaksei</forename><surname>Severyn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Presta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kuzman</forename><surname>Ganchev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In ACL</title>
+		<imprint>
+			<biblScope unit="page" from="2442" to="2452" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Training with exploration improves a greedy stack-LSTM parser</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2005" to="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Coarse-tofine n-best parsing and MaxEnt discriminative reranking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Charniak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="173" to="180" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">A maximum-entropy-inspired parser</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Charniak</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="132" to="139" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">A fast and accurate dependency parser using neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In EMNLP</title>
+		<imprint>
+			<biblScope unit="page" from="740" to="750" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Bi-directional attention with agreement for dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Fang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodong</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Deng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2204" to="2214" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Parsing as language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kook</forename><surname>Do</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Choe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Charniak</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2331" to="2336" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Head-driven statistical models for natural language parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="page" from="589" to="637" />
+		</imprint>
+	</monogr>
+	<note>Computational linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Span-based constituency parsing with a structure-label system and provably optimal dynamic oracles</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Cross</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Liang</forename><surname>Huang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1" to="11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Deep biaffine attention for neural dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Dozat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Durrett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+		<title level="m">Neural CRF parsing. In ACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="302" to="312" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Transitionbased dependency parsing with stack long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Austin</forename><surname>Matthews</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="334" to="343" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Recurrent neural network grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adhiguna</forename><surname>Kuncoro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="199" to="209" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Forest reranking: Discriminative parsing with non-local features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Liang</forename><surname>Huang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="586" to="594" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">PCFG models of linguistic tree representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="613" to="632" />
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Simple and accurate dependency parsing using bidirectional LSTM feature representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eliyahu</forename><surname>Kiperwasser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Transactions of the Association of Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="313" to="327" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">What do recurrent neural network grammars learn about syntax? In EACL</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adhiguna</forename><surname>Kuncoro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lingpeng</forename><surname>Kong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Graham</forename><surname>Neubig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="1249" to="1258" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">LSTM CCG parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Lewis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="221" to="231" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Shift-Reduce Constituent Parsing with Neural Lookahead Features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiangming</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yue</forename><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Transactions of the Association of Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="page" from="45" to="58" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Building a large annotated corpus of English: The Penn Treebank</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell</forename><forename type="middle">P</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Beatrice</forename><surname>Santorini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mary</forename><forename type="middle">Ann</forename><surname>Marcinkiewicz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="313" to="330" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Efficient probabilistic top-down and left-corner parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Brian</forename><surname>Roark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="421" to="428" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Deriving lexical and syntactic expectation-based measures for psycholinguistic modeling via incremental top-down parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Brian</forename><surname>Roark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Asaf</forename><surname>Bachrach</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carlos</forename><surname>Cardenas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christophe</forename><surname>Pallier</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="324" to="333" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Robust probabilistic predictive syntactic processing: motivations, models, and applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Brian</forename><surname>Roark</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+	<note>In Ph.D. thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Deterministic left corner parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Daniel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philip</forename><forename type="middle">M</forename><surname>Rosenkrantz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lewis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Conference Record of 11th Annual Symposium on Switching and Automata Theory</title>
+		<imprint>
+			<date type="published" when="1970" />
+			<biblScope unit="page" from="139" to="152" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">A classifier-based parser with linear run-time complexity</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenji</forename><surname>Sagae</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alon</forename><surname>Lavie</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IWPT</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="125" to="132" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Broad-coverage parsing using human-like memory constraints</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William</forename><surname>Schuler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samir</forename><surname>Abdelrahman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Miller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lane</forename><surname>Schwartz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">36</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="30" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Bayesian symbol-refined tree substitution grammars for syntactic parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hiroyuki</forename><surname>Shindo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yusuke</forename><surname>Miyao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Akinori</forename><surname>Fujino</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Masaaki</forename><surname>Nagata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="440" to="448" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Parsing with compositional vector grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Bauer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><forename type="middle">Y</forename><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="455" to="465" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">The syntactic process</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Steedman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2000" />
+			<publisher>MIT Press</publisher>
+			<biblScope unit="page">24</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">An analysis of frequency-and memory-based processing costs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marten</forename><surname>Van Schijndel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William</forename><surname>Schuler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">HLT-NAACL</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="95" to="105" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Grammar as a foreign language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Łukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Terry</forename><surname>Koo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Joint POS tagging and transition-based constituent parsing in Chinese with non-local features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiguo</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Xue</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="733" to="742" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Feature optimization for constituent parsing via neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiguo</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Haitao</forename><surname>Mi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Xue</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL-IJCNLP</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1138" to="1147" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Transitionbased neural constituent parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Taro</forename><surname>Watanabe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eiichiro</forename><surname>Sumita</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1169" to="1179" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">LSTM shift-reduce CCG parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenduan</forename><surname>Xu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1754" to="1764" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">The Penn Chinese treebank: Phrase structure annotation of a large corpus</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Naiwen</forename><surname>Xue</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fei</forename><surname>Xia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fu-Dong</forename><surname>Chiou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martha</forename><surname>Palmer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Natural Language Engineering</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="207" to="238" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Transition-based parsing of the chinese treebank using a global discriminative model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yue</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Clark</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IWPT</title>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="162" to="171" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Fast and accurate shift-reduce constituent parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Muhua</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yue</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenliang</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Min</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jingbo</forename><surname>Zhu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="434" to="443" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

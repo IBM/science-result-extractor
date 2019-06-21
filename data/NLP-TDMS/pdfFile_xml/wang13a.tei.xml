@@ -1,0 +1,597 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:57+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Fast dropout training</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sida</forename><forename type="middle">I</forename><surname>Wang</surname></persName>
+							<email>sidaw@cs.stanford.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Department of Computer Science</orgName>
+								<orgName type="institution">Stanford University</orgName>
+								<address>
+									<postCode>94305</postCode>
+									<settlement>Stanford</settlement>
+									<region>CA</region>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+							<email>manning@stanford.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Department of Computer Science</orgName>
+								<orgName type="institution">Stanford University</orgName>
+								<address>
+									<postCode>94305</postCode>
+									<settlement>Stanford</settlement>
+									<region>CA</region>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Fast dropout training</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Preventing feature co-adaptation by encouraging independent contributions from different features often improves classification and regression performance. Dropout training (Hinton et al., 2012) does this by randomly dropping out (zeroing) hidden units and input features during training of neural networks. However, repeatedly sampling a random subset of input features makes training much slower. Based on an examination of the implied objective function of dropout training , we show how to do fast dropout training by sampling from or integrating a Gaussian approximation, instead of doing Monte Carlo optimization of this objective. This approximation , justified by the central limit theorem and empirical evidence, gives an order of magnitude speedup and more stability. We show how to do fast dropout training for classification , regression, and multilayer neural networks. Beyond dropout, our technique is extended to integrate out other types of noise and small image transformations.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.">Introduction</head><p>Recent work ( <ref type="bibr" target="#b2">Hinton et al., 2012</ref>) has shown that preventing feature co-adaptation by dropout training is a promising method for regularization. Applied to neural network training, the idea is to dropout (zero) randomly sampled hidden units and input features during each iteration of optimization. Dropout played an important role in the systems that won recent learning competitions such as ImageNet classification ( <ref type="bibr" target="#b3">Krizhevsky et al., 2012</ref>) and the Merck molecular activity challenge at www.kaggle.com, and improves performance on various tasks. Dropout can be considered another approach to regularization in addition to the widely used parameter shrinkage methods and model averaging. This process lowers the trust in a feature that is only helpful when other specific features are present, since any particular feature may be dropped out and cannot be depended on. Alternatively, the procedure can be seen as averaging over many neural networks with shared weights.</p><p>Other observations of harmful co-adaptation and ways to address them exist in the literature. Naive Bayes, by completely ignoring co-adaptation, performs better than discriminative methods when there is little data <ref type="bibr" target="#b9">(Ng &amp; Jordan, 2002)</ref>, and continues to perform better on certain relatively large datasets <ref type="bibr">(Wang &amp; Man- ning, 2012</ref>). In ( <ref type="bibr" target="#b14">Sutton et al., 2006</ref>), it is observed that training involves trade-offs among weights, where the presence of highly indicative features can cause other useful but weaker features to undertrain. They propose feature bagging: training different models on subsets of features that are later combined, an idea further pursued under the name logarithmic opinion pools by <ref type="bibr" target="#b12">(Smith et al., 2005</ref>). Improved performance on Named Entity Recognition and Part-of-Speech Tagging was demonstrated.</p><p>While the effectiveness of these methods in preventing feature co-adaptation has been demonstrated, actually sampling, or training multiple models, make training slower. Moreover, with a dropout rate of p, the proportion of data still not seen after n passes is p n (e.g., 5 passes of the data are required to see 95% of it at p = 0.5). If the data is not highly redundant, and if we make the relevant data only partially observable at random, then the task becomes even harder, and training efficiency may reduce further.</p><p>In this paper, we look at how to achieve the benefit of dropout training without actually sampling, thereby using all the data efficiently. The approach uses a Gaussian approximation that is justified by the central limit theorem and empirical evidence. We show the validity of this approximation and how it can provide an order of magnitude speed-up at training time, while also giving more stability. Fast dropout fits into the general framework of integrating out noise added to the training data <ref type="bibr" target="#b7">(Matsuoka, 1992;</ref><ref type="bibr" target="#b0">Bishop, 1995)</ref>. See (van der <ref type="bibr" target="#b15">Maaten et al., 2013</ref>) for an alternative approach to integrating out noise and a survey of related work from that angle. Their approach is exact for loss functions decomposable by the moment generating function of the independent noise such as the exponential loss and squared error loss. Our approach does not require independence: it can integrate out small transformations that an image classifier should be invariant to. We begin with logistic regression for simplicity, then extend the idea to other loss functions, other noise, and neural networks. Code is provided at the author's website.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">Fast approximations to dropout</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1.">The implied objective function</head><p>We illustrate the idea with logistic regression (LR) given training vector x, and label y ∈ {0, 1}. To train LR with dropout on data with dimension m, first sample z i ∼ Bernoulli(p i ) for i = 1...m. Here p i is the probability of not dropping out input x i . After sampling z = {z i } i=1...m we can compute the stochastic gradient descent (sgd) update as follows:</p><formula xml:id="formula_0">∆w = (y − σ(w T D z x))D z x</formula><p>where D z = diag(z) ∈ R m×m , and σ(x) = 1/(1 + e −x ) is the logistic function.</p><p>This update rule, applied over the training data for multiple passes, can be seen as a Monte Carlo approximation to the following gradient:</p><formula xml:id="formula_1">∆ ¯ w = E z;zi∼Bernoulli(pi) [(y − σ(w T D z x))D z x] (1)</formula><p>The objective function with the above gradient is the expected conditional log-likelihood of the label given the data with dropped out dimensions indicated by z,</p><formula xml:id="formula_2">for y ∼ Bernoulli(σ(w T D z x)))</formula><p>. This is the implied objective function for dropout training:</p><formula xml:id="formula_3">L(w) = E z [log(p(y|D z x; w)] (2) = E z [y log(σ(w T D z x)) + (1 − y) log(1 − σ(w T D z x))]</formula><p>Since we are just taking an expectation, we still have a convex optimization problem provided that the negative log-likelihood is convex.</p><p>Evaluating the expectation in (1) naively by summing over all possible z has complexity O(2 m m). Rather than directly computing the expectation with respect to z, we propose a variable transformation that allows us to approximately compute the expectation with respect to a simple random variable Y ∈ R, instead of z ∈ {0, 1} m . In the next subsection, we describe an efficient O(m) approximation that is accurate for machine learning applications where w i x i usually come from a unimodal or bounded distribution. As z is repeatedly sampled, the resulting inputs to the top unit are close to being normally distributed.</p><p>We make the observation that evaluating the objective function L(w) involves taking the expectation with respect to the variable Y (z) = w T D z x = m i w i x i z i , a weighted sum of Bernoulli random variables. For most machine learning problems, {w i } typically forms a unimodal distribution centered at 0, {x i } is either unimodal or in a fixed interval. In this case, Y can be well approximated by a normal distribution even for relatively low dimensional data with m = 10. More technically, the Lyapunov condition is generally satisfied for a weighted sum of Bernoulli random variables of the form Y that are weighted by real data ( <ref type="bibr" target="#b4">Lehmann, 1998)</ref>. Then, Lyapunov's central limit theorem states that Y (z) tends to a normal distribution as m → ∞ (see <ref type="figure" target="#fig_1">figure 1</ref>). We empirically verify that the approximation is good for typical datasets of moderate dimensions, except when a couple of dimensions dominate all others (see <ref type="figure" target="#fig_2">figure 3)</ref>. Finally, let S be the</p><formula xml:id="formula_4">approximating Gaussian (Y d → S) S = E z [Y (z)] + Var[Y (z)] = µ S + σ S (3)</formula><p>where</p><formula xml:id="formula_5">∼ N (0, 1), E z [Y (z)] = m i=1 p i w i x i , and Var [Y (z)] = m i=1 p i (1 − p i )(w i x i ) 2 .</formula><p>In the following subsections, based on the Gaussian assumption above, we present several approximations at different tradeoff points between speed and accuracy. In the end, we present experimental results showing that there is little to no performance loss when using the faster, less accurate approximations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3.">Gradient computation by sampling from the Gaussian</head><p>Given good convergence, we note that drawing samples of the approximating Gaussian S of Y (z), a constant time operation, is much cheaper than drawing samples of Y (z) directly, which takes O(m). This effect is very significant for high dimensional datasets. So without doing much, we can already approximate the objective function (2) m times faster by sampling from S instead of Y (z). Empirically, this approximation is within the variance of the direct MC approximation of <ref type="formula">(2)</ref> by taking 200 samples of z.</p><p>Approximating the gradient introduces a complication when using samples from the Gaussian. The gradient</p><formula xml:id="formula_6">(1) involves not only Y (z) d − → S, but also D z x directly: L(w) = E z [(y − σ(Y (z)))D z x] (4) Let f (Y (z)) = y − σ(Y (z)) and let g(z) = D z x. Naively approximating E z [f (Y (z))g(z)] by either E S [f (S)]E z [g(z)], or worse, by f (E s [S])E z [g(z)</formula><p>] works poorly in terms of both approximation error and final performance. Note that g(z) is a linear function and therefore</p><formula xml:id="formula_7">E z [g(z)] = g(E z [z]) = diag(p)x.</formula><p>A good way to approximate (4) is by analytically taking the expectation with respect to z i and then using a linear approximation to the conditional expectation. More precisely, consider dimension i of the gradient:</p><formula xml:id="formula_8">∂L(w) ∂w i = E z [f (Y (z))x i z i ] = zi∈{0,1} p(z i )z i x i E z−i|zi [f (Y (z))] = p(z i = 1)x i E z−i|zi=1 [f (Y (z))] (5) ≈ p i x i E S∼N (µ S ,σ 2 S ) [f (S)] + ∆µ i ∂E S∼N (µ,σ 2 S ) [f (S)] ∂µ µ=µ S + ∆σ 2 i ∂E S∼N (µ S ,σ 2 ) [f (S)] ∂σ 2 σ 2 =σ 2 S = p i x i (α(µ S , σ 2 S ) + ∆µ i β(µ S , σ 2 S ) + ∆σ 2 i γ(µ S , σ 2 S ))</formula><p>where z −i is the collection of all other zs except z i ,</p><formula xml:id="formula_9">µ S , σ S is defined in (3), ∆µ i = (1 − p i )x i w i , ∆σ 2 i = −p i (1 − p i )x 2</formula><p>i w 2 i are the changes in µ S , σ 2 S due to conditioning on z i . Note that the partial derivatives as well as E S∼N (µ S ,σ 2 S ) [f (S)] only need to be computed once per training case, since they are independent of i. α, β, γ can be computed by drawing K samples from S, taking time O(K) (whereas K samples of Y (z) take time O(mK)). Concretely,</p><formula xml:id="formula_10">α(µ, σ 2 ) = y − E S∼N (0,1) 1 1 + e −µ−σ S S β(µ, σ 2 ) = ∂α(µ,σ 2 ) ∂µ , and γ(µ, σ 2 ) = ∂α(µ,σ 2 ) ∂σ 2</formula><p>can be computed by differentiating inside the expectation.</p><p>One can combine <ref type="formula">(5)</ref> and what we do in <ref type="formula" target="#formula_12">(7)</ref> below to obtain a more accurate yet relatively cheap approximation to the derivative. However, in practice, using only β approximates the derivative to within the variance of successive MC computations of the objective L (see <ref type="figure" target="#fig_5">figure 4</ref>). Empirically, this is 2-30 times faster compared to MC dropout (see <ref type="figure">figure 5</ref> and table 1).</p><p>At a slightly higher loss in accuracy, we can get rid of z completely by re-parameterizing the problem in µ s and σ s and taking derivatives with respect to them instead of approximating the derivative directly. So the objective function (2) becomes</p><formula xml:id="formula_11">L(w) ≈ E S∼N (µ S ,σ S ) [y log(σ(S))+(1−y) log(1−σ(S))]<label>(6)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.4.">A closed-form approximation</head><p>In the binary classification case, we can avoid sampling by tabulating α, β, γ, and their partial derivatives (they are just functions of 2 arguments). Interestingly, an accurate closed-from approximation is also possible by using the Gaussian cumulative distribution function Φ(x) = 1 √ 2π</p><p>x −∞ e −t 2 /2 dt to approximate the logistic function. It can be shown by parameter differentiation with respect to µ and then integrating with respect to µ that</p><formula xml:id="formula_12">∞ −∞ Φ(λx)N (x|µ, s)dx = Φ µ √ λ −2 + s 2 Substituting in σ(x) ≈ Φ( π/8x), we get ∞ −∞ σ(x)N (x|µ, s 2 )dx ≈ σ µ 1 + πs 2 /8<label>(7)</label></formula><p>This is an approximation that is used for Bayesian prediction when the posterior is approximated by a Gaussian <ref type="bibr" target="#b6">(MacKay, 1992)</ref>. As we now have a closed-form approximation of α, one can also obtain expressions for β and γ by differentiating.</p><p>Furthermore, by substituting x = µ+st, differentiating with respect to µ, and <ref type="formula" target="#formula_12">(7)</ref>, we can even approximate the objective function (6) in a closed-form:</p><formula xml:id="formula_13">E X∼N (µ,s 2 ) [log(σ(X))] = ∞ −∞ log(σ(x))N (x|µ, s 2 )dx ≈ 1 + πs 2 /8 log σ µ 1 + πs 2 /8<label>(8)</label></formula><p>The actual objective as defined in <ref type="formula">(2)</ref> can be obtained from the above by observing that 1 − σ(x) = σ(−x).</p><p>The gradient and Hessian with respect to w can be found by analytically differentiating.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.">Generalizations</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1.">Least squares regression</head><p>In contrast to all the approximations so far, dropout training of regression with squared error loss can be computed exactly. Let y be the true label andˆYandˆ andˆY = i w i x i z i be the predicted label with</p><formula xml:id="formula_14">µ = E ˆ Y = p m i=1 w i x i and s 2 = VarˆYVarˆ VarˆY = p(1 − p) m i=1 w 2 i x 2 i</formula><p>By the bias-variance decomposition, the expected squared error loss is</p><formula xml:id="formula_15">E ˆ Y ∼N (µ,s 2 ) [( ˆ Y − y) 2 ] = ∞ −∞ (ˆ y − y) 2 N (ˆ y|µ, s 2 )dˆydˆy = (µ − y) 2 + s 2<label>(9)</label></formula><p>Since <ref type="formula" target="#formula_15">(9)</ref> is completely determined by the mean and variance ofˆYofˆ ofˆY , it does not matter which distributionˆY distributionˆ distributionˆY comes from as long as µ and s 2 are matched. As a result, (9) is also the exact loss function of the original dropout objective if we summed over z i instead. So over the whole dataset of size n, dropout regression has the following equivalent objective:</p><formula xml:id="formula_16">L(w) = 1 n n j=0 (ˆ y(w, x (j) ) − y) 2 + λ m i=1 c i w 2 i</formula><p>This is a form of L 2 regularization depending on</p><formula xml:id="formula_17">c i = 1/n n j=1 x (j)2 i</formula><p>so that weights of larger features are regularized more strongly.</p><p>Alternatively, let X ∈ R n×m be the design matrix, then the normal equations for dropout training and ridge regression are, respectively,</p><formula xml:id="formula_18">w = (X T X + λ diag(X T X)) −1 X T y w = (X T X + λI) −1 X T y<label>(10)</label></formula><p>where diag(A) represents the diagonal matrix with the same diagonal as A. The diagonal of X T X is stronger by a multiplicative factor 1 + λ for dropout instead of the additive λI for L 2 . The equivalent value for λ determined by dropout is (1 − p)/p.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.">Hinge loss and the Maxout unit</head><p>Our apporach can be applied to the classical hinge loss and the recently proposed maxout network <ref type="bibr">(Goodfel- low et al., 2013</ref>). The structured SVM loss is</p><formula xml:id="formula_19">L(w) = maxˆy∈Y maxˆ maxˆy∈Y {(y, ˆ y) + (w T ˆ y x) − (w T y x)}.</formula><p>where Y is the set of possible predictions and (y, y ) is the loss incurred by predictingˆypredictingˆ predictingˆy when the true label is y. The maxout unit computes</p><formula xml:id="formula_20">h(x) = max j w T j x</formula><p>Under the fast dropout approach, both of these reduce to the problem of computing the maximum of Gaussians max i X i for X i ∼ N (µ(x, w i ), σ 2 (x, w i )) not necessarily indepedent. Several approaches to this problem is presented in (Ross, 2010).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3.">Softmax and general loss</head><p>Unfortunately, the best way to compute the crossentropy loss for softmax seems to be sampling from the input Gaussian directly with S ∈ R |Y| where Y is the set of possible predictions.</p><formula xml:id="formula_21">L = E S∼N (µ,Σ) [ |Y| i=1 t i log(softmax(S) i )] = E S ∼N (0,I) [ |Y| i=1 t i log(softmax(µ + U S ) i )]</formula><p>where softmax(s) i = e si / |Y| j=1 e sj and Σ = U U T . The required partial derivatives can again be computed by differentiating inside the expectation. This is also the general way to do fast dropout training on output units that may be vector-valued functions of vectors.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4.">Transformation invariance as noise</head><p>More image data can be generated by applying transformations like small translations, rotations, shearing etc. to the original training data. A transformation of magnitude can be approximated locally by its Lie derivative as T α (x) = x + L T,x (Simard et al., 1996). For translation, rotation, shearing, we can generate more data by randomly sampling i ∼ N (0, σ 2 i ) and computing X = x+ i i L i . Notice that w T X is again normally distributed and the techniques presented in this paper can be used to integrate out these transformations without actually generating the transformed data. Here we do not need the central limit theorem and the noise is not independent.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5.">Other noise</head><p>Like the exact approach in (van der <ref type="bibr" target="#b15">Maaten et al., 2013)</ref>, the Gaussian approximation can be applied to other noise models (Poisson, Gaussian, etc). We just need to characterize the noise in terms of its mean and variance and rely on the central limit theorem.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.">Fast dropout for neural networks</head><p>Dropout training, as originally proposed, was intended for neural networks where hidden units are dropped out, instead of the data. Fast dropout is directly applicable to dropping out the final hidden layer of neural networks. In this section, we approximately extend our technique to deep neural networks and show how they apply to several popular types of hidden units. For the last layer of a neural network, any output unit outlined in section 3 can be used.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.">The hidden layers</head><p>Under dropout training, each hidden unit takes a random variable as input, and produces a random variable as output. When the number of hidden units is more than 10 or so, we may again approximate their inputs as Gaussians and characterize their outputs by the output means and variances. A complication is that the inputs to hidden units have a covariance as shown in <ref type="figure">figure 2</ref>.</p><p>Consider any hidden unit in dropout training. We may approximate its input as a Gaussian variable X ∼ N (x|µ, s 2 ), and let its output mean and variance be ν and τ 2 . E.g., for the commonly used sigmoid unit</p><formula xml:id="formula_22">ν = ∞ −∞ σ(x)N (x|µ, s 2 )dx ≈ σ µ 1 + πs 2 /8</formula><p>This integral can be evaluated exactly for the rectified linear unit f (x) = max(0, x). Let r = µ/s, then</p><formula xml:id="formula_23">ν = ∞ −∞ f (x)N (x|µ, s 2 )dx = Φ(r)µ + sN (r|0, 1)</formula><p>The rectified linear unit is a special case of the maxout unit, for which techniques in <ref type="bibr" target="#b10">(Ross, 2010)</ref> can be used to compute its mean and variance.</p><p>With dropout training, each hidden unit also has an output variance. Sigmoid squared can be approximated by a translatedscaled version of the sigmoid:</p><formula xml:id="formula_24">τ 2 = Var X∼N (µ,s 2 ) [σ(X)] = E[σ(X) 2 ] − E[σ(X)] 2 ≈ E[σ(a(X − b))] − E[σ(X)] 2</formula><p>Figure 2. MC dropout covariance matrices of the inputs of 50 random hidden units: left: at random initialization; right: trained to convergence. The covariance is not completely diagonal once trained to convergence. a,b can be found by matching the values and derivatives (a = 4 − 2 √ 2 and b = − log( √ 2 − 1)).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.">Training with backpropagation</head><p>The resulting neural network can be trained by backpropagation with two sets of partial derivatives. In normal backpropagation, one only needs to keep ∂L ∂µi for each hidden unit i with input µ i . For fast dropout training, we need ∂L ∂s 2 i as well for input variance s 2 i . Where</p><formula xml:id="formula_25">µ i = p j w ij ν j and s 2 i = j p(1 − p)ν 2 j w 2 ij + pτ 2</formula><p>j w 2 ij and ν j and τ j are the output mean and variance of the previous layer. In practice, the method still works well if we ignore the output variance τ , so the input variance to the next layer is generated by dropout alone.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.">Relation to Bayesian model selection</head><p>Once we make the Gaussian approximation, there is an alternative interpretation of where the variance comes from. In the dropout framework, the variance comes from the dropout variable z. Under the alternative interpretation where w is a random variable, we can view dropout training as maximizing a lower bound on the Bayesian marginal likelihood among a class of models M µ indexed by µ ∈ R m . Concretely, let µ i = pw i , then the dropout objective</p><formula xml:id="formula_26">L(w) = E z;zi∼Bernoulli(pi) [log p(y|w T D z x)] ≈ E Y ∼N (E[w T Dzx],Var[w T Dzx]) [log p(y|Y )] = E v:vi∼N (µi,αµ 2 i ) [log p(y|v T x)] ≤ log E v:vi∼N (µi,αµ 2 i ) [p(y|v T x)] = log(M µ )</formula><p>where Here the variance of v is tied to its magnitude, so a larger weight is only beneficial when it is robust to noise. While α can be determined by the dropout process, we are also free to choose α and we find empirically that using a slightly larger α than that determined by dropout often performs slightly better.</p><formula xml:id="formula_27">M µ = p(D|v)p(v|µ)dv is the Bayesian ev- idence. p(v i |µ i ) = N (v i |µ i , αµ 2 i ) and p(y|v T x) = σ(v T x) y (1 − σ(v T x)) 1</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.">Experiments</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1.">Evaluating the assumptions and speed</head><p>For logistic regression (LR), <ref type="figure" target="#fig_5">figure 4</ref> shows that the quality of the gradient approximation using Gaussian samples is comparable to the difference between different MC dropout runs with 200 samples. <ref type="figure">Figure 5</ref> shows that, under identical settings, the Gaussian approximation is much faster than MC dropout, and has a very similar validation error profile. Both Gaussian dropout training and real dropout training reduce validation error rate by about 30% over plain LR when trained to convergence, without ever overfitting.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2.">Experiments on document classification</head><p>We show the performance of fast dropout LR on several sentiment and topic document classification tasks, both accuracy and time taken, in the top half of table 1. Sampling from the Gaussian is generally around 10 times faster than MC dropout and performs comparably to NBSVM in ( <ref type="bibr" target="#b16">Wang &amp; Manning, 2012)</ref>, which is a method specifically engineered for document classification. Further speedup is achieved by directly optimizing the objective in <ref type="bibr">(8)</ref> and that is only 30% slower than plain logistic regression. While each iteration of fast dropout is still slower than LR, fast dropout sometimes reaches a better validation performance in less time as seen in <ref type="figure">figure 5</ref>. Note that for the MPQA dataset where the average number of non-zero dimensions is m ≈ 4, the Gaussian assumption is unjustifiable, but the derived method works empirically anyways. We compare to other papers in the bottom half  of the table 1, using either a test/train split or Nfold cross validation, depending on what is the most standard for the dataset. With the right regularization parameters and bigram features, our plain LR baseline is itself quite strong relative to previous work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3.">Experiments on MNIST</head><p>Experimental results on MNIST using 2-hidden-layer neural networks are shown in table 2 and the validation error curves with a slight smaller net are shown in <ref type="figure">figure 6</ref>. Here is a case where the data is fairly redundant so that dropping out input features does not make the problem much harder and MC dropout on minibatches converges fairly quickly. We replicate the original experiment using the exact settings described in ( <ref type="bibr" target="#b2">Hinton et al., 2012</ref>) with a 20% dropout of the inputs, an exponentially decaying learning rate, a momentum schedule, and minibatch stochastic gradient descent. Under the learning schedule in the original experiment, no improvement resulted from doing fast dropout in the minibatch setting. In fact, each minibatch of fast dropout takes 1.5 times as much time as real dropout with 1 sample. However, the fast dropout objective is suitable for standard optimization technology, and we were able to train faster using L-BFGS where it converged in less than 100 epochs as opposed to over 500 epochs (see <ref type="figure">figure 6</ref>). 160 errors is the previous best result without pre-training or weightsharing or enhancement of the training data. Plain LR Gaussian approx. MC dropout <ref type="figure">Figure 5</ref>. Validation errors vs. time spent in training (left), and number of iterations (right): trained using batch gradient descent on the 20-newsgroup subtask alt.atheism vs. religion.misc. 100 samples are used for both MC and Gaussian dropout. For MC dropout, zi is sampled only for non-zero xi.   <ref type="figure">Figure 6</ref>. Validation errors vs. epochs: we used the exact SGD training schedule described in ( <ref type="bibr" target="#b2">Hinton et al., 2012</ref>) and a 784-800-800-10 2-hiden-layer neural network. This training schedule is presumably tuned for real dropout. fast dropout performs similarly to real dropout but with less variance. fast dropout batch: use batch L-BFGS and fast dropout, with validation error evaluated every 10 epochs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Methods\ Datasets</head><p>simplicity. <ref type="table">Table 3</ref> compares several test time methods on neural networks trained for MNIST and CIFAR using real dropout. Multiple real dropout samples and fast dropout provide a small but noticeable improvement over weight scaling.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.5.">Other experiments</head><p>The normal equations <ref type="formula" target="#formula_18">(10)</ref> show the contrast between additive and multiplicative L 2 regularization. For linear regression, L 2 regularization outperformed dropout on 10 datasets from UCI that we tried. 1 Results on 5 of them are shown in table 4.</p><p>Classification results using neural networks on small UCI datasets are shown in table 5 where fast dropout does better than plain neural networks in most cases.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.">Conclusions</head><p>We presented a way of getting the benefits of dropout training without actually sampling, thereby speeding up the process by an order of magnitude. For high dimensional datasets (over a few hundred), each iteration of fast dropout is less than 2 times slower than normal training. We provided a deterministic and easy-to-compute objective function approximately equivalent to that of real dropout training. One can optimize this objective using standard optimization  <ref type="table" target="#tab_1">Full Scale D1 D10 D100 FD  MNIST number of errors  Test  129  108 199 118  105 103  Train  4  1  36  1  1  1  Time(s)  10  10  13 110 1.1K  16  CIFAR-10 percent error  Test  53  47  51  45  43  44  Train  42  35  42  33  32  33  Time(s)  17  23  25 230 2.2K  29   Table 3</ref>. Different test time methods on networks trained with real dropout: A 784-800-800-10 neural network is trained with real dropout on MNIST (3072-1000-1000-10 for CIFAR-10) and tested using: Full: use all weights without scaling; Scale: w ← pw; D(n): take n real dropout samples; FD: fast dropout.   methods, whereas standard methods are of limited use in real dropout because we only have a noisy measurement of the gradient. Furthermore, since fast dropout is not losing any information in individual training cases from sampling, it is capable of doing more work in each iteration, often reaching the same validation set performance in a shorter time and in less iterations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Dataset</head></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head></head><label></label><figDesc>Proceedings of the 30 th International Conference on Ma- chine Learning, Atlanta, Georgia, USA, 2013. JMLR: W&amp;CP volume 28. Copyright 2013 by the author(s).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 1 .</head><label>1</label><figDesc>Figure 1. Illustration of the fast dropout idea: The numbers at the bottom are the dropout indicator variables z1...z5. As z is repeatedly sampled, the resulting inputs to the top unit are close to being normally distributed.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 .</head><label>3</label><figDesc>Figure 3. Empirical input distribution of the input of a hidden unit: left: random initialization; right: trained to convergence. We lose almost nothing here.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head></head><label></label><figDesc>−y is the logistic model. For dropout training, µ = w/p and α = (1 − p)/p.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 4 .</head><label>4</label><figDesc>Figure 4. Scatterplot of various approximations (y-axis) vs. direct MC dropout for LR: Each point is a random dimension of the gradient, with its x-value computed from MC dropout with 200 samples of z, and its y-value computed by the method in the legend. MC dropout and Gaussian approximation used 200 samples. Naive is the approximation defined after (4), by assuming that f (z) and g(z) are independent. The green line is the reference y = x.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>1</head><label></label><figDesc>http://archive.ics.uci.edu/ml/</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 .</head><label>2</label><figDesc></figDesc><table>Test errors of neural networks on MNIST: 2NN: 
+2-hidden-layer neural net with 784-1200-1200-10. FD: fast 
+dropout. +Var: more artificial variance by increasing α in 
+FD. +Tr: integrating out translation, rotation and scaling 
+described in 3.4. MC: real dropout. 
+
+6.4. The test time utility of fast dropout 
+
+For the case of real dropout, at test time, Hinton 
+et al. (2012) propose using all features, with weights 
+scaled by p. This weight scaling heuristic does not 
+
+exactly match the training objective being optimized, 
+but greatly speeds run time performance. If we are not 
+concerned about run time, we can still apply dropout 
+at test time. 
+
+In contrast, the test time procedure for fast dropout is 
+exactly the same as the training time procedure. One 
+shortcoming of fast dropout is that the implementation 
+of training does become more complicated, mainly in 
+the backpropagation stage, while the forward compu-
+tation of the network function is still straightforward. 
+
+One compromise here is to use fast dropout at test 
+time, even if we want to train with real dropout for </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 4 .</head><label>4</label><figDesc></figDesc><table>Linear regression using eq. (10). Dropout per-
+forms worse than L2 regularization (recall that fast dropout 
+is exact). While a digit is still easily recognizable when half 
+of its dimensions are dropped out, dropout noise is exces-
+sive for the low dimensional regressors. 
+
+Classification accuracy 
+Dataset 
+L 2 train L 2 test FD train FD test 
+SmallM 
+100 
+87 
+99 
+90 
+USPS 
+100 
+95 
+98 
+96 
+Isolet 
+100 
+91 
+95 
+93 
+Hepatitis 
+100 
+94 
+99 
+95 
+Soybean 
+100 
+91 
+94 
+89 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 5 .</head><label>5</label><figDesc></figDesc><table>Classification results on various datasets: we used 
+a M-200-100-K neural network, and cross validated the pa-
+rameters. 
+
+</table></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We thank Andrej Karpathy, Charlie Tang and Percy Liang for helpful discussions. Sida Wang was partially funded by a NSERC PGS-M scholarship and a Stanford School of Engineering fellowship.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Training with noise is equivalent to Tikhonov regularization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">M</forename><surname>Bishop</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="108" to="116" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ian</forename><forename type="middle">J</forename><surname>Goodfellow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Warde-Farley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>David</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mirza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mehdi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><forename type="middle">C</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bengio</forename></persName>
+		</author>
+		<idno>abs/1302.4389</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Improving neural networks by preventing co-adaptation of feature detectors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nitish</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ilya</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<idno>abs/1207.0580</idno>
+		<imprint>
+			<date type="published" when="2012" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">ImageNet classification with deep convolutional neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ilya</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NIPS</title>
+		<meeting>NIPS</meeting>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Elements of Large-Sample Theory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erich</forename><forename type="middle">L</forename><surname>Lehmann</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1998" />
+			<publisher>Springer</publisher>
+		</imprint>
+	</monogr>
+	<note>ISBN 03873985956</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Christopher. Learning word vectors for sentiment analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><forename type="middle">L</forename><surname>Maas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raymond</forename><forename type="middle">E</forename><surname>Daly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Pham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Peter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Dan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><forename type="middle">Y</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Potts</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL</title>
+		<meeting>the ACL</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">The evidence framework applied to classification networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><forename type="middle">J C</forename><surname>Mackay</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="720" to="736" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Noise injection into inputs in back-propagation learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kiyotoshi</forename><surname>Matsuoka</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Systems, Man, and Cybernetics</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="436" to="440" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Dependency tree-based sentiment classification using CRFs with hidden variables</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nakagawa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tetsuji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kentaro</forename><surname>Inui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kurohashi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sadao</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL:HLT</title>
+		<meeting>ACL:HLT</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">On discriminative vs. generative classifiers: A comparison of logistic regression and naive bayes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><forename type="middle">Y</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><forename type="middle">I</forename><surname>Jordan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NIPS</title>
+		<meeting>NIPS</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="841" to="848" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Computing bounds on the expected maximum of correlated normal variables</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Ross</surname></persName>
+		</author>
+		<idno>1387-5841</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Methodology and Computing in Applied Probability</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="111" to="138" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Transformation invariance in pattern recognition-tangent distance and tangent propagation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Patrice</forename><surname>Simard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lecun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Yann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Denker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bernard</forename><surname>Victorri</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Neural Networks: Tricks of the Trade</title>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="239" to="266" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Logarithmic opinion pools for conditional random fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Smith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Trevor</forename><surname>Cohn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miles</forename><surname>Osborne</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL</title>
+		<meeting>the ACL</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="18" to="25" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">SemiSupervised Recursive Autoencoders for Predicting Sentiment Distributions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Jeffrey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><forename type="middle">H</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><forename type="middle">Y</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Christopher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Reducing weight undertraining in structured discriminative learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Charles</forename><surname>Sutton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Sindelar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of HLT-NAACL)</title>
+		<meeting>HLT-NAACL)</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Learning with marginalized corrupted features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Van Der Maaten</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Laurens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Minmin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Tyree</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kilian</forename><surname>Weinberger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICML</title>
+		<meeting>ICML</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Baselines and bigrams: Simple, good sentiment and topic classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sida</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL</title>
+		<meeting>the ACL</meeting>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="90" to="94" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

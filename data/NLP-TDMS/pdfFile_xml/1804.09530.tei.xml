@@ -1,0 +1,1527 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:52+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Strong Baselines for Neural Semi-supervised Learning under Domain Shift</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Ruder</surname></persName>
+							<email>sebastian@ruder.io</email>
+							<affiliation key="aff0">
+								<orgName type="department">Insight Research Centre</orgName>
+								<orgName type="institution">National University of Ireland</orgName>
+								<address>
+									<settlement>Galway</settlement>
+									<country key="IE">Ireland</country>
+								</address>
+							</affiliation>
+							<affiliation key="aff1">
+								<orgName type="institution">Aylien Ltd</orgName>
+								<address>
+									<settlement>Dublin</settlement>
+									<country key="IE">Ireland</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">♠</forename></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barbara</forename><surname>Plank</surname></persName>
+							<email>bplank@gmail.com</email>
+							<affiliation key="aff2">
+								<orgName type="department">Center for Language and Cognition</orgName>
+								<orgName type="institution">University of Groningen</orgName>
+								<address>
+									<country key="NL">The Netherlands</country>
+								</address>
+							</affiliation>
+							<affiliation key="aff3">
+								<orgName type="department">Department of Computer Science</orgName>
+								<orgName type="institution">IT University of Copenhagen</orgName>
+								<address>
+									<country key="DK">Denmark</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Strong Baselines for Neural Semi-supervised Learning under Domain Shift</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Novel neural models have been proposed in recent years for learning under domain shift. Most models, however, only evaluate on a single task, on proprietary datasets, or compare to weak baselines, which makes comparison of models difficult. In this paper , we re-evaluate classic general-purpose bootstrapping approaches in the context of neural networks under domain shifts vs. recent neural approaches and propose a novel multi-task tri-training method that reduces the time and space complexity of classic tri-training. Extensive experiments on two benchmarks are negative: while our novel method establishes a new state-of-the-art for sentiment analysis, it does not fare consistently the best. More importantly, we arrive at the somewhat surprising conclusion that classic tri-training, with some additions , outperforms the state of the art. We conclude that classic approaches constitute an important and strong baseline.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Deep neural networks (DNNs) excel at learning from labeled data and have achieved state of the art in a wide array of supervised NLP tasks such as dependency parsing <ref type="bibr" target="#b11">(Dozat and Manning, 2017)</ref>, named entity recognition ( <ref type="bibr" target="#b25">Lample et al., 2016)</ref>, and semantic role labeling ( <ref type="bibr" target="#b18">He et al., 2017)</ref>.</p><p>In contrast, learning from unlabeled data, especially under domain shift, remains a challenge. This is common in many real-world applications where the distribution of the training and test data differs. Many state-of-the-art domain adaptation approaches leverage task-specific characteristics such as sentiment words <ref type="bibr" target="#b3">(Blitzer et al., 2006</ref>; <ref type="bibr" target="#b50">Wu and Huang, 2016)</ref> or distributional features <ref type="bibr">(Schn- abel and Schütze, 2014;</ref><ref type="bibr" target="#b52">Yin et al., 2015)</ref> which do not generalize to other tasks. Other approaches that are in theory more general only evaluate on proprietary datasets ( <ref type="bibr" target="#b22">Kim et al., 2017</ref>) or on a single benchmark ( <ref type="bibr" target="#b53">Zhou et al., 2016)</ref>, which carries the risk of overfitting to the task. In addition, most models only compare against weak baselines and, strikingly, almost none considers evaluating against approaches from the extensive semi-supervised learning (SSL) literature <ref type="bibr" target="#b6">(Chapelle et al., 2006</ref>).</p><p>In this work, we make the argument that such algorithms make strong baselines for any task in line with recent efforts highlighting the usefulness of classic approaches <ref type="bibr" target="#b32">(Melis et al., 2017;</ref><ref type="bibr" target="#b10">Denkowski and Neubig, 2017)</ref>. We re-evaluate bootstrapping algorithms in the context of DNNs. These are general-purpose semi-supervised algorithms that treat the model as a black box and can thus be used easily-with a few additions-with the current generation of NLP models. Many of these methods, though, were originally developed with in-domain performance in mind, so their effectiveness in a domain adaptation setting remains unexplored.</p><p>In particular, we re-evaluate three traditional bootstrapping methods, self-training <ref type="bibr" target="#b51">(Yarowsky, 1995)</ref>, tri-training ( <ref type="bibr" target="#b54">Zhou and Li, 2005)</ref>, and tritraining with disagreement <ref type="bibr">(Søgaard, 2010)</ref> for neural network-based approaches on two NLP tasks with different characteristics, namely, a sequence prediction and a classification task (POS tagging and sentiment analysis). We evaluate the methods across multiple domains on two wellestablished benchmarks, without taking any further task-specific measures, and compare to the best results published in the literature.</p><p>We make the somewhat surprising observation that classic tri-training outperforms task-agnostic state-of-the-art semi-supervised learning <ref type="bibr" target="#b24">(Laine and Aila, 2017)</ref> and recent neural adaptation approaches ( <ref type="bibr" target="#b15">Ganin et al., 2016;</ref><ref type="bibr" target="#b41">Saito et al., 2017</ref>).</p><p>In addition, we propose multi-task tri-training, which reduces the main deficiency of tri-training, namely its time and space complexity. It establishes a new state of the art on unsupervised domain adaptation for sentiment analysis but it is outperformed by classic tri-training for POS tagging.</p><p>Contributions Our contributions are: a) We propose a novel multi-task tri-training method. b) We show that tri-training can serve as a strong and robust semi-supervised learning baseline for the current generation of NLP models. c) We perform an extensive evaluation of bootstrapping 1 algorithms compared to state-of-the-art approaches on two benchmark datasets. d) We shed light on the task and data characteristics that yield the best performance for each model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Neural bootstrapping methods</head><p>We first introduce three classic bootstrapping methods, self-training, tri-training, and tri-training with disagreement and detail how they can be used with neural networks. For in-depth details we refer the reader to <ref type="bibr" target="#b0">(Abney, 2007;</ref><ref type="bibr" target="#b6">Chapelle et al., 2006;</ref><ref type="bibr" target="#b56">Zhu and Goldberg, 2009)</ref>. We introduce our novel multitask tri-training method in §2.3.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Self-training</head><p>Self-training <ref type="bibr" target="#b51">(Yarowsky, 1995;</ref><ref type="bibr" target="#b31">McClosky et al., 2006b</ref>) is one of the earliest and simplest bootstrapping approaches. In essence, it leverages the model's own predictions on unlabeled data to obtain additional information that can be used during training. Typically the most confident predictions are taken at face value, as detailed next.</p><p>Self-training trains a model m on a labeled training set L and an unlabeled data set U . At each iteration, the model provides predictions m(x) in the form of a probability distribution over classes for all unlabeled examples x in U . If the probability assigned to the most likely class is higher than a predetermined threshold τ , x is added to the labeled examples with p(x) = arg max m(x) as pseudo-label. This instantiation is the most widely used and shown in Algorithm 1.</p><p>Calibration It is well-known that output probabilities in neural networks are poorly calibrated ( <ref type="bibr" target="#b17">Guo et al., 2017)</ref>. Using a fixed threshold τ is thus Algorithm 1 Self-training <ref type="bibr" target="#b0">(Abney, 2007)</ref> 1: repeat</p><formula xml:id="formula_0">2: m ← train_model(L) 3: for x ∈ U do 4: if max m(x) &gt; τ then 5:</formula><p>L ← L ∪ {(x, p(x))} 6: until no more predictions are confident not the best choice. While the absolute confidence value is inaccurate, we can expect that the relative order of confidences is more robust.</p><p>For this reason, we select the top n unlabeled examples that have been predicted with the highest confidence after every epoch and add them to the labeled data. This is one of the many variants for self-training, called throttling <ref type="bibr" target="#b0">(Abney, 2007)</ref>. We empirically confirm that this outperforms the classic selection in our experiments.</p><p>Online learning In contrast to many classic algorithms, DNNs are trained online by default. We compare training setups and find that training until convergence on labeled data and then training until convergence using self-training performs best.</p><p>Classic self-training has shown mixed success. In parsing it proved successful only with small datasets <ref type="bibr" target="#b38">(Reichart and Rappoport, 2007)</ref> or when a generative component is used together with a reranker in high-data conditions <ref type="bibr" target="#b31">(McClosky et al., 2006b;</ref><ref type="bibr" target="#b48">Suzuki and Isozaki, 2008)</ref>. Some success was achieved with careful task-specific data selection ( <ref type="bibr" target="#b35">Petrov and McDonald, 2012)</ref>, while others report limited success on a variety of NLP tasks <ref type="bibr" target="#b36">(Plank, 2011;</ref><ref type="bibr" target="#b49">Van Asch and Daelemans, 2016;</ref><ref type="bibr" target="#b16">van der Goot et al., 2017)</ref>. Its main downside is that the model is not able to correct its own mistakes and errors are amplified, an effect that is increased under domain shift.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Tri-training</head><p>Tri-training ( <ref type="bibr" target="#b54">Zhou and Li, 2005</ref>) is a classic method that reduces the bias of predictions on unlabeled data by utilizing the agreement of three independently trained models. Tri-training (cf. Algorithm 2) first trains three models m 1 , m 2 , and m 3 on bootstrap samples of the labeled data L. An unlabeled data point is added to the training set of a model m i if the other two models m j and m k agree on its label. Training stops when the classifiers do not change anymore.</p><p>Tri-training with disagreement (Søgaard, 2010) Algorithm 2 Tri-training ( <ref type="bibr" target="#b54">Zhou and Li, 2005)</ref> 1: for i ∈ {1..3} do</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>2:</head><p>S i ← bootstrap_sample(L)</p><p>3:</p><formula xml:id="formula_1">m i ← train_model(S i ) 4: repeat 5:</formula><p>for i ∈ {1..3} do 6:</p><formula xml:id="formula_2">L i ← ∅ 7: for x ∈ U do 8: if p j (x) = p k (x)(j, k = i) then 9: L i ← L i ∪ {(x, p j (x))} m i ← train_model(L ∪ L i )</formula><p>10: until none of m i changes 11: apply majority vote over m i is based on the intuition that a model should only be strengthened in its weak points and that the labeled data should not be skewed by easy data points. In order to achieve this, it adds a simple modification to the original algorithm (altering line 8 in Algorithm 2), requiring that for an unlabeled data point on which m j and m k agree, the other model m i disagrees on the prediction. Tri-training with disagreement is more data-efficient than tritraining and has achieved competitive results on part-of-speech tagging <ref type="bibr">(Søgaard, 2010)</ref>.</p><p>Sampling unlabeled data Both tri-training and tri-training with disagreement can be very expensive in their original formulation as they require to produce predictions for each of the three models on all unlabeled data samples, which can be in the millions in realistic applications. We thus propose to sample a number of unlabeled examples at every epoch. For all traditional bootstrapping approaches we sample 10k candidate instances in each epoch. For the neural approaches we use a linearly growing candidate sampling scheme proposed by <ref type="bibr" target="#b41">(Saito et al., 2017)</ref>, increasing the candidate pool size as the models become more accurate.</p><p>Confidence thresholding Similar to selftraining, we can introduce an additional requirement that pseudo-labeled examples are only added if the probability of the prediction of at least one model is higher than some threshold τ . We did not find this to outperform prediction without threshold for traditional tri-training, but thresholding proved essential for our method ( §2.3).</p><p>The most important condition for tri-training and tri-training with disagreement is that the models are diverse. Typically, bootstrap samples are used to create this diversity ( <ref type="bibr" target="#b54">Zhou and Li, 2005;</ref><ref type="bibr">Sø- gaard, 2010</ref>). However, training separate models on bootstrap samples of a potentially large amount of training data is expensive and takes a lot of time. This drawback motivates our approach.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Multi-task tri-training</head><p>In order to reduce both the time and space complexity of tri-training, we propose Multi-task Tritraining (MT-Tri). MT-Tri leverages insights from multi-task learning (MTL) <ref type="bibr" target="#b5">(Caruana, 1993)</ref> to share knowledge across models and accelerate training. Rather than storing and training each model separately, we propose to share the parameters of the models and train them jointly using MTL. <ref type="bibr">2</ref> All models thus collaborate on learning a joint representation, which improves convergence.</p><p>The output softmax layers are model-specific and are only updated for the input of the respective model. We show the model in <ref type="figure" target="#fig_0">Figure 1</ref> (as instantiated for POS tagging). As the models leverage a joint representation, we need to ensure that the features used for prediction in the softmax layers of the different models are as diverse as possible, so that the models can still learn from each other's predictions. In contrast, if the parameters in all output softmax layers were the same, the method would degenerate to self-training.</p><p>To guarantee diversity, we introduce an orthogonality constraint ( <ref type="bibr">Bousmalis et al., 2016</ref>) as an additional loss term, which we define as follows:</p><formula xml:id="formula_3">L orth = W m 1 W m 2 2 F (1)</formula><p>where | · 2 F is the squared Frobenius norm and W m 1 and W m 2 are the softmax output parameters of the two source and pseudo-labeled output layers m 1 and m 2 , respectively. The orthogonality constraint encourages the models not to rely on the same features for prediction. As enforcing pairwise orthogonality between three matrices is not possible, we only enforce orthogonality between the softmax output layers of m 1 and m 2 , 3 while m 3 is gradually trained to be more target-specific. We parameterize L orth by γ=0.01 following ( ). We do not further tune γ.</p><p>More formally, let us illustrate the model by taking the sequence prediction task <ref type="figure" target="#fig_0">(Figure 1)</ref> as illustration. Given an utterance with labels y 1 , .., y n , our Multi-task Tri-training loss consists of three task-specific (m 1 , m 2 , m 3 ) tagging loss functions (where h is the uppermost Bi-LSTM encoding):</p><formula xml:id="formula_4">L(θ) = − i 1,..,n log P m i (y| h) + γL orth (2)</formula><p>In contrast to classic tri-training, we can train the multi-task model with its three model-specific outputs jointly and without bootstrap sampling on the labeled source domain data until convergence, as the orthogonality constraint enforces different representations between models m 1 and m 2 . From this point, we can leverage the pair-wise agreement of two output layers to add pseudo-labeled examples as training data to the third model. We train the third output layer m 3 only on pseudo-labeled target instances in order to make tri-training more robust to a domain shift. For the final prediction, majority voting of all three output layers is used, which resulted in the best instantiation, together with confidence thresholding (τ = 0.9, except for highresource POS where τ = 0.8 performed slightly better). We also experimented with using a domainadversarial loss ( <ref type="bibr" target="#b15">Ganin et al., 2016</ref>) on the jointly learned representation, but found this not to help. The full pseudo-code is given in Algorithm 3.</p><p>Computational complexity The motivation for MT-Tri was to reduce the space and time complexity of tri-training. We thus give an estimate of its efficiency gains. MT-Tri is ~3× more spaceefficient than regular tri-training; tri-training stores one set of parameters for each of the three models, while MT-Tri only stores one set of parameters (we use three output layers, but these make up a comparatively small part of the total parameter budget). In terms of time efficiency, tri-training first Algorithm 3 Multi-task Tri-training</p><formula xml:id="formula_5">1: m ← train_model(L) 2: repeat 3: for i ∈ {1..3} do 4: L i ← ∅ 5: for x ∈ U do 6: if p j (x) = p k (x)(j, k = i) then 7: L i ← L i ∪ {(x, p j (x))} 8: if i = 3 then m i = train_model(L i ) 9: elsem i ← train_model(L ∪ L i )</formula><p>10: until end condition is met 11: apply majority vote over m i requires to train each of the models from scratch. The actual tri-training takes about the same time as training from scratch and requires a separate forward pass for each model, effectively training three independent models simultaneously. In contrast, MT-Tri only necessitates one forward pass as well as the evaluation of the two additional output layers (which takes a negligible amount of time) and requires about as many epochs as tri-training until convergence (see <ref type="table" target="#tab_5">Table 3</ref>, second column) while adding fewer unlabeled examples per epoch (see Section 3.4). In our experiments, MT-Tri trained about 5-6× faster than traditional tri-training.</p><p>MT-Tri can be seen as a self-ensembling technique, where different variations of a model are used to create a stronger ensemble prediction. Recent approaches in this line are snapshot ensembling ( ) that ensembles models converged to different minima during a training run, asymmetric tri-training ( <ref type="bibr" target="#b41">Saito et al., 2017</ref>) (ASYM) that leverages agreement on two models as information for the third, and temporal ensembling (Laine and Aila, 2017), which ensembles predictions of a model at different epochs. We tried to compare to temporal ensembling in our experiments, but were not able to obtain consistent results. <ref type="bibr">4</ref> We compare to the closest most recent method, asymmetric tritraining ( <ref type="bibr" target="#b41">Saito et al., 2017)</ref>. It differs from ours in two aspects: a) ASYM leverages only pseudolabels from data points on which m 1 and m 2 agree, and b) it uses only one task (m 3 ) as final predictor. In essence, our formulation of MT-Tri is closer to the original tri-training formulation (agreements on two provide pseudo-labels to the third) thereby incorporating more diversity.   <ref type="table" target="#tab_0">Answers  3,489  27,274  Emails  4,900  1,194,173  Newsgroups  2,391  1,000,000  Reviews  3,813  1,965,350  Weblogs  2,031  524,834  WSJ</ref> 30,060 100,000 </p><note type="other">Sentiment Book 2,000 4,465 DVD 2,000 3,586 Electronics 2,000 5,681 Kitchen 2,000 5,945</note></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Experiments</head><p>In order to ascertain which methods are robust across different domains, we evaluate on two widely used unsupervised domain adaptation datasets for two tasks, a sequence labeling and a classification task, cf. <ref type="table" target="#tab_0">Table 1</ref> for data statistics.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">POS tagging</head><p>For POS tagging we use the SANCL 2012 shared task dataset (Petrov and McDonald, 2012) and compare to the top results in both low and high-data conditions ( <ref type="bibr" target="#b42">Schnabel and Schütze, 2014;</ref><ref type="bibr" target="#b52">Yin et al., 2015)</ref>. Both are strong baselines, as the FLORS tagger has been developed for this challenging dataset and it is based on contextual distributional features (excluding the word's identity), and hand-crafted suffix and shape features (including some languagespecific morphological features). We want to gauge to what extent we can adopt a nowadays fairly standard (but more lexicalized) general neural tagger. Our POS tagging model is a state-of-the-art Bi-LSTM tagger <ref type="bibr" target="#b37">(Plank et al., 2016</ref>) with word and 100-dim character embeddings. Word embeddings are initialized with the 100-dim Glove embeddings ( <ref type="bibr" target="#b34">Pennington et al., 2014</ref>). The BiLSTM has one hidden layer with 100 dimensions. The base POS model is trained on WSJ with early stopping on the WSJ development set, using patience 2, Gaussian noise with σ = 0.2 and word dropout with p = 0.25 <ref type="bibr" target="#b23">(Kiperwasser and Goldberg, 2016)</ref>.</p><p>Regarding data, the source domain is the Ontonotes 4.0 release of the Penn treebank Wall Street Journal (WSJ) annotated for 48 fine-grained POS tags. This amounts to 30,060 labeled sentences. We use 100,000 WSJ sentences from 1988 as unlabeled data, following <ref type="bibr" target="#b42">Schnabel and Schütze (2014)</ref>. <ref type="bibr">5</ref> As target data, we use the five SANCL domains (answers, emails, newsgroups, reviews, weblogs). We restrict the amount of unlabeled data for each SANCL domain to the first 100k sentences, and do not do any pre-processing. We consider the development set of ANSWERS as our only target dev set to set hyperparameters. This may result in suboptimal per-domain settings but better resembles an unsupervised adaptation scenario.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Sentiment analysis</head><p>For sentiment analysis, we evaluate on the Amazon reviews dataset <ref type="bibr" target="#b3">(Blitzer et al., 2006</ref>). Reviews with 1 to 3 stars are ranked as negative, while reviews with 4 or 5 stars are ranked as positive. The dataset consists of four domains, yielding 12 adaptation scenarios. We use the same pre-processing and architecture as used in ( <ref type="bibr" target="#b15">Ganin et al., 2016;</ref><ref type="bibr" target="#b41">Saito et al., 2017)</ref>: 5,000-dimensional tf-idf weighted unigram and bigram features as input; 2k labeled source samples and 2k unlabeled target samples for training, 200 labeled target samples for validation, and between 3k-6k samples for testing. The model is an MLP with one hidden layer with 50 dimensions, sigmoid activations, and a softmax output. We compare against the Variational Fair Autoencoder (VFAE) ( <ref type="bibr" target="#b27">Louizos et al., 2015</ref>) model and domain-adversarial neural networks (DANN) (Ganin et al., 2016).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Baselines</head><p>Besides comparing to the top results published on both datasets, we include the following baselines: a) the task model trained on the source domain; b) self-training (Self); c) tri-training (Tri); d) tri-training with disagreement (Tri-D); and e) asymmetric tri-training ( <ref type="bibr" target="#b41">Saito et al., 2017</ref>).</p><p>Our proposed model is multi-task tri-training (MTTri). We implement our models in DyNet ( <ref type="bibr">Neu- big et al., 2017)</ref>. Reporting single evaluation scores might result in biased results <ref type="bibr" target="#b39">(Reimers and Gurevych, 2017)</ref>. Throughout the paper, we report mean accuracy and standard deviation over five runs for POS tagging and over ten runs for </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Results</head><p>Sentiment analysis We show results for sentiment analysis for all 12 domain adaptation scenarios in <ref type="figure" target="#fig_3">Figure 2</ref>. For clarity, we also show the accuracy scores averaged across each target domain as well as a global macro average in  MT-Tri finally outperforms the state of the art on 3/4 domains, and even slightly traditional tritraining, resulting in the overall best method. This improvement is mainly due to the B-&gt;E and D-&gt;E scenarios, on which tri-training struggles. These domain pairs are among those with the highest Adistance ( <ref type="bibr" target="#b2">Blitzer et al., 2007)</ref>, which highlights that tri-training has difficulty dealing with a strong shift in domain. Our method is able to mitigate this deficiency by training one of the three output layers only on pseudo-labeled target domain examples.</p><p>In addition, MT-Tri is more efficient as it adds a smaller number of pseudo-labeled examples than tri-training at every epoch. For sentiment analysis, tri-training adds around 1800-1950/2000 unlabeled examples at every epoch, while MT-Tri only adds around 100-300 in early epochs. This shows that the orthogonality constraint is useful for inducing diversity. In addition, adding fewer examples poses a smaller risk of swamping the learned representations with useless signals and is more akin to fine-tuning, the standard method for supervised domain adaptation <ref type="bibr" target="#b19">(Howard and Ruder, 2018)</ref>.</p><p>We observe an asymmetry in the results between some of the domain pairs, e.g. B-&gt;D and D-&gt;B. We hypothesize that the asymmetry may be due to properties of the data and that the domains are relatively far apart e.g., in terms of A-distance. In fact, asymmetry in these domains is already reflected Src (+glove) 87.63 ±.37 86.49 ±.35 88.60 ±.22 90.12 ±.32 92.85 ±.17 89.14 ±.28 95.49 ±.09 -Self (5) 87.64 ±.18 86.58 ±.30 88.42 ±.24 90.03 ±.11 92.80 ±.19 89.09 ±.20 95.36 ±.07 .5k Tri (4) 88.42 ±.16 87.46 ±.20 87.97 ±.09 90.72 ±.14 93.40 ±.15 89.56 ±.16 95.94 ±.07 20.5k Tri-D (7) 88.50 ±.04 87.63 ±.15 88.12 ±.05 90.76 ±.10 93.51 ±.06 89.70 ±.08 95.99 ±.03 7.7K Asym (3) 87.81 ±.19 86.97 ±.17 87.74 ±.24 90.16 ±.17 92.73 ±.16 89.08 ±.19 95.55 ±.12 1.5k MT-Tri (4) 87.92 ±.18 87.20 ±.23 87.73 ±.37 90.27 ±.10 92.96 ±.07 89.21 ±.19 95.50 ±.06   <ref type="table">Table 4</ref>: Accuracy for POS tagging on the dev and test sets of the SANCL domains, models trained on full source data setup. Values for methods with * are from ( <ref type="bibr" target="#b42">Schnabel and Schütze, 2014)</ref>.</p><p>in the results of <ref type="bibr" target="#b2">Blitzer et al. (2007)</ref> and is corroborated in the results for asymmetric tri-training ( <ref type="bibr" target="#b41">Saito et al., 2017</ref>) and our method. We note a weakness of this dataset is high variance. Existing approaches only report the mean, which makes an objective comparison difficult. For this reason, we believe it is essential to evaluate proposed approaches also on other tasks.</p><p>POS tagging Results for tagging in the low-data regime (10% of WSJ) are given in <ref type="table" target="#tab_5">Table 3</ref>.</p><p>Self-training does not work for the sequence prediction task. We report only the best instantiation (throttling with n=800). Our results contribute to negative findings regarding self-training <ref type="bibr" target="#b36">(Plank, 2011;</ref><ref type="bibr" target="#b49">Van Asch and Daelemans, 2016</ref>).</p><p>In the low-data setup, tri-training with disagreement works best, reaching an overall average accuracy of 89.70, closely followed by classic tritraining, and significantly outperforming the baseline on 4/5 domains. The exception is newsgroups, a difficult domain with high OOV rate where none of the approches beats the baseline (see §3.4). Our proposed MT-Tri is better than asymmetric tritraining, but falls below classic tri-training. It beats  For the high-data setup <ref type="table">(Table 4</ref>) results are similar. Disagreement, however, is only favorable in the low-data setups; the effect of avoiding easy points no longer holds in the full data setup. Classic tritraining is the best method. In particular, traditional tri-training is complementary to word embedding initialization, pushing the non-pre-trained baseline to the level of SRC with Glove initalization. Tritraining pushes performance even further and results in the best model, significantly outperforming the baseline again in 4/5 cases, and reaching FLORS performance on weblogs. Multi-task tritraining is often slightly more effective than asymmetric tri-training ( <ref type="bibr" target="#b41">Saito et al., 2017)</ref>; however, improvements for both are not robust across domains, sometimes performance even drops. The model likely is too simplistic for such a high-data POS setup, and exploring shared-private models might prove more fruitful ( ). On the test sets, tri-training performs consistently the best.</p><p>POS analysis We analyze POS tagging accuracy with respect to word frequency 6 and unseen word-tag combinations (UWT) on the dev sets. <ref type="table" target="#tab_7">Table 5</ref> (top rows) provides percentage of un- <ref type="bibr">6</ref> The binned log frequency was calculated with base 2 (bin 0 are OOVs, bin 1 are singletons and rare words etc). known tags, OOVs and unknown word-tag (UWT) rate. The SANCL dataset is overall very challenging: OOV rates are high (6.8-11% compared to 2.3% in WSJ), so is the unknown word-tag (UWT) rate (answers and emails contain 2.91% and 3.47% UWT compared to 0.61% on WSJ) and almost all target domains even contain unknown tags ( <ref type="bibr" target="#b42">Schnabel and Schütze, 2014</ref>) (unknown tags: ADD,GW,NFP,XX), except for weblogs. Email is the domain with the highest OOV rate and highest unknown-tag-for-known-words rate. We plot accuracy with respect to word frequency on email in <ref type="figure" target="#fig_4">Figure 3</ref>, analyzing how the three methods fare in comparison to the baseline on this difficult domain.</p><p>Regarding OOVs, the results in <ref type="table" target="#tab_7">Table 5</ref> (second part) show that classic tri-training outperforms the source model (trained on only source data) on 3/5 domains in terms of OOV accuracy, except on two domains with high OOV rate (newsgroups and weblogs). In general, we note that tri-training works best on OOVs and on low-frequency tokens, which is also shown in <ref type="figure" target="#fig_4">Figure 3</ref> (leftmost bins). Both other methods fall typically below the baseline in terms of OOV accuracy, but MT-Tri still outperforms Asym in 4/5 cases. <ref type="table" target="#tab_7">Table 5</ref> (last part) also shows that no bootstrapping method works well on unknown word-tag combinations. UWT tokens are very difficult to predict correctly using an unsupervised approach; the less lexicalized and more context-driven approach taken by FLORS is clearly superior for these cases, resulting in higher UWT accuracies for 4/5 domains.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Related work</head><p>Learning under Domain Shift There is a large body of work on domain adaptation. Studies on unsupervised domain adaptation include early work on bootstrapping ( <ref type="bibr" target="#b47">Steedman et al., 2003;</ref><ref type="bibr" target="#b30">McClosky et al., 2006a</ref>), shared feature representations ( <ref type="bibr" target="#b3">Blitzer et al., 2006</ref><ref type="bibr" target="#b2">Blitzer et al., , 2007</ref> and instance weighting <ref type="bibr" target="#b21">(Jiang and Zhai, 2007)</ref>. Recent approaches include adversarial learning ( <ref type="bibr" target="#b15">Ganin et al., 2016)</ref> and fine-tuning ( <ref type="bibr" target="#b43">Sennrich et al., 2016)</ref>. There is almost no work on bootstrapping approaches for recent neural NLP, in particular under domain shift. Tri-training is less studied, and only recently re-emerged in the vision community ( <ref type="bibr" target="#b41">Saito et al., 2017</ref>), albeit is not compared to classic tri-training.</p><p>Neural network ensembling Related work on self-ensembling approaches includes snapshot ensembling (  or temporal ensembling ( <ref type="bibr" target="#b24">Laine and Aila, 2017)</ref>. In general, the line between "explicit" and "implicit" ensembling ( , like dropout ( <ref type="bibr" target="#b46">Srivastava et al., 2014</ref>) or temporal ensembling ( <ref type="bibr" target="#b41">Saito et al., 2017)</ref>, is more fuzzy. As we noted earlier our multi-task learning setup can be seen as a form of self-ensembling.</p><p>Multi-task learning in NLP Neural networks are particularly well-suited for MTL allowing for parameter sharing <ref type="bibr" target="#b5">(Caruana, 1993)</ref>. Recent NLP conferences witnessed a "tsunami" of deep learning papers <ref type="bibr" target="#b29">(Manning, 2015)</ref>, followed by what we call a multi-task learning "wave": MTL has been successfully applied to a wide range of NLP tasks <ref type="bibr" target="#b8">(Cohn and Specia, 2013;</ref><ref type="bibr" target="#b7">Cheng et al., 2015;</ref><ref type="bibr" target="#b28">Luong et al., 2015;</ref><ref type="bibr" target="#b37">Plank et al., 2016;</ref><ref type="bibr" target="#b13">Fang and Cohn, 2016;</ref><ref type="bibr" target="#b40">Ruder et al., 2017;</ref><ref type="bibr" target="#b1">Augenstein et al., 2018)</ref>. Related to it is the pioneering work on adversarial learning (DANN) ( <ref type="bibr" target="#b15">Ganin et al., 2016</ref>). For sentiment analysis we found tri-training and our MT-Tri model to outperform DANN. Our MT-Tri model lends itself well to shared-private models such as those proposed recently ( <ref type="bibr" target="#b22">Kim et al., 2017)</ref>, which extend upon ( <ref type="bibr" target="#b15">Ganin et al., 2016</ref>) by having separate source and target-specific encoders.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Conclusions</head><p>We re-evaluate a range of traditional generalpurpose bootstrapping algorithms in the context of neural network approaches to semi-supervised learning under domain shift. For the two examined NLP tasks classic tri-training works the best and even outperforms a recent state-of-the-art method. The drawback of tri-training it its time and space complexity. We therefore propose a more efficient multi-task tri-training model, which outperforms both traditional tri-training and recent alternatives in the case of sentiment analysis. For POS tagging, classic tri-training is superior, performing especially well on OOVs and low frequency tokens, which suggests it is less affected by error propagation. Overall we emphasize the importance of comparing neural approaches to strong baselines and reporting results across several runs.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Multi-task tri-training (MT-Tri).</figDesc><graphic url="image-1.png" coords="3,318.19,62.81,196.44,114.46" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Average results for unsupervised domain adaptation on the Amazon dataset. Domains: B (Book), D (DVD), E (Electronics), K (Kitchen). Results for VFAE, DANN, and Asym are from Saito et al. (2017).</figDesc><graphic url="image-4.png" coords="6,72.85,171.81,216.00,108.00" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: POS accuracy per binned log frequency.</figDesc><graphic url="image-6.png" coords="8,307.28,62.81,218.27,99.46" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head>Table 1 :</head><label>1</label><figDesc></figDesc><table>Number of labeled and unlabeled sen-
+tences for each domain in the SANCL 2012 dataset 
+(Petrov and McDonald, 2012) for POS tagging 
+(above) and the Amazon Reviews dataset (Blitzer 
+et al., 2006) for sentiment analysis (below). 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="true"><head>Table 2 .</head><label>2</label><figDesc></figDesc><table>Model 
+D 
+B 
+E 
+K 
+Avg 
+
+VFAE* 76.57 73.40 80.53 82.93 78.36 
+DANN* 75.40 71.43 77.67 80.53 76.26 
+Asym* 
+76.17 72.97 80.47 83.97 78.39 
+
+Src 
+75.91 73.47 75.61 79.58 76.14 
+Self 
+78.00 74.55 76.54 80.30 77.35 
+Tri 
+78.72 75.64 78.60 83.26 79.05 
+Tri-D 
+76.99 74.44 78.30 80.59 77.58 
+MT-Tri 
+78.14 74.86 81.45 82.14 79.15 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 2 :</head><label>2</label><figDesc>Self-training achieves surprisingly good results but is not able to compete with tri-training. Tri- training with disagreement is only slightly better than self-training, showing that the disagreement component might not be useful when there is a strong domain shift. Tri-training achieves the best average results on two target domains and clearly outperforms the state of the art on average.</figDesc><table>Average accuracy scores for each SA tar-
+get domain. *: result from Saito et al. (2017). 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Accuracy scores on dev set of target domain for POS tagging for 10% labeled data. Avg: average 
+over the 5 SANCL domains. Hyperparameter ep (epochs) is tuned on Answers dev. µ pseudo : average 
+amount of added pseudo-labeled data. FLORS: results for Batch (u:big) from (Yin et al., 2015) (see  §3). 
+
+Target domains dev sets 
+Avg on 
+Model 
+Answers 
+Emails 
+Newsgroups 
+Reviews 
+Weblogs 
+targets 
+WSJ 
+TnT* 
+88.55 
+88.14 
+88.66 
+90.40 
+93.33 
+89.82 
+95.75 
+Stanford* 
+88.92 
+88.68 
+89.11 
+91.43 
+94.15 
+90.46 
+96.83 
+
+Src 
+88.84 ±.15 88.24 ±.12 89.45 ±.23 91.24 ±.03 93.92 ±.17 90.34 ±.14 96.69 ±.08 
+Tri 
+89.34 ±.18 88.83 ±.07 89.32 ±.21 91.62 ±.06 94.40 ±.06 90.70 ±.12 96.84 ±.04 
+Tri-D 
+89.35 ±.16 88.66 ±.09 89.29 ±.12 91.58 ±.05 94.32 ±.05 90.62 ±.09 96.85 ±.06 
+
+Src (+glove) 89.35 ±.16 88.55 ±.14 90.12 ±.31 91.48 ±.15 94.48 ±.07 90.80 ±.17 96.90 ±.04 
+Tri 
+90.00 ±.03 89.06 ±.16 90.04 ±.25 91.98 ±.11 94.74 ±.06 91.16 ±.12 96.99 ±.02 
+Tri-D 
+89.80 ±.19 88.85 ±.10 90.03 ±.22 91.98 ±.09 94.70 ±.05 91.01 ±.13 96.95 ±.05 
+Asym 
+89.51 ±.15 88.47 ±.19 89.26 ±.16 91.60 ±.20 94.28 ±.15 90.62 ±.17 96.56 ±.01 
+MT-Tri 
+89.45 ±.05 88.65 ±.04 89.40 ±.22 91.63 ±.23 94.41 ±.05 90.71 ±.12 97.37 ±.07 
+
+FLORS* 
+90.30 
+89.44 
+90.86 
+92.95 
+94.71 
+91.66 
+96.59 
+Target domains test sets 
+Avg on 
+Model 
+Answers 
+Emails 
+Newsgroups 
+Reviews 
+Weblogs 
+targets 
+WSJ 
+TnT* 
+89.36 
+87.38 
+90.85 
+89.67 
+91.37 
+89.73 
+96.57 
+Stanford* 
+89.74 
+87.77 
+91.25 
+90.30 
+92.32 
+90.28 
+97.43 
+
+Src (+glove) 90.43 ±.13 87.95 ±.18 91.83 ±.20 90.04 ±.11 92.44 ±.14 90.54 ±.15 97.50 ±.03 
+Tri 
+91.21 ±.06 88.30 ±.19 92.18 ±.19 90.06 ±.10 92.85 ±.02 90.92 ±.11 97.45 ±.03 
+Asym 
+90.62 ±.26 87.71 ±.07 91.40 ±.05 89.89 ±.22 92.37 ±.27 90.39 ±.17 97.19 ±.03 
+MT-Tri 
+90.53 ±.15 87.90 ±.07 91.45 ±.19 89.77 ±.26 92.35 ±.09 90.40 ±.15 97.37 ±.07 
+
+FLORS* 
+91.17 
+88.67 
+92.41 
+92.25 
+93.14 
+91.53 
+97.11 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Accuracy scores on dev sets for OOV and 
+unknown word-tag (UWT) tokens. 
+
+the baseline significantly on only 2/5 domains (an-
+swers and emails). The FLORS tagger (Yin et al., 
+2015) fares better. Its contextual distributional fea-
+tures are particularly helpful on unknown word-tag 
+combinations (see  § 3.4), which is a limitation of 
+the lexicalized generic bi-LSTM tagger. 
+</table></figure>
+
+			<note place="foot" n="1"> We use the term bootstrapping as used in the semisupervised learning literature (Zhu, 2005), which should not be confused with the statistical procedure of the same name (Efron and Tibshirani, 1994).</note>
+
+			<note place="foot" n="2"> Note: we use the term multi-task learning here albeit all tasks are of the same kind, similar to work on multi-lingual modeling treating each language (but same label space) as separate task e.g., (Fang and Cohn, 2017). It is interesting to point out that our model is further doing implicit multi-view learning by way of the orthogonality constraint.</note>
+
+			<note place="foot" n="3"> We also tried enforcing orthogonality on a hidden layer rather than the output layer, but this did not help.</note>
+
+			<note place="foot" n="4"> We suspect that the sparse features in NLP and the domain shift might be detrimental to its unsupervised consistency loss.</note>
+
+			<note place="foot" n="5"> Note that our unlabeled data might slightly differ from theirs. We took the first 100k sentences from the 1988 WSJ dataset from the BLLIP 1987-89 WSJ Corpus Release 1.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Semisupervised learning for computational linguistics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Abney</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2007" />
+			<publisher>CRC Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Multi-task Learning of Pairwise Sequence Classification Tasks Over Disparate Label Spaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Isabelle</forename><surname>Augenstein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Ruder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Sø-Gaard</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NAACL-HLT</title>
+		<meeting>NAACL-HLT</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Biographies, bollywood, boom-boxes and blenders: Domain adaptation for sentiment classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Blitzer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Dredze</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fernando</forename><surname>Pereira</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Annual Meeting-Association for Computational Linguistics</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="volume">45</biblScope>
+			<biblScope unit="page">440</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Domain Adaptation with Structural Correspondence Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Blitzer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Mcdonald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fernando</forename><surname>Pereira</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2006 Conference on Empirical Methods in Natural Language Processing (EMNLP &apos;06)</title>
+		<meeting>the 2006 Conference on Empirical Methods in Natural Language Processing (EMNLP &apos;06)</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="120" to="128" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Konstantinos</forename><surname>Bousmalis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">George</forename><surname>Trigeorgis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nathan</forename><surname>Silberman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dilip</forename><surname>Krishnan</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+	<note>and Dumitru Erhan. 2016. Domain Separation Networks. NIPS</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Multitask learning: A knowledgebased source of inductive bias</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rich</forename><surname>Caruana</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Tenth International Conference on Machine Learning</title>
+		<meeting>the Tenth International Conference on Machine Learning</meeting>
+		<imprint>
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Semi-Supervised Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Olivier</forename><surname>Chapelle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bernhard</forename><surname>Schölkopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><surname>Zien</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2006" />
+			<publisher>MIT press</publisher>
+			<biblScope unit="volume">1</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Open-domain name error detection using a multitask rnn</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Fang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mari</forename><surname>Ostendorf</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="737" to="746" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Modelling annotator bias with multi-task gaussian processes: An application to machine translation quality estimation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Trevor</forename><surname>Cohn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lucia</forename><surname>Specia</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 51st Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 51st Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="volume">1</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Association for Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="page" from="32" to="42" />
+			<pubPlace>Sofia, Bulgaria</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Denkowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Graham</forename><surname>Neubig</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1706.09733</idno>
+		<title level="m">Stronger baselines for trustable results in neural machine translation</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Deep Biaffine Attention for Neural Dependency Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Dozat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICLR 2017</title>
+		<meeting>ICLR 2017</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">An introduction to the bootstrap</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bradley</forename><surname>Efron</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Robert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tibshirani</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1994" />
+			<publisher>CRC press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Learning when to trust distant supervision: An application to lowresource pos tagging using cross-lingual projection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Meng</forename><surname>Fang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Trevor</forename><surname>Cohn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of CoNLL-16</title>
+		<meeting>CoNLL-16</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Model transfer for tagging low-resource languages using a bilingual dictionary</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Meng</forename><surname>Fang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Trevor</forename><surname>Cohn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="587" to="593" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Domain-Adversarial Training of Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yaroslav</forename><surname>Ganin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Evgeniya</forename><surname>Ustinova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hana</forename><surname>Ajakan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pascal</forename><surname>Germain</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hugo</forename><surname>Larochelle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Francois</forename><surname>Laviolette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mario</forename><surname>Marchand</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Lempitsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="page" from="1" to="35" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">To normalize, or not to normalize: The impact of normalization on part-of-speech tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rob</forename><surname>Van Der Goot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barbara</forename><surname>Plank</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Malvina</forename><surname>Nissim</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 3rd Workshop on Noisy Usergenerated Text</title>
+		<meeting>the 3rd Workshop on Noisy Usergenerated Text<address><addrLine>Copenhagen, Denmark</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="31" to="39" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">On Calibration of Modern Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chuan</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoff</forename><surname>Pleiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yu</forename><surname>Sun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kilian</forename><forename type="middle">Q</forename><surname>Weinberger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICML 2017</title>
+		<meeting>ICML 2017</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Deep semantic role labeling: What works and what&apos;s next</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luheng</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Lewis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Vancouver, Canada</addrLine></address></meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="473" to="483" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Universal Language Model Fine-tuning for Text Classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeremy</forename><surname>Howard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Ruder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL 2018</title>
+		<meeting>ACL 2018</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gao</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yixuan</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoff</forename><surname>Pleiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhuang</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><forename type="middle">E</forename><surname>Hopcroft</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kilian</forename><forename type="middle">Q</forename><surname>Weinberger</surname></persName>
+		</author>
+		<title level="m">Snapshot Ensembles: Train 1, get M for free</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+	<note>Proceedings of ICLR 2017</note>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Instance weighting for domain adaptation in nlp</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jing</forename><surname>Jiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chengxiang</forename><surname>Zhai</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 45th Annual Meeting of the Association of Computational Linguistics</title>
+		<meeting>the 45th Annual Meeting of the Association of Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="264" to="271" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Adversarial adaptation of synthetic or stale data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Young-Bum</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karl</forename><surname>Stratos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dongchan</forename><surname>Kim</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Vancouver, Canada</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="1297" to="1307" />
+		</imprint>
+	</monogr>
+	<note>Long Papers)</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Simple and accurate dependency parsing using bidirectional lstm feature representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eliyahu</forename><surname>Kiperwasser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Transactions of the Association for Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="313" to="327" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Temporal Ensembling for Semi-Supervised Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samuli</forename><surname>Laine</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timo</forename><surname>Aila</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICLR</title>
+		<meeting>ICLR</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Neural Architectures for Named Entity Recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guillaume</forename><surname>Lample</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sandeep</forename><surname>Subramanian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuya</forename><surname>Kawakami</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL-HLT</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Adversarial multi-task learning for text classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pengfei</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xipeng</forename><surname>Qiu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuanjing</forename><surname>Huang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Vancouver, Canada</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1" to="10" />
+		</imprint>
+	</monogr>
+	<note>Long Papers)</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christos</forename><surname>Louizos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Swersky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yujia</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Max</forename><surname>Welling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Zemel</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.00830</idno>
+		<title level="m">The variational fair autoencoder</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minh-Thang</forename><surname>Luong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Quoc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukasz</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kaiser</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.06114</idno>
+		<title level="m">Multi-task sequence to sequence learning</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Computational linguistics and deep learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Christopher D Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">41</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="701" to="707" />
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Effective self-training for parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Mcclosky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Charniak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Human Language Technology Conference of the NAACL, Main Conference</title>
+		<meeting>the Human Language Technology Conference of the NAACL, Main Conference<address><addrLine>New York City, USA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Reranking and Self-Training for Parser Adaptation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Mcclosky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Charniak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Computational Linguistics (COLING) and Annual Meeting of the Association for Computational Linguistics (ACL)</title>
+		<imprint>
+			<date type="published" when="2006-07" />
+			<biblScope unit="page" from="337" to="344" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<title level="m" type="main">On the State of the Art of Evaluation in Neural Language Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gábor</forename><surname>Melis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+		<idno type="arXiv">arXivpreprintarXiv:1707.05589</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Graham</forename><surname>Neubig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Austin</forename><surname>Matthews</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Waleed</forename><surname>Ammar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antonios</forename><surname>Anastasopoulos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Chiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Clothiaux</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Trevor</forename><surname>Cohn</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1701.03980</idno>
+	</analytic>
+	<monogr>
+		<title level="m">The dynamic neural network toolkit</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Empirical Methods in Natural Language Processing (EMNLP)</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1532" to="1543" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Mcdonald</surname></persName>
+		</author>
+		<title level="m">Overview of the 2012 shared task on parsing the web. Notes of the First Workshop on Syntactic Analysis of NonCanonical Language (SANCL)</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page">59</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+		<title level="m" type="main">Domain adaptation for parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barbara</forename><surname>Plank</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2011" />
+			<pubPlace>University Library Groningen</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Multilingual Part-of-Speech Tagging with Bidirectional Long Short-Term Memory Models and Auxiliary Loss</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barbara</forename><surname>Plank</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Self-training for enhancement and domain adaptation of statistical parsers trained on small datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roi</forename><surname>Reichart</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ari</forename><surname>Rappoport</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 45th Annual Meeting of the Association of Computational Linguistics</title>
+		<meeting>the 45th Annual Meeting of the Association of Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="616" to="623" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Reporting score distributions makes a difference: Performance study of lstm-networks for sequence tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nils</forename><surname>Reimers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iryna</forename><surname>Gurevych</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2017 Conference on Empirical Methods in Natural Language Processing<address><addrLine>Copenhagen, Denmark</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="338" to="348" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Ruder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joachim</forename><surname>Bingel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Isabelle</forename><surname>Augenstein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.08142</idno>
+		<title level="m">Learning what to share between loosely related tasks</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<monogr>
+		<title level="m" type="main">Asymmetric Tri-training for Unsupervised Domain Adaptation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kuniaki</forename><surname>Saito</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshitaka</forename><surname>Ushiku</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tatsuya</forename><surname>Harada</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">FLORS: Fast and Simple Domain Adaptation for Part-ofSpeech Tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tobias</forename><surname>Schnabel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hinrich</forename><surname>Schütze</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">TACL</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="15" to="26" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Improving neural machine translation models with monolingual data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rico</forename><surname>Sennrich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barry</forename><surname>Haddow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexandra</forename><surname>Birch</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Berlin, Germany</addrLine></address></meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="86" to="96" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">Simple semi-supervised training of part-of-speech taggers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL 2010 Conference Short Papers</title>
+		<meeting>the ACL 2010 Conference Short Papers</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="205" to="208" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">Deep multitask learning with low level tasks supervised at lower layers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Berlin, Germany</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="231" to="235" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">Dropout: A Simple Way to Prevent Neural Networks from Overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">Example selection for bootstrapping statistical parsers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Steedman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rebecca</forename><surname>Hwa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miles</forename><surname>Osborne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anoop</forename><surname>Sarkar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julia</forename><surname>Hockenmaier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Ruhlen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Baker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeremiah</forename><surname>Crim</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2003 Human Language Technology Conference of the North American Chapter</title>
+		<meeting>the 2003 Human Language Technology Conference of the North American Chapter</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<monogr>
+		<title level="m" type="main">Semi-supervised sequential labeling and segmentation using gigaword scale unlabeled data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Suzuki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hideki</forename><surname>Isozaki</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="665" to="673" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<monogr>
+		<title level="m" type="main">Predicting the effectiveness of self-training: Application to sentiment classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent</forename><surname>Van Asch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Walter</forename><surname>Daelemans</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1601.03288</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Sentiment Domain Adaptation with Multiple Sources</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fangzhao</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yongfeng</forename><surname>Huang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics (ACL 2016)</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics (ACL 2016)</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="301" to="310" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<analytic>
+		<title level="a" type="main">Unsupervised Word Sense Disambiguation Rivaling Supervised Methods</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Yarowsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 33rd annual meeting on Association for Computational Linguistics</title>
+		<meeting>the 33rd annual meeting on Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b52">
+	<analytic>
+		<title level="a" type="main">Online Updating of Word Representations for Part-of-Speech Tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenpeng</forename><surname>Yin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tobias</forename><surname>Schnabel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hinrich</forename><surname>Schütze</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2015-09" />
+			<biblScope unit="page" from="1329" to="1334" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b53">
+	<analytic>
+		<title level="a" type="main">Bi-transferring deep neural networks for domain adaptation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guangyou</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiwen</forename><surname>Xie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><forename type="middle">Xiangji</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tingting</forename><surname>He</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Berlin, Germany</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="322" to="332" />
+		</imprint>
+	</monogr>
+	<note>Long Papers)</note>
+</biblStruct>
+
+<biblStruct xml:id="b54">
+	<analytic>
+		<title level="a" type="main">Tri-Training: Exploiting Unlabeled Data Using Three Classifiers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhi-Hua</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans.Data Eng</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">11</biblScope>
+			<biblScope unit="page" from="1529" to="1541" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b55">
+	<analytic>
+		<title level="a" type="main">Semi-Supervised Learning Literature Survey</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaojin</forename><surname>Zhu</surname></persName>
+		</author>
+		<idno>1530</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Sciences</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+		<respStmt>
+			<orgName>University of Wisconsin-Madison</orgName>
+		</respStmt>
+	</monogr>
+<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b56">
+	<monogr>
+		<title level="m" type="main">Introduction to semi-supervised learning. Synthesis lectures on artificial intelligence and machine learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaojin</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Andrew</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Goldberg</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="1" to="130" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

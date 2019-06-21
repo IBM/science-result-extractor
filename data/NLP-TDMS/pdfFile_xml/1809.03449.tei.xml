@@ -1,0 +1,851 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:05+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Exploring Machine Reading Comprehension with Explicit Knowledge</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chao</forename><surname>Wang</surname></persName>
+							<email>chwang@eecs.yorku.ca</email>
+							<affiliation key="aff0">
+								<orgName type="department">Department of Electrical Engineering and Computer Science Lassonde School of Engineering</orgName>
+								<orgName type="institution">York University</orgName>
+								<address>
+									<addrLine>4700 Keele Street</addrLine>
+									<settlement>Toronto</settlement>
+									<region>Ontario</region>
+									<country key="CA">Canada</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hui</forename><surname>Jiang</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">Department of Electrical Engineering and Computer Science Lassonde School of Engineering</orgName>
+								<orgName type="institution">York University</orgName>
+								<address>
+									<addrLine>4700 Keele Street</addrLine>
+									<settlement>Toronto</settlement>
+									<region>Ontario</region>
+									<country key="CA">Canada</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Exploring Machine Reading Comprehension with Explicit Knowledge</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>To apply general knowledge to machine reading comprehension (MRC), we propose an innovative MRC approach, which consists of a WordNet-based data enrichment method and an MRC model named as Knowledge Aided Reader (KAR). The data enrichment method uses the semantic relations of WordNet to extract semantic level inter-word connections from each passage-question pair in the MRC dataset, and allows us to control the amount of the extraction results by setting a hyper-parameter. KAR uses the extraction results of the data enrichment method as explicit knowledge to assist the prediction of answer spans. According to the experimental results, the single model of KAR achieves an Exact Match (EM) of 72.4 and an F1 Score of 81.1 on the development set of SQuAD, and more importantly , by applying different settings in the data enrichment method to change the amount of the extraction results, there is a 2% variation in the resulting performance of KAR, which implies that the explicit knowledge provided by the data enrichment method plays an effective role in the training of KAR.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Machine reading comprehension (MRC) is a challenging task in artificial intelligence. As the name suggests, MRC requires a machine to read a passage and answer a relevant question. Since the answer to each question is supposed to stem from the corresponding passage, a common solution for MRC is to train an MRC model that predicts for each given passage-question pair an answer span (i.e. the answer start position and the answer end position) in the passage. To encourage the exploration of MRC models, many MRC datasets have been published, such as SQuAD ( <ref type="bibr" target="#b18">Rajpurkar et al., 2016)</ref> and MS-MARCO ( <ref type="bibr" target="#b14">Nguyen et al., 2016)</ref>. In this paper, we focus on SQuAD. A lot of MRC models have been proposed for the challenge of SQuAD. Although the top models on the leader-board have achieved almost the same performance as human beings, we are firmly convinced that the way human beings conduct reading comprehension is still worth studying for us to make further innovations in MRC. Therefore, let us briefly review human reading comprehension before diving into MRC. Given a passage and a relevant question, we may wish to match the passage words with the question words, so that we could find the answer around the matched passage words. However, due to the complexity and diversity of natural languages, this naive method is often useless in practice. Instead, we must rely on our reasoning skills to deal with reading comprehension, which makes it necessary for us to obtain enough inter-word connections from each given passage-question pair. Inter-word connections have a wide coverage, they exist not only on the syntactic level (e.g. dependency), but also on the semantic level (e.g. synonymy). The examples provided in <ref type="table">Table 1</ref> demonstrate how human reading comprehension could benefit from semantic level inter-word connections. By roughly analyzing the MRC models proposed for SQuAD, we find that leveraging neural attention mechanisms ( ) based on recurrent neural networks, such as LSTM <ref type="bibr" target="#b9">(Hochreiter and Schmidhuber, 1997</ref>) and GRU ( , is currently the dominant approach. Since neural network models are usually deemed as simulations of human brains, we may as well interpret the training of an MRC model as a process of teaching knowledge to it, where the knowledge comes from the training samples, and thus can be absorbed into the model parameters through gradient descent. However, neural network models are also known as black boxes, that is to say, by just updating model parameters according to training samples, we cannot understand the meaning of the knowledge taught to an</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Passage</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Question</head><p>Answer Teachers may use a lesson plan to facilitate student learning, providing a course of study which is called the curriculum.</p><p>What can a teacher use to help students learn? lesson plan</p><p>Manufacturing accounts for a significant but declining share of employment, although the city's garment industry is showing a resurgence in Brooklyn.</p><p>In what borough is the garment business prominent?</p><p>Brooklyn <ref type="table">Table 1</ref>: Two examples about the effects of semantic level inter-word connections on human reading comprehension. In the first example, we can find the answer because we know "facilitate" and "help" are synonyms.</p><p>Similarly, in the second example, we can find the answer because we know "borough" is a hypernym of "Brooklyn", or "Brooklyn" is a hyponym of "borough". Both of the two examples are selected from SQuAD.</p><p>MRC model, neither can we control the amount of the knowledge taught to it, therefore we name such knowledge as implicit knowledge. So far, human beings have accumulated a tremendous amount of general knowledge. These general knowledge, despite being an essential component of human intelligence, has never been effectively applied to MRC, which we believe is the biggest gap between MRC and human reading comprehension. We intend to bridge this gap with the help of knowledge bases, which store general knowledge in structured forms. In recent years, many knowledge bases have been established, such as WordNet <ref type="bibr" target="#b8">(Fellbaum, 1998)</ref> and Freebase <ref type="bibr">(Bol- lacker et al., 2008)</ref>, and they have made it convenient for machines to access and process the general knowledge of human beings. Therefore, it is both meaningful and feasible to integrate the general knowledge in a knowledge base with the training of an MRC model. However, rather than leveraging knowledge base embeddings <ref type="bibr" target="#b5">(Bordes et al., 2011</ref><ref type="bibr" target="#b4">(Bordes et al., , 2013</ref><ref type="bibr" target="#b25">Yang et al., 2014;</ref><ref type="bibr" target="#b24">Yang and Mitchell, 2017)</ref>, we would prefer our MRC model to use general knowledge in an understandable and controllable way, and we name the general knowledge used in this way as explicit knowledge. In this paper, by using WordNet as our knowledge base, we propose an innovative MRC approach, which consists of two components: a WordNetbased data enrichment method, which uses WordNet to extract semantic level inter-word connections from each passage-question pair in the MRC dataset, and an MRC model named as Knowledge Aided Reader (KAR), which uses the extraction results of the data enrichment method as explicit knowledge to assist the prediction of answer spans. There are two important features in our MRC approach: on the one hand, the data enrichment method allows us to control the amount of the extraction results; on the other hand, this amount in turn affects the performance of KAR. According to the experimental results, by applying different settings in the data enrichment method to change the amount of the extraction results, there is a 2% variation in the resulting performance of KAR, which implies that the explicit knowledge provided by the data enrichment method plays an effective role in the training of KAR.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Task Description</head><p>The MRC task considered in this paper is defined as the following prediction problem: given a passage P := [p 1 , . . . , p n ], which is a sequence of n words, and a relevant question Q := [q 1 , . . . , q m ], which is a sequence of m words, predict an answer start position a s and an answer end position a e , where 1 ≤ a s ≤ a e ≤ n, so that the fragment [p as , . . . , p ae ] in P is the answer to Q.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">WordNet-based Data Enrichment</head><p>To provide our MRC model with explicit knowledge, we would like to enrich the content of the MRC dataset by extracting semantic level interword connections from each passage-question pair in it, therefore we propose a WordNet-based data enrichment method.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">What and how to extract from each passage-question pair</head><p>WordNet is a lexical database for English. Words in WordNet are organized into synsets, which in turn are related to each other through semantic relations, such as "hypernym" and "hyponym".</p><p>In our data enrichment method, we use the semantic relations of WordNet to extract semantic level inter-word connections from each passagequestion pair in the MRC dataset. Considering the requirements of our MRC model, we need to represent the extraction results as positional information. Specifically, for each word w in a passagequestion pair, we need to obtain a set Z w , which contains the positions of the passage words that w is semantically connected to. Besides, when w itself is a passage word, we also need to ensure that its position is excluded from Z w .</p><p>The key problem to obtain the above extraction results is to determine if a subject word is semantically connected to an object word. To solve this problem, we introduce two concepts: the directlyinvolved synsets and indirectly-involved synsets of a word. Given a word w, its directly-involved synsets Φ w represents the synsets that w belongs to, and its indirectly-involved synsets Φ w represents the synsets that the synsets in Φ w are related to through semantic relations. Based on the two concepts, we propose the following hypothesis: given a subject word w s and an object word w o , w s is semantically connected to w o if and only if (Φ ws ∪ Φ ws ) ∩ Φ wo = ∅. According to the hypothesis, Algorithm 1 describes the process of extracting semantic level inter-word connections from each passage-question pair.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">How to obtain the indirectly-involved synsets of each word</head><p>The above hypothesis and process can work only if we know how to obtain the directly-involved synsets and indirectly-involved synsets of each word. Given a word w, we can easily obtain its directly-involved synsets Φ w from WordNet, but obtaining its indirectly-involved synsets Φ w is much more complicated, because in WordNet, the way synsets are related to each other is flexible and extensible. In some cases, a synset is related to another synset through a single semantic relation. For example, the synset "cold.a.01" is related to the synset "temperature.n.01" through the semantic relation "attribute". However, in more cases, a synset is related to another synset through a semantic relation chain. For example, first the synset "keratin.n.01" is related to the synset "feather.n.01" through the semantic relation "substance holonym", then the synset "feather.n.01" is related to the synset "bird.n.01" through the semantic relation "part holonym", and finally the synset "bird.n.01" is related to the synset "parrot.n.01" through the semantic relation "hyponym", thus we can say that the synset "keratin.n.01" is related to the synset "parrot.n.01" through the semantic relation chain "substance holonym → part holonym → hyponym". We name each semantic relation in a semantic relation chain as a hop, so that a semantic relation chain having k semantic relations is a k-hop semantic relation chain. Besides, each single semantic relation is a 1-hop semantic relation chain. Let us use Γ := {γ 1 , γ 2 , . . .} to represent the semantic relations of WordNet, and use Ω γ i φ to represent the synsets that a synset φ is related to through a single semantic relation γ i ∈ Γ. Since Ω γ i φ is easy to obtain from WordNet, we can further obtain the synsets that φ is related to through 1-hop semantic relation chains:</p><formula xml:id="formula_0">Ψ 1 φ = γ i ∈Γ Ω γ i φ , the synsets that φ is related to through 2-hop se- mantic relation chains: Ψ 2 φ = ˆ φ∈Ψ 1 φ γ i ∈Γ Ω γ i ˆ φ ,</formula><p>and by induction, the synsets that φ is related to through k-hop semantic relation chains:</p><formula xml:id="formula_1">Ψ k φ = ˆ φ∈Ψ k−1 φ γ i ∈Γ Ω γ i ˆ φ</formula><p>. In theory, if we do not limit the hop counts of semantic relation chains, φ can be related to all other synsets in WordNet, which is meaningless in many cases. Therefore, we use a hyper-parameter χ ∈ N to represent the maximum hop count of semantic relation chains, and only consider the semantic relation chains that have no more than χ hops. Based on the above descriptions, given a word w and its directly-involved synsets Φ w , we can obtain its indirectly-involved synsets:</p><formula xml:id="formula_2">Φ w = φ∈Φw χ k=1 Ψ k φ .</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">About controlling the amount of the extraction results</head><p>The hyper-parameter χ is crucial in controlling the amount of the extraction results. When we set χ to 0, the indirectly-involved synsets of each word contains no synset, so that semantic level interword connections only exist between synonyms.</p><p>As we increase χ, the indirectly-involved synsets of each word usually contains more synsets, so that semantic level inter-word connections are likely to exist between more words. As a result, by increasing χ within a certain range, we can extract more semantic level inter-word connections from the MRC dataset, and thus provide our MRC model with more explicit knowledge. However, due to the limitations of WordNet, only a part of the extraction results are useful explicit knowledge, while the rest are useless for the prediction of answer spans. According to our observation, the proportion of the useless explicit knowledge Algorithm 1 Extract semantic level inter-word connections from each passage-question pair procedure EXTRACT(P, Q) Given a passage P and a relevant question Q for p i in P do For each passage word</p><formula xml:id="formula_3">p i Z p i ← {j ∈ {1, . . . , n}\{i} : (Φ p i ∪ Φ p i ) ∩ Φ p j = ∅} Obtain the extraction results Z p i end for for q i in Q do For each question word q i Z q i ← {j ∈ {1, . . . , n} : (Φ q i ∪ Φ q i ) ∩ Φ p j = ∅}</formula><p>Obtain the extraction results Z q i end for end procedure</p><p>Return the extraction results on P and Q increases as χ gets larger. Therefore, there exists an optimal setting for χ, which can result in the best performance of our MRC model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Knowledge Aided Reader</head><p>As depicted in <ref type="figure" target="#fig_0">Figure 1</ref>, our MRC model, Knowledge Aided Reader (KAR), consists of five layers: given a passage-question pair, the lexical embedding layer encodes the lexical features of each word to generate the passage lexical embeddings and the question lexical embeddings; based on the lexical embeddings, the contextual embedding layer encodes the contextual clues about each word to generate the passage contextual embeddings and the question contextual embeddings; based on the contextual embeddings, the memory generation layer performs passage-to-question attention and question-to-passage attention to generate the preliminary memories over the passagequestion pair; based on the preliminary memories, the memory refining layer performs self-matching attention to generate the refined memories over the passage-question pair; based on the refined memories and the question contextual embeddings, the answer span prediction layer generates the answer start position distribution and the answer end position distribution. KAR is quite different from the existing MRC models in that it uses the semantic level inter-word connections, which are preextracted from the MRC dataset by the WordNetbased data enrichment method, as explicit knowledge to assist the prediction of answer spans. On the one hand, the memory generation layer uses the explicit knowledge to assist the passage-toquestion attention and the question-to-passage attention. On the other hand, the memory refining layer uses the explicit knowledge to assist the selfmatching attention. Besides, to better utilize the explicit knowledge, the lexical embedding layer encodes dependency and synonymy information into the lexical embedding of each word.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Lexical Embedding Layer</head><p>For each word, the lexical embedding layer generates its lexical embedding by merging the following four basic embeddings:</p><p>1. Word-level Embedding. We define our vocabulary as the intersection between the words in all training samples and those in the pre-trained 300-dimensional GloVe ( <ref type="bibr" target="#b17">Pennington et al., 2014</ref>). Given a word w, if it is in the vocabulary, we set its word-level embedding α w to its GloVe word vector, which is fixed during the training, otherwise we have α w = α o ∈ R 300 , where α o is a trainable parameter serving as the shared word vector of all out-of-vocabulary (OOV) words.</p><p>2. Character-level Embedding. We represent each character as a separate 150-dimensional vector, which is a trainable parameter. Given a word w consisting of a sequence of k characters, whose vectors are represented as U β ∈ R 150×k , we use a bidirectional FOFE ( <ref type="bibr" target="#b28">Zhang et al., 2015</ref>) to process U β , concatenate the forward FOFE output (R 150×k ) and the backward FOFE output (R 150×k ) across rows to obtain F β ∈ R 300×k , and perform self attention on F β to obtain the character-level embedding of w:</p><formula xml:id="formula_4">β w = F β softmax(tanh(W β F β ) v β ) ∈ R 300</formula><p>where W β and v β are trainable parameters. Applying character-level embedding is helpful in representing OOV words.</p><p>3. Dependency Embedding. Inspired by <ref type="bibr" target="#b11">Liu et al. (2017a)</ref>, we use a dependency parser to obtain the dependent words of each word. Given a word w having k dependent words, whose wordlevel embeddings are represented as U η ∈ R 300×k , we perform self attention on U η to obtain the dependency embedding of w: where W η and v η are trainable parameters. By applying dependency embedding, we make use of syntactic level inter-word connections, which serve as a supplement to the pre-extracted semantic level inter-word connections. 4. Synonymy Embedding. In the scope of the vocabulary, we use WordNet to obtain the synonyms of each word. Given a word w having k synonyms, whose word-level embeddings are represented as U µ ∈ R 300×k , we perform self attention on U µ to obtain the synonymy embedding of w:</p><formula xml:id="formula_5">η w = U η softmax(tanh(W η U η ) v η ) ∈ R 300</formula><formula xml:id="formula_6">µ w = U µ softmax(tanh(W µ U µ ) v µ ) ∈ R 300</formula><p>where W µ and v µ are trainable parameters. By applying synonymy embedding, we improve the vector-space similarity between synonyms, and thus promote the effects of the pre-extracted semantic level inter-word connections. Based on the above descriptions, given a word w, we obtain α w , β w , η w , and µ w , and concatenate them across rows to obtain π w ∈ R 1200 . In this way, for all passage words, we obtain Π P = [π p 1 , . . . , π pn ] ∈ R 1200×n , and for all question words, we obtain Π Q = [π q 1 , . . . , π qm ] ∈ R 1200×m . We put Π P through a 1-layer highway network ( <ref type="bibr" target="#b21">Srivastava et al., 2015</ref>) to obtain the passage lexical embeddings:</p><formula xml:id="formula_7">L P = [l p 1 , . . . , l pn ] ∈ R 1200×n</formula><p>, and put Π Q through the same highway network to obtain the question lexical embeddings:</p><formula xml:id="formula_8">L Q = [l q 1 , . . . , l qm ] ∈ R 1200×m .</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Contextual Embedding Layer</head><p>For each word, the contextual embedding layer fuses its lexical embedding with those of its surrounding words to generate its contextual embedding. Specifically, we use a bidirectional LSTM (BiLSTM), whose hidden state size is d, to process L P and L Q separately. For L P , we concatenate the forward LSTM output (R d×n ) and the backward LSTM output (R d×n ) across rows to obtain the passage contextual embeddings:</p><formula xml:id="formula_9">C P = [c p 1 , . . . , c pn ] ∈ R 2d×n .</formula><p>For L Q , we concatenate the forward LSTM output (R d×m ) and the backward LSTM output (R d×m ) across rows to obtain the question contextual embeddings:</p><formula xml:id="formula_10">C Q = [c q 1 , . . . , c qm ] ∈ R 2d×m .</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Memory Generation Layer</head><p>For each passage word, the memory generation layer fuses its contextual embedding with both the passage contextual embeddings and the question contextual embeddings to generate its preliminary memory over the passage-question pair. Specifically, the task of this layer is decomposed into the following four steps:</p><p>1. Generating enhanced contextual embeddings. We enhance the contextual embedding of each word according to the pre-extracted semantic level inter-word connections. Given a word w, whose contextual embedding is c w ∈ R 2d , suppose we have obtained Z w through Algorithm 1, then we gather the columns in C P whose positions are contained in Z w , represent these columns as U τ ∈ R 2d×|Zw| , and perform attention on U τ to obtain the c w -attended contextual embedding:</p><formula xml:id="formula_11">τ w = U τ softmax(tanh(W τ (c w U τ )) v τ ) ∈ R 2d</formula><p>where W τ and v τ are trainable parameters, and x X represents concatenating a vector x with each column in a matrix X across rows. Based on the above descriptions, given a word w, we concatenate c w and τ w across rows to obtain λ w ∈ R 4d . In this way, for all passage words, we ob-  <ref type="bibr" target="#b19">Seo et al. (2016)</ref> to obtain each element in A:</p><formula xml:id="formula_12">tain Λ P = [λ p 1 , . . . , λ pn ] ∈ R 4d×n ,</formula><formula xml:id="formula_13">A[i, j] = v A (b p i 1 b q j 1 (b p i b q j )) ∈ R</formula><p>where v A ∈ R 12d is a trainable parameter, 1 represents concatenation across rows, and represents element-wise multiplication. Since the enhanced contextual embeddings are generated according to the pre-extracted semantic level inter-word connections, the alignment matrix A is named as knowledge aided alignment matrix.</p><p>3. Performing passage-to-question attention and question-to-passage attention.</p><p>On the one hand, following <ref type="bibr" target="#b19">Seo et al. (2016)</ref>, we perform passage-to-question attention to obtain the passage-attended question representations:</p><formula xml:id="formula_14">R Q = C Q softmax r (A) ∈ R 2d×n</formula><p>where softmax r (X) represents normalizing each row in a matrix X by softmax. On the other hand, following <ref type="bibr" target="#b23">Xiong et al. (2016)</ref>, we perform question-to-passage attention to obtain the question-attended passage representations:</p><formula xml:id="formula_15">R P = C P softmax c (A)softmax r (A) ∈ R 2d×n</formula><p>where softmax c (X) represents normalizing each column in a matrix X by softmax. 4. Generating preliminary memories. We concatenate C P , R Q , C P R Q , and C P R P across rows, put this concatenation (R 8d×n ) through a 1-layer highway network, use a BiLSTM, whose hidden state size is d, to process the output of the highway network (R 8d×n ), and concatenate the forward LSTM output (R d×n ) and the backward LSTM output (R d×n ) across rows to obtain the preliminary memories over the passage-question pair:</p><formula xml:id="formula_16">G = [g p 1 , . . . , g pn ] ∈ R 2d×n .</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Memory Refining Layer</head><p>For each passage word, the memory refining layer fuses its preliminary memory with those of some other passage words to generate its refined memory over the passage-question pair. Inspired by <ref type="bibr" target="#b22">Wang et al. (2017)</ref>, we perform self-matching attention on the preliminary memories. However, we are different from <ref type="bibr" target="#b22">Wang et al. (2017)</ref> in that for each passage word, we only match its preliminary memory with those of a corresponding subset of other passage words, which are selected according to the pre-extracted semantic level inter-word connections, therefore our self-matching attention is named as knowledge aided self-matching attention. Specifically, given a passage word p i , whose preliminary memory is g p i ∈ R 2d , suppose we have obtained Z w through Algorithm 1, then we gather the columns in G whose positions are contained in Z w , represent these columns as U ζ ∈ R 2d×|Zw| , and perform attention on U ζ to obtain the g p i -attended preliminary memory:</p><formula xml:id="formula_17">ζ p i = U ζ softmax(tanh(W ζ (g p i U ζ )) v ζ ) ∈ R 2d</formula><p>where W ζ and v ζ are trainable parameters. Based on the above descriptions, given a passage word p i , we concatenate g p i and ζ p i across rows to obtain δ p i ∈ R 4d . In this way, for all passage words, we obtain ∆ = [δ p 1 , . . . , δ pn ] ∈ R 4d×n . We put ∆ through a 1-layer highway network, use a BiLSTM, whose hidden state size is d, to process the output of the highway network (R 4d×n ), and concatenate the forward LSTM output (R d×n ) and the backward LSTM output (R d×n ) across rows to obtain the refined memories over the passagequestion pair:</p><formula xml:id="formula_18">H = [h p 1 , . . . , h pn ] ∈ R 2d×n .</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5">Answer Span Prediction Layer</head><p>In the answer span prediction layer, we first perform self attention on C Q to obtain a summary of the question:</p><formula xml:id="formula_19">= C Q softmax(tanh(W C Q ) v ) ∈ R 2d</formula><p>where W and v are trainable parameters. Then with as the query, we perform attention on H to obtain the answer start position distribution:</p><formula xml:id="formula_20">d s = softmax(tanh(W s ( H)) v s ) ∈ R n</formula><p>where W s and v s are trainable parameters. Next we concatenate and Hd s ∈ R 2d across rows to obtain ξ ∈ R 4d . Finally with ξ as the query, we perform attention on H again to obtain the answer end position distribution:</p><formula xml:id="formula_21">d e = softmax(tanh(W e (ξ H)) v e ) ∈ R n</formula><p>where W e and v e are trainable parameters. Based on the above descriptions, for the training, we minimize the sum of the negative log probabilities of the ground truth answer start position and the ground truth answer end position by the predicted distributions, and for the inference, the answer start position a s and the answer end position a e are chosen such that the product of d s [a s ] and d e [a e ] is maximized and a s ≤ a e . (2017a) generate a syntactic tree for each sentence in the original passage-question pairs. However, the above works just enrich the original MRC dataset with the outputs of certain external models or systems, therefore their MRC models can only make use of machine generated data, but cannot utilize human knowledge explicitly. Attention mechanism has also been widely used in the existing MRC models. For example, <ref type="bibr" target="#b23">Xiong et al. (2016)</ref> use a coattention encoder and a dynamic pointer decoder to address the local maximum problem; <ref type="bibr" target="#b19">Seo et al. (2016)</ref> use a bidirectional attention flow mechanism to obtain the questionaware passage representation; and <ref type="bibr" target="#b22">Wang et al. (2017)</ref> use a self-matching attention mechanism to refine the question-aware passage representation. The passage-to-question attention, questionto-passage attention, and self-matching attention in KAR draw on the ideas of the above works, but are different from them in that we integrate explicit knowledge with these attentions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Related Works</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Experiments</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">MRC Dataset</head><p>The MRC dataset used in this paper is SQuAD, which contains over 100, 000 passage-question pairs and their answers. All questions and answers in SQuAD are human generated, and the answer to each question is a fragment in the corresponding passage. SQuAD has been randomly partitioned into three parts: the training set (80%), the development set (10%), and the test set (10%). Both the training set and the development set are publicly available, while the test set is confidential. Besides, SQuAD adopts both Exact Match (EM) and F1 Score as the evaluation metrics.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Implementation Details</head><p>To implement KAR, we first preprocess SQuAD. Specifically, we put each passage and question in SQuAD through a Stanford CoreNLP ( ) pipeline, which performs tokenization, sentence splitting, POS tagging, lemmatization, and dependency parsing in order. With the outputs of the pipeline, we use the WordNet interface provided by NLTK ( <ref type="bibr" target="#b2">Bird and Loper, 2004</ref>) to perform the WordNet-based data enrichment method, and thus obtain an enriched MRC dataset. Based on the data preprocessing, we implement KAR using TensorFlow ( <ref type="bibr" target="#b0">Abadi et al., 2016</ref>). For the character-level embedding, we set the forget-  ting factor of FOFE to 0.7. For each BiLSTM, we set its hidden state size d to 300. For the training, we use ADAM ( <ref type="bibr" target="#b10">Kingma and Ba, 2014</ref>) as our optimizer, set the learning rate to 0.0005, and set the mini-batch size to 40. To avoid overfitting, we apply dropout ( <ref type="bibr" target="#b20">Srivastava et al., 2014</ref>) to the word vectors, the character vectors, the input to each BiLSTM, and the linear transformation before each softmax in the answer span prediction layer, with a dropout rate of 0.2, and apply early stopping with a patience of 5. To avoid the exploding gradient problem, we apply gradient clipping ( <ref type="bibr" target="#b16">Pascanu et al., 2013</ref>) with a cutoff threshold of 2. Besides, we also apply exponential moving average with a decay rate of 0.999.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Experimental Process and Results</head><p>In this paper, we only consider the single model performance of MRC models on the development set of SQuAD. On this premise, we perform the following two experiments:</p><p>1. Verifying the effects of explicit knowledge. We obtain six enriched MRC datasets by setting χ to 0, 1, 2, 3, 4, and 5 separately, and train a different KAR on each enriched MRC dataset. As shown in <ref type="table" target="#tab_2">Table 2</ref>, the amount of the extraction results increases monotonically as we increase χ from 0 to 5, but during this process, the performance of KAR first rises by 2% until χ reaches 3, and then begins to drop gradually. Thus it can be seen that the explicit knowledge provided by the WordNet-based data enrichment method plays an effective role in the training of KAR.</p><p>2. Verifying the effects of dependency embedding and synonymy embedding. By applying the optimal setting for χ (i.e. 3), we perform ablation analysis on the dependency embedding and the synonymy embedding. As shown in  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>MRC Models</head><p>Performance (EM / F1) GDAN (  -/ 67.2 DCN ( <ref type="bibr" target="#b23">Xiong et al., 2016)</ref> 65.4 / 75.6 BiDAF ( <ref type="bibr" target="#b19">Seo et al., 2016)</ref> 67.7 / 77.3 SEDT ( <ref type="bibr" target="#b11">Liu et al., 2017a)</ref> 68.1 / 77.5 DrQA ( <ref type="bibr" target="#b6">Chen et al., 2017)</ref> 69.5 / 78.8 MEMEN ( <ref type="bibr" target="#b15">Pan et al., 2017)</ref> 70.9 / 80.3 R-NET ( <ref type="bibr" target="#b22">Wang et al., 2017)</ref> 72.3 / 80.6 KAR (ours) 72.4 / 81.1 QANet ( <ref type="bibr" target="#b27">Yu et al., 2018)</ref> 75.1 / 83.8 SAN ( <ref type="bibr" target="#b12">Liu et al., 2017b)</ref> 76.2 / 84.0 both of the two basic embeddings contribute to the performance of KAR, but the synonymy embedding seems to be more important. Besides, we also compare the best performance of KAR with the published performance of the MRC models mentioned in the related works. As shown in <ref type="table" target="#tab_5">Table 4</ref>, although KAR has achieved fairly good performance, there is still some way to go to catch up with the cutting-edge MRC models. This is because the scope of the general knowledge in WordNet is very limited, so that KAR cannot obtain enough useful explicit knowledge.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Conclusion</head><p>In this paper, we explore how to apply the general knowledge in WordNet as explicit knowledge to the training of an MRC model, and thereby propose the WordNet-based data enrichment method and KAR. Based on the explicit knowledge provided by the data enrichment method, KAR has achieved fairly good performance on SQuAD, and more importantly, the performance of KAR varies with the amount of the explicit knowledge. In the future work, we will use larger knowledge bases, such as Freebase, to improve the quality of the explicit knowledge provided to KAR.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Our MRC model: Knowledge Aided Reader (KAR)</figDesc><graphic url="image-1.png" coords="5,72.00,62.81,453.55,295.58" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head></head><label></label><figDesc>Data enrichment has been widely used in the ex- isting MRC models. For example, Yu et al. (2018) use translation models to paraphrase the original passages so as to generate extra training samples; Yang et al. (2017) generate extra training samples by training a generative model that generates ques- tions based on unlabeled text; Chen et al. (2017), Liu et al. (2017b), and Pan et al. (2017) append linguistic tags, such as POS tag and NER tag, to each word in the original passages; and Liu et al.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>The amount of the extraction results and the 
+performance of KAR under each setting for χ. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="true"><head>Table 3 ,</head><label>3</label><figDesc></figDesc><table>Ablation Part 
+Performance 
+(EM / F1) 
+Dependency Embedding 
+71.6 / 80.2 
+Synonymy Embedding 
+70.9 / 79.5 
+No Ablation 
+72.4 / 81.1 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>The ablation analysis on the dependency em-
+bedding and the synonymy embedding. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>The comparison of different MRC models 
+(published single model performance on the develop-
+ment set of SQuAD). 
+
+</table></figure>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Tensorflow: A system for large-scale machine learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martín</forename><surname>Abadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Barham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianmin</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhifeng</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andy</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Dean</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthieu</forename><surname>Devin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sanjay</forename><surname>Ghemawat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Irving</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Isard</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">OSDI</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="page" from="265" to="283" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Neural machine translation by jointly learning to align and translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.0473</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Nltk: the natural language toolkit</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Bird</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Loper</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL 2004 on Interactive poster and demonstration sessions, page 31. Association for Computational Linguistics</title>
+		<meeting>the ACL 2004 on Interactive poster and demonstration sessions, page 31. Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Freebase: a collaboratively created graph database for structuring human knowledge</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kurt</forename><surname>Bollacker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Colin</forename><surname>Evans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Praveen</forename><surname>Paritosh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Sturge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jamie</forename><surname>Taylor</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2008 ACM SIGMOD international conference on Management of data</title>
+		<meeting>the 2008 ACM SIGMOD international conference on Management of data</meeting>
+		<imprint>
+			<publisher>AcM</publisher>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="1247" to="1250" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Translating embeddings for modeling multirelational data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Usunier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alberto</forename><surname>Garciaduran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oksana</forename><surname>Yakhnenko</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="2787" to="2795" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Learning structured embeddings of knowledge bases</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronan</forename><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="page">6</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Reading wikipedia to answer open-domain questions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Fisch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.00051</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">On the properties of neural machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bart</forename><surname>Van Merriënboer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.1259</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">Encoder-decoder approaches. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christiane</forename><surname>Fellbaum</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1998" />
+			<publisher>Wiley Online Library</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Diederik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6980</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Structural embedding of syntactic trees for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rui</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junjie</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zi</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><surname>Nyberg</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1703.00572</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Stochastic answer networks for machine reading comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodong</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yelong</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Duh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1712.03556</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">The stanford corenlp natural language processing toolkit</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mihai</forename><surname>Surdeanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Bauer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jenny</forename><surname>Finkel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Bethard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Mcclosky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of 52nd annual meeting of the association for computational linguistics: system demonstrations</title>
+		<meeting>52nd annual meeting of the association for computational linguistics: system demonstrations</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="55" to="60" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Ms marco: A human generated machine reading comprehension dataset</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tri</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mir</forename><surname>Rosenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xia</forename><surname>Song</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Saurabh</forename><surname>Tiwary</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rangan</forename><surname>Majumder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Deng</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.09268</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Memen: Multi-layer embedding with memory networks for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Boyuan Pan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhou</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zhao</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.09098</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+	<note>Bin Cao, Deng Cai, and Xiaofei He</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">On the difficulty of training recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Razvan</forename><surname>Pascanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Machine Learning</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1310" to="1318" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 conference on empirical methods in natural language processing (EMNLP)</title>
+		<meeting>the 2014 conference on empirical methods in natural language processing (EMNLP)</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1532" to="1543" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title level="m" type="main">Squad: 100,000+ questions for machine comprehension of text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pranav</forename><surname>Rajpurkar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Konstantin</forename><surname>Lopyrev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.05250</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Bidirectional attention flow for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minjoon</forename><surname>Seo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aniruddha</forename><surname>Kembhavi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ali</forename><surname>Farhadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hannaneh</forename><surname>Hajishirzi</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01603</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Dropout: A simple way to prevent neural networks from overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh Kumar</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Greff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1505.00387</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">Highway networks. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Gated self-matching networks for reading comprehension and question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenhui</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nan</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Furu</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Baobao</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Zhou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="189" to="198" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Dynamic coattention networks for question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01604</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Leveraging knowledge bases in lstms for improving machine reading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bishan</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tom</forename><surname>Mitchell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1436" to="1446" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Embedding entities and relations for learning and inference in knowledge bases</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bishan</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wen-Tau</forename><surname>Yih</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodong</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Deng</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6575</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhilin</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junjie</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William W</forename><surname>Cohen</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1702.02206</idno>
+		<title level="m">Semi-supervised qa with generative domain-adaptive nets</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Qanet: Combining local convolution with global self-attention for reading comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adams</forename><forename type="middle">Wei</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Dohan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minh-Thang</forename><surname>Luong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rui</forename><surname>Zhao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohammad</forename><surname>Norouzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc V</forename><surname>Le</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1804.09541</idno>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">The fixed-size ordinallyforgetting encoding method for neural network language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shiliang</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hui</forename><surname>Jiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mingbin</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junfeng</forename><surname>Hou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lirong</forename><surname>Dai</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing</title>
+		<meeting>the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="495" to="500" />
+		</imprint>
+	</monogr>
+	<note>Short Papers</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

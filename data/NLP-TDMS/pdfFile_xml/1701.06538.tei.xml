@@ -1,0 +1,1159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:46+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">OUTRAGEOUSLY LARGE NEURAL NETWORKS: THE SPARSELY-GATED MIXTURE-OF-EXPERTS LAYER</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">Google Brain</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Azalia</forename><surname>Mirhoseini</surname></persName>
+							<email>azalia@google.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Krzysztof</forename><surname>†1</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">Google Brain</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Maziarz</surname></persName>
+							<affiliation key="aff1">
+								<orgName type="institution">Jagiellonian University</orgName>
+								<address>
+									<settlement>Cracow</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andy</forename><surname>Davis</surname></persName>
+							<email>andydavis@google.com</email>
+							<affiliation key="aff0">
+								<orgName type="department">Google Brain</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc</forename><surname>Le</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">Google Brain</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+							<email>geoffhinton@google.com</email>
+							<affiliation key="aff0">
+								<orgName type="department">Google Brain</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">Google Brain</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">OUTRAGEOUSLY LARGE NEURAL NETWORKS: THE SPARSELY-GATED MIXTURE-OF-EXPERTS LAYER</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+					<note>Under review as a conference paper at ICLR 2017</note>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>The capacity of a neural network to absorb information is limited by its number of parameters. Conditional computation, where parts of the network are active on a per-example basis, has been proposed in theory as a way of dramatically increasing model capacity without a proportional increase in computation. In practice, however, there are significant algorithmic and performance challenges. In this work, we address these challenges and finally realize the promise of conditional computation, achieving greater than 1000x improvements in model capacity with only minor losses in computational efficiency on modern GPU clusters. We introduce a Sparsely-Gated Mixture-of-Experts layer (MoE), consisting of up to thousands of feed-forward sub-networks. A trainable gating network determines a sparse combination of these experts to use for each example. We apply the MoE to the tasks of language modeling and machine translation, where model capacity is critical for absorbing the vast quantities of knowledge available in the training corpora. We present model architectures in which a MoE with up to 137 billion parameters is applied convolutionally between stacked LSTM layers. On large language modeling and machine translation benchmarks, these models achieve significantly better results than state-of-the-art at lower computational cost.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION AND RELATED WORK</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.1">CONDITIONAL COMPUTATION</head><p>Exploiting scale in both training data and model size has been central to the success of deep learning. When datasets are sufficiently large, increasing the capacity (number of parameters) of neural networks can give much better prediction accuracy. This has been shown in domains such as text ( <ref type="bibr" target="#b9">Sutskever et al., 2014;</ref><ref type="bibr" target="#b4">Bahdanau et al., 2014;</ref><ref type="bibr">Jozefowicz et al., 2016;</ref><ref type="bibr" target="#b12">Wu et al., 2016</ref>), images ( <ref type="bibr">Krizhevsky et al., 2012;</ref><ref type="bibr">Le et al., 2012)</ref>, and audio ( <ref type="bibr">Hinton et al., 2012;</ref><ref type="bibr" target="#b3">Amodei et al., 2015</ref>). For typical deep learning models, where the entire model is activated for every example, this leads to a roughly quadratic blow-up in training costs, as both the model size and the number of training examples increase. Unfortunately, the advances in computing power and distributed computation fall short of meeting such demand.</p><p>Various forms of conditional computation have been proposed as a way to increase model capacity without a proportional increase in computational costs <ref type="bibr">(Davis &amp; Arel, 2013;</ref><ref type="bibr" target="#b6">Bengio et al., 2013;</ref><ref type="bibr">Eigen et al., 2013;</ref><ref type="bibr">Ludovic Denoyer, 2014;</ref><ref type="bibr" target="#b5">Bengio et al., 2015;</ref><ref type="bibr" target="#b2">Almahairi et al., 2015)</ref>. In these schemes, large parts of a network are active or inactive on a per-example basis. The gating decisions may be binary or sparse and continuous, stochastic or deterministic. Various forms of reinforcement learning and back-propagation are proposed for trarining the gating decisions. While these ideas are promising in theory, no work to date has yet demonstrated massive improvements in model capacity, training time, or model quality. We blame this on a combination of the following challenges:</p><p>• Modern computing devices, especially GPUs, are much faster at arithmetic than at branching. Most of the works above recognize this and propose turning on/off large chunks of the network with each gating decision.</p><p>• Large batch sizes are critical for performance, as they amortize the costs of parameter transfers and updates. Conditional computation reduces the batch sizes for the conditionally active chunks of the network.</p><p>• Network bandwidth can be a bottleneck. A cluster of GPUs may have computational power thousands of times greater than the aggregate inter-device network bandwidth. To be computationally efficient, the relative computational versus network demands of an algorithm must exceed this ratio. Embedding layers, which can be seen as a form of conditional computation, are handicapped by this very problem. Since the embeddings generally need to be sent across the network, the number of (example, parameter) interactions is limited by network bandwidth instead of computational capacity.</p><p>• Depending on the scheme, loss terms may be necessary to achieve the desired level of sparsity per-chunk and/or per example. <ref type="bibr" target="#b5">Bengio et al. (2015)</ref> use three such terms. These issues can affect both model quality and load-balancing.</p><p>• Model capacity is most critical for very large data sets. The existing literature on conditional computation deals with relatively small image recognition data sets consisting of up to 600,000 images. It is hard to imagine that the labels of these images provide a sufficient signal to adequately train a model with millions, let alone billions of parameters.</p><p>In this work, we for the first time address all of the above challenges and finally realize the promise of conditional computation. We obtain greater than 1000x improvements in model capacity with only minor losses in computational efficiency and significantly advance the state-of-the-art results on public language modeling and translation data sets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.2">OUR APPROACH: THE SPARSELY-GATED MIXTURE-OF-EXPERTS LAYER</head><p>Our approach to conditional computation is to introduce a new type of general purpose neural network component: a Sparsely-Gated Mixture-of-Experts Layer (MoE). The MoE consists of a number of experts, each a simple feed-forward neural network, and a trainable gating network which selects a sparse combination of the experts to process each input (see <ref type="figure" target="#fig_0">Figure 1</ref>). All parts of the network are trained jointly by back-propagation.</p><p>While the introduced technique is generic, in this paper we focus on language modeling and machine translation tasks, which are known to benefit from very large models. In particular, we apply a MoE convolutionally between stacked LSTM layers <ref type="bibr">(Hochreiter &amp; Schmidhuber, 1997</ref>), as in <ref type="figure" target="#fig_0">Figure 1</ref>. The MoE is called once for each position in the text, selecting a potentially different combination of experts at each position. The different experts tend to become highly specialized based on syntax and semantics (see Appendix E <ref type="table">Table 9</ref>). On both language modeling and machine translation benchmarks, we improve on best published results at a fraction of the computational cost.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.3">RELATED WORK ON MIXTURES OF EXPERTS</head><p>Since its introduction more than two decades ago ( <ref type="bibr">Jacobs et al., 1991;</ref><ref type="bibr">Jordan &amp; Jacobs, 1994)</ref>, the mixture-of-experts approach has been the subject of much research. Different types of expert architectures hae been proposed such as SVMs ( <ref type="bibr">Collobert et al., 2002</ref>), Gaussian Processes <ref type="bibr" target="#b11">(Tresp, 2001;</ref><ref type="bibr" target="#b10">Theis &amp; Bethge, 2015;</ref><ref type="bibr">Deisenroth &amp; Ng, 2015)</ref>, Dirichlet Processes <ref type="bibr">(Shahbaba &amp; Neal, 2009)</ref>, and deep networks. Other work has focused on different expert configurations such as a hierarchical structure ( <ref type="bibr" target="#b13">Yao et al., 2009)</ref>, infinite numbers of experts <ref type="bibr">(Rasmussen &amp; Ghahramani, 2002</ref>), and adding experts sequentially ( <ref type="bibr" target="#b1">Aljundi et al., 2016)</ref>. <ref type="bibr">Garmash &amp; Monz (2016)</ref> suggest an ensemble model in the format of mixture of experts for machine translation. The gating network is trained on a pre-trained ensemble NMT model.</p><p>The works above concern top-level mixtures of experts. The mixture of experts is the whole model. <ref type="bibr">Eigen et al. (2013)</ref> introduce the idea of using multiple MoEs with their own gating networks as parts of a deep model. It is intuitive that the latter approach is more powerful, since complex problems may contain many sub-problems each requiring different experts. They also allude in their conclusion to the potential to introduce sparsity, turning MoEs into a vehicle for computational computation.</p><p>Our work builds on this use of MoEs as a general purpose neural network component. While <ref type="bibr">Eigen et al. (2013)</ref> uses two stacked MoEs allowing for two sets of gating decisions, our convolutional application of the MoE allows for different gating decisions at each position in the text. We also realize sparse gating and demonstrate its use as a practical way to massively increase model capacity.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">THE STRUCTURE OF THE MIXTURE-OF-EXPERTS LAYER</head><p>The Mixture-of-Experts (MoE) layer consists of a set of n "expert networks" E 1 , · · · , E n , and a "gating network" G whose output is a sparse n-dimensional vector. <ref type="figure" target="#fig_0">Figure 1</ref> shows an overview of the MoE module. The experts are themselves neural networks, each with their own parameters. Although in principle we only require that the experts accept the same sized inputs and produce the same-sized outputs, in our initial investigations in this paper, we restrict ourselves to the case where the models are feed-forward networks with identical architectures, but with separate parameters.</p><p>Let us denote by G(x) and E i (x) the output of the gating network and the output of the i-th expert network for a given input x. The output y of the MoE module can be written as follows:</p><formula xml:id="formula_0">y = n i=1 G(x) i E i (x)<label>(1)</label></formula><p>We save computation based on the sparsity of the output of G(x). Wherever G(x) i = 0, we need not compute E i (x). In our experiments, we have up to thousands of experts, but only need to evaluate a handful of them for every example. If the number of experts is very large, we can reduce the branching factor by using a two-level hierarchical MoE. In a hierarchical MoE, a primary gating network chooses a sparse weighted combination of "experts", each of which is itself a secondary mixture-of-experts with its own gating network. In the following we focus on ordinary MoEs. We provide more details on hierarchical MoEs in Appendix B.</p><p>Our implementation is related to other models of conditional computation. A MoE whose experts are simple weight matrices is similar to the parameterized weight matrix proposed in . A MoE whose experts have one hidden layer is similar to the block-wise dropout described in ( <ref type="bibr" target="#b5">Bengio et al., 2015)</ref>, where the dropped-out layer is sandwiched between fully-activated layers.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">GATING NETWORK</head><p>Softmax Gating: A simple choice of non-sparse gating function <ref type="bibr">(Jordan &amp; Jacobs, 1994)</ref> is to multiply the input by a trainable weight matrix W g and then apply the Sof tmax function.</p><formula xml:id="formula_1">G σ (x) = Sof tmax(x · W g )<label>(2)</label></formula><p>Noisy Top-K Gating: We add two components to the Softmax gating network: sparsity and noise. Before taking the softmax function, we add tunable Gaussian noise, then keep only the top k values, setting the rest to −∞ (which causes the corresponding gate values to equal 0). The sparsity serves to save computation, as described above. While this form of sparsity creates some theoretically scary discontinuities in the output of gating function, we have not yet observed this to be a problem in practice. The noise term helps with load balancing, as will be discussed in Appendix A. The amount of noise per component is controlled by a second trainable weight matrix W noise .</p><formula xml:id="formula_2">G(x) = Sof tmax(KeepT opK(H(x), k))<label>(3)</label></formula><formula xml:id="formula_3">H(x) i = (x · W g ) i + StandardN ormal() · Sof tplus((x · W noise ) i ) (4) KeepT opK(v, k) i = v i if v i is in the top k elements of v. −∞ otherwise.<label>(5)</label></formula><p>Training the Gating Network We train the gating network by simple back-propagation, along with the rest of the model. If we choose k &gt; 1, the gate values for the top k experts have nonzero derivatives with respect to the weights of the gating network. This type of occasionally-sensitive behavior is described in ( <ref type="bibr" target="#b6">Bengio et al., 2013</ref>) with respect to noisy rectifiers. Gradients also backpropagate through the gating network to its inputs. Our method differs here from ( <ref type="bibr" target="#b5">Bengio et al., 2015</ref>) who use boolean gates and a REINFORCE-style approach to train the gating network.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">ADDRESSING PERFORMANCE CHALLENGES</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">THE SHRINKING BATCH PROBLEM</head><p>On modern CPUs and GPUs, large batch sizes are necessary for computational efficiency, so as to amortize the overhead of parameter loads and updates. If the gating network chooses k out of n experts for each example, then for a batch of b examples, each expert receives a much smaller batch of approximately kb n b examples. This causes a naive MoE implementation to become very inefficient as the number of experts increases. The solution to this shrinking batch problem is to make the original batch size as large as possible. However, batch size tends to be limited by the memory necessary to store activations between the forwards and backwards passes. We propose the following techniques for increasing the batch size:</p><p>Mixing Data Parallelism and Model Parallelism: In a conventional distributed training setting, multiple copies of the model on different devices asynchronously process distinct batches of data, and parameters are synchronized through a set of parameter servers. In our technique, these different batches run synchronously so that they can be combined for the MoE layer. We distribute the standard layers of the model and the gating network according to conventional data-parallel schemes, but keep only one shared copy of each expert. Each expert in the MoE layer receives a combined batch consisting of the relevant examples from all of the data-parallel input batches. The same set of devices function as data-parallel replicas (for the standard layers and the gating networks) and as model-parallel shards (each hosting a subset of the experts). If the model is distributed over d devices, and each device processes a batch of size b, each expert receives a batch of approximately kbd n examples. Thus, we achieve a factor of d improvement in expert batch size. In the case of a hierarchical MoE (Section B), the primary gating network employs data parallelism, and the secondary MoEs employ model parallelism. Each secondary MoE resides on one device. This technique allows us to increase the number of experts (and hence the number of parameters) by proportionally increasing the number of devices in the training cluster. The total batch size increases, keeping the batch size per expert constant. The memory and bandwidth requirements per device also remain constant, as do the step times, as does the amount of time necessary to process a number of training examples equal to the number of parameters in the model. It is our goal to train a trillionparameter model on a trillion-word corpus. We have not scaled our systems this far as of the writing of this paper, but it should be possible by adding more hardware.</p><p>Taking Advantage of Convolutionality: In our language models, we apply the same MoE to each time step of the previous layer. If we wait for the previous layer to finish, we can apply the MoE to all the time steps together as one big batch. Doing so increases the size of the input batch to the MoE layer by a factor of the number of unrolled time steps.</p><p>Increasing Batch Size for a Recurrent MoE: We suspect that even more powerful models may involve applying a MoE recurrently. For example, the weight matrices of a LSTM or other RNN could be replaced by a MoE. Sadly, such models break the convolutional trick from the last paragraph, since the input to the MoE at one timestep depends on the output of the MoE at the previous timestep. <ref type="bibr">Gruslys et al. (2016)</ref> describe a technique for drastically reducing the number of stored activations in an unrolled RNN, at the cost of recomputing forward activations. This would allow for a large increase in batch size.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">NETWORK BANDWIDTH</head><p>Another major performance concern in distributed computing is network bandwidth. Since the experts are stationary (see above) and the number of gating parameters is small, most of the communication involves sending the inputs and outputs of the experts across the network. To maintain computational efficiency, the ratio of an expert's computation to the size of its input and output must exceed the ratio of computational to network capacity of the computing device. For GPUs, this may be thousands to one. In our experiments, we use experts with one hidden layer containing thousands of RELU-activated units. Since the weight matrices in the expert have sizes input_size×hidden_size and hidden_size × output_size, the ratio of computation to input and output is equal to the size of the hidden layer. Conveniently, we can increase computational efficiency simply by using a larger hidden layer, or more hidden layers.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">BALANCING EXPERT UTILIZATION</head><p>We have observed that the gating network tends to converge to a state where it always produces large weights for the same few experts. This imbalance is self-reinforcing, as the favored experts are trained more rapidly and thus are selected even more by the gating network. <ref type="bibr">Eigen et al. (2013)</ref> describe the same phenomenon, and use a hard constraint at the beginning of training to avoid this local minimum. <ref type="bibr" target="#b5">Bengio et al. (2015)</ref> include a soft constraint on the batch-wise average of each gate. <ref type="bibr">1</ref> We take a soft constraint approach. We define the importance of an expert relative to a batch of training examples to be the batchwise sum of the gate values for that expert. We define an additional loss L importance , which is added to the overall loss function for the model. This loss is equal to the square of the coefficient of variation of the set of importance values, multiplied by a hand-tuned scaling factor w importance . This additional loss encourages all experts to have equal importance.</p><formula xml:id="formula_4">Importance(X) = x∈X G(x) (6) L importance (X) = w importance · CV (Importance(X)) 2<label>(7)</label></formula><p>While this loss function can ensure equal importance, experts may still receive very different numbers of examples. For example, one expert may receive a few examples with large weights, and another may receive many examples with small weights. This can cause memory and performance problems on distributed hardware. To solve this problem, we introduce a second loss function, L load , which ensures balanced loads. Appendix A contains the definition of this function, along with experimental results. MoE Models: Our models consist of two stacked LSTM layers with a MoE layer between them (see <ref type="figure" target="#fig_0">Figure 1)</ref>. The results of these models are shown in <ref type="figure" target="#fig_2">Figure 2</ref>-left. The model with 4 always-active experts performed (unsurprisingly) similarly to the computationally-matched baseline models, while the largest of the models (4096 experts) achieved an impressive 24% lower perplexity on the test set. Varied Computation, High Capacity: In addition to the largest model from the previous section, we trained two more MoE models with similarly high capacity (4 billion parameters), but higher computation budgets. These models had larger LSTMs, and fewer but larger and experts. Details <ref type="table">Table 1</ref>: Summary of high-capacity MoE-augmented models with varying computational budgets, vs. best previously published results ( <ref type="bibr">Jozefowicz et al., 2016</ref> can be found in Appendix C.2. Results of these three models form the bottom line of <ref type="figure" target="#fig_2">Figure 2</ref>-right. <ref type="table">Table 1</ref> compares the results of these models to the best previously-published result on this dataset . Even the fastest of these models beats the best published result (when controlling for the number of training epochs), despite requiring only 6% of the computation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">EXPERIMENTS</head><p>Computational Efficiency: We trained our models using TensorFlow ( <ref type="bibr" target="#b0">Abadi et al., 2016</ref>) on clusters containing 16-32 Tesla K40 GPUs. For each of our models, we determine computational efficiency in TFLOPS/GPU by dividing the number of floating point operations required to process one training batch by the observed step time and the number of GPUs in the cluster. The operation counts used here are higher than the ones we report in our ops/timestep numbers in that we include the backwards pass, we include the importance-sampling-based training of the softmax layer, and we count a multiply-and-add as two separate operations. For all of our MoE models, the floating point operations involved in the experts represent between 37% and 46% of the total.</p><p>For our baseline models wtih no MoE, observed computational efficiency ranged from 1.07-1.29 TFLOPS/GPU. For our low-computation MoE models, computation efficiency ranged from 0.74-0.90 TFLOPS/GPU, except for the 4-expert model which did not make full use of the available parallelism. Our highest-computation MoE model was more efficient at 1.56 TFLOPS/GPU, likely due to the larger matrices. These numbers represent a significant fraction of the theoretical maximum of 4.29 TFLOPS/GPU claimed by NVIDIA. Detailed results are in Appendix C, <ref type="table" target="#tab_8">Table 7</ref>. On the 1-billion-word corpus, adding additional capacity seems to produce diminishing returns as the number of parameters in the MoE layer exceeds 1 billion, as can be seen in <ref type="figure" target="#fig_2">Figure 2</ref>-left. We hypothesized that for a larger training set, even higher capacities would produce significant quality improvements.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">100 BILLION WORD GOOGLE NEWS CORPUS</head><p>We constructed a similar training set consisting of shuffled unique sentences from Google's internal news corpus, totalling roughly 100 billion words. Similarly to the previous section, we tested a series of models with similar computational costs of about 8 million ops/timestep. In addition to a baseline LSTM model, we trained models augmented with MoE layers containing 32, 256, 1024, 4096, 16384, 65536, and 131072 experts. This corresponds to up to 137 billion parameters in the MoE layer. Details on architecture, training, and results are given in Appendix D.</p><p>Results: <ref type="figure" target="#fig_3">Figure 3</ref> shows test perplexity as a function of capacity after training on 10 billion words (top line) and 100 billion words (bottom line). When training over the full 100 billion words, test perplexity improves significantly up to 65536 experts (68 billion parameters), dropping 39% lower than the computationally matched baseline, but degrades at 131072 experts, possibly a result of too much sparsity. The widening gap between the two lines demonstrates (unsurprisingly) that increased model capacity helps more on larger training sets.</p><p>Even at 65536 experts (99.994% layer sparsity), computational efficiency for the model stays at a respectable 0.72 TFLOPS/GPU.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">MACHINE TRANSLATION (SINGLE LANGUAGE PAIR)</head><p>Model Architecture: Our model was a modified version of the GNMT model described in ( <ref type="bibr" target="#b12">Wu et al., 2016)</ref>. To reduce computation, we decreased the number of LSTM layers in the encoder and decoder from 9 and 8 to 3 and 2 respectively. We inserted MoE layers in both the encoder (between layers 2 and 3) and the decoder (between layers 1 and 2    Results: <ref type="table" target="#tab_3">Tables 2, 3, and 4</ref> show the results of our largest models, compared with published results. Our approach achieved BLEU scores of 40.56 and 26.03 on the WMT'14 En→Fr and En→De benchmarks. As our models did not use RL refinement, these results constitute significant gains of 1.34 and 1.12 BLEU score on top of the strong baselines in ( <ref type="bibr" target="#b12">Wu et al., 2016)</ref>. The perplexity scores are also better. <ref type="bibr">2</ref> On the Google Production dataset, our model achieved 1.01 higher test BLEU score even after training for only one sixth of the time.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">MULTILINGUAL MACHINE TRANSLATION</head><p>Dataset: (Johnson et al., 2016) train a single GNMT ( <ref type="bibr" target="#b12">Wu et al., 2016</ref>) model on a very large combined dataset of twelve language pairs. Results are somewhat worse than those for 12 separately trained single-pair GNMT models. This is not surprising, given that the twelve models have 12 times the capacity and twelve times the aggregate training of the one model. We repeat this experiment with a single MoE-augmented model. See Appendix E for details on model architecture. We train our model on the same dataset as (Johnson et al., 2016) and process the same number of training examples (about 3 billion sentence pairs). Our training time was shorter due to the lower computational budget of our model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Results:</head><p>Results for the single-pair GNMT models, the multilingual GNMT model and the multilingual MoE model are given in <ref type="table" target="#tab_6">Table 5</ref>. The MoE model achieves 19% lower perplexity on the dev set than the multilingual GNMT model. On BLEU score, the MoE model significantly beats the multilingual GNMT model on 11 of the 12 language pairs (by as much as 5.84 points), and even beats the monolingual GNMT models on 8 of 12 language pairs. The poor performance on English → Korean seems to be a result of severe overtraining, as for the rarer language pairs a small number of real examples were highly oversampled in the training corpus. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">CONCLUSION</head><p>This work is the first to demonstrate major wins from conditional computation in deep networks. We carefully identified the design considerations and challenges of conditional computing and addressed them with a combination of algorithmic and engineering solutions. While we focused on text, conditional computation may help in other domains as well, provided sufficiently large training sets. We look forward to seeing many novel implementations and applications of conditional computation in the years to come.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>We would like to thank all of the members of the Google Brain and Google Translate teams who helped us with this project, in particular Zhifeng Chen, Yonghui Wu, and Melvin Johnson. Thanks also to our anonymous ICLR reviewers for the helpful suggestions on making this paper better.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>APPENDICES A LOAD-BALANCING LOSS</head><p>As discussed in section 4, for load-balancing purposes, we want to define an additional loss function to encourage experts to receive roughly equal numbers of training examples. Unfortunately, the number of examples received by an expert is a discrete quantity, so it can not be used in backpropagation. Instead, we define a smooth estimator Load(X) of the number of examples assigned to each expert for a batch X of inputs. The smoothness allows us to back-propagate gradients through the estimator. This is the purpose of the noise term in the gating function. We define P (x, i) as the probability that G(x) i is nonzero, given a new random choice of noise on element i, but keeping the already-sampled choices of noise on the other elements. To compute P (x, i), we note that the G(x) i is nonzero if and only if H(x) i is greater than the k th -greatest element of H(x) excluding itself. The probability works out to be:</p><formula xml:id="formula_5">P (x, i) = P r (x · W g ) i + StandardN ormal() · Sof tplus((x · W noise ) i ) &gt; kth_excluding(H(x), k, i)<label>(8)</label></formula><p>Where kth_excluding(v, k, i) means the kth highest component of v, excluding component i. Simplifying, we get:</p><formula xml:id="formula_6">P (x, i) = Φ (x · W g ) i − kth_excluding(H(x), k, i) Sof tplus((x · W noise ) i )<label>(9)</label></formula><p>Where Φ is the CDF of the standard normal distribution.</p><formula xml:id="formula_7">Load(X) i = x∈X P (x, i)<label>(10)</label></formula><p>We can now define the load loss to be the square of the coefficient of variation of the load vector, multiplied by a hand-tuned scaling factor w load .</p><formula xml:id="formula_8">L load (X) = w load · CV (Load(X)) 2<label>(11)</label></formula><p>Initial Load Imbalance: To avoid out-of-memory errors, we need to initialize the network in a state of approximately equal expert load (since the soft constraints need some time to work). To accomplish this, we initialize the matrices W g and W noise to all zeros, which yields no signal and some noise.</p><p>Experiments: We trained a set of models with identical architecture (the MoE-256 model described in Appendix C), using different values of w importance and w load . We trained each model for 10 epochs, then measured perplexity on the test set. We also measured the coefficients of variation in Importance and Load, as well as ratio of the load on the most overloaded expert to the average load. This last value is significant for load balancing purposes on distributed hardware. All of these metrics were averaged over several training batches. Results: Results are reported in <ref type="table" target="#tab_7">Table 6</ref>. All the combinations containing at least one the two losses led to very similar model quality, where having no loss was much worse. Models with higher values of w load had lower loads on the most overloaded expert.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>B HIERACHICAL MIXTURE OF EXPERTS</head><p>If the number of experts is very large, we can reduce the branching factor by using a two-level hierarchical MoE. In a hierarchical MoE, a primary gating network chooses a sparse weighted combination of "experts", each of which is itself a secondary mixture-of-experts with its own gating network. <ref type="bibr">3</ref> If the hierarchical MoE consists of a groups of b experts each, we denote the primary gating network by G primary , the secondary gating networks by (G 1 , G 2 ..G a ), and the expert networks by (E 0,0 , E 0,1 ..E a,b ). The output of the MoE is given by:</p><formula xml:id="formula_9">y H = a i=1 b j=1 G primary (x) i · G i (x) j · E i,j (x)<label>(12)</label></formula><p>Our metrics of expert utilization change to the following:</p><formula xml:id="formula_10">Importance H (X) i,j = x∈X G primary (x) i · G i (x) j (13) Load H (X) i,j = Load primary (X) i · Load i (X (i) ) j |X (i) |<label>(14)</label></formula><p>Load primary and Load i deonte the Load functions for the primary gating network and i th secondary gating network respectively. X (i) denotes the subset of X for which G primary (x) i &gt; 0.</p><p>It would seem simpler to let Load H (X) i,j = Load i (X i ) j , but this would not have a gradient with respect to the primary gating network, so we use the formulation above.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>C 1 BILLION WORD LANGUAGE MODELING BENCHMARK -EXPERIMENTAL DETAILS</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>C.1 8-MILLION-OPERATIONS-PER-TIMESTEP MODELS</head><p>Model Architecture: Our model consists of five layers: a word embedding layer, a recurrent Long Short-Term Memory (LSTM) layer <ref type="bibr">(Hochreiter &amp; Schmidhuber, 1997;</ref><ref type="bibr">Gers et al., 2000</ref>), a MoE layer, a second LSTM layer, and a softmax layer. The dimensionality of the embedding layer, the number of units in each LSTM layer, and the input and output dimensionality of the MoE layer are all equal to 512. For every layer other than the softmax, we apply drouput ( <ref type="bibr" target="#b14">Zaremba et al., 2014</ref>) to the layer output, dropping each activation with probability DropP rob, otherwise dividing by (1 − DropP rob). After dropout, the output of the previous layer is added to the layer output. This residual connection encourages gradient flow ( <ref type="bibr">He et al., 2015)</ref>. We call the resulting models MoE-4, MoE-32, MoE-256, MoE-256-h, MoE-1024-h and MoE-4096-h. For the hierarchical MoE layers, the first level branching factor was 16, corresponding to the number of GPUs in our cluster. We use Noisy-Top-K Gating (see Section 2.1) with k = 4 for the ordinary MoE layers and k = 2 at each level of the hierarchical MoE layers. Thus, each example is processed by exactly 4 experts for a total of 4M ops/timestep. The two LSTM layers contribute 2M ops/timestep each for the desired total of 8M.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Computationally-Matched Baselines:</head><p>The MoE-4 model does not employ sparsity, since all 4 experts are always used. In addition, we trained four more computationally-matched baseline models with no sparsity:</p><p>• MoE-1-Wide: The MoE layer consists of a single "expert" containing one ReLU-activated hidden layer of size 4096.</p><p>• MoE-1-Deep: The MoE layer consists of a single "expert" containing four ReLU-activated hidden layers, each with size 1024.</p><p>• 4xLSTM-512: We replace the MoE layer with two additional 512-unit LSTM layers.</p><p>• LSTM-2048-512: The model contains one 2048-unit LSTM layer (and no MoE). The output of the LSTM is projected down to 512 dimensions ( <ref type="bibr">Sak et al., 2014</ref>). The next timestep of the LSTM receives the projected output. This is identical to one of the models published in ( <ref type="bibr">Jozefowicz et al., 2016)</ref>. We re-ran it to account for differences in training regimen, and obtained results very similar to the published ones.</p><p>Training: The models were trained on a cluster of 16 K40 GPUs using the synchronous method described in Section 3. Each batch consisted of a set of sentences totaling roughly 300,000 words. In the interest of time, we limited training to 10 epochs, (27,000 steps). Training took 12-16 hours for all models, except for MoE-4, which took 18 hours (since all the expert computation was performed on only 4 of 16 GPUs). We used the Adam optimizer <ref type="bibr">(Kingma &amp; Ba, 2015)</ref>. The base learning rate was increased linearly for the first 1000 training steps, and decreased after that so as to be proportional to the inverse square root of the step number. The Softmax output layer was trained efficiently using importance sampling similarly to the models in ( <ref type="bibr">Jozefowicz et al., 2016</ref>). For each model, we performed a hyper-parmeter search to find the best dropout probability, in increments of 0.1.</p><p>To ensure balanced expert utilization we set w importance = 0.1 and w load = 0.1, as described in Section 4 and Appendix A.</p><p>Results: We evaluate our model using perplexity on the holdout dataset, used by ( <ref type="bibr" target="#b7">Chelba et al., 2013;</ref><ref type="bibr">Jozefowicz et al., 2016</ref>). We follow the standard procedure and sum over all the words including the end of sentence symbol. Results are reported in <ref type="table" target="#tab_8">Table 7</ref>. For each model, we report the test perplexity, the computational budget, the parameter counts, the value of DropP rob, and the computational efficiency. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>C.2 MORE EXPENSIVE MODELS</head><p>We ran two additional models <ref type="bibr">(MoE-34M and MoE-143M)</ref> to investigate the effects of adding more computation in the presence of a large MoE layer. These models have computation budgets of 34M and 143M ops/timestep. Similar to the models above, these models use a MoE layer between two LSTM layers. The dimensionality of the embedding layer, and the input and output dimensionality of the MoE layer are set to 1024 instead of 512. For MoE-34M, the LSTM layers have 1024 units. For MoE-143M, the LSTM layers have 4096 units and an output projection of size 1024 <ref type="bibr">(Sak et al., 2014</ref>). MoE-34M uses a hierarchical MoE layer with 1024 experts, each with a hidden layer of size 2048. MoE-143M uses a hierarchical MoE layer with 256 experts, each with a hidden layer of size 8192. Both models have 4B parameters in the MoE layers. We searched for the best DropP rob for each model, and trained each model for 10 epochs.</p><p>The two models achieved test perplexity of 31.3 and 28.0 respectively, showing that even in the presence of a large MoE, more computation is still useful. Results are reported at the bottom of <ref type="table" target="#tab_8">Table 7</ref>. The larger of the two models has a similar computational budget to the best published model from the literature, and training times are similar. Comparing after 10 epochs, our model has a lower test perplexity by 18%.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>D 100 BILLION WORD GOOGLE NEWS CORPUS -EXPERIMENTAL DETAILS</head><p>Model Architecture: The models are similar in structure to the 8-million-operations-per-timestep models described in the previous section. We vary the number of experts between models, using an ordinary MoE layer with 32 experts and hierarchical MoE layers with 256, 1024, 4096, 16384, 65536 and 131072 experts. For the hierarchical MoE layers, the first level branching factors are 32, 32, 64, 128, 256 and 256, respectively.</p><p>Training: Models are trained on a cluster of 32 Tesla K40 GPUs, except for the last two models, which are trained on clusters of 64 and 128 GPUs so as to have enough memory for all the parameters. For all models, training batch sizes are approximately 2.5 million words. Models are trained once-through over about 100 billion words.</p><p>We implement several memory optimizations in order to fit up to 1 billion parameters per GPU. First, we do not store the activations of the hidden layers of the experts, but instead recompute them on the backwards pass. Secondly, we modify the optimizer on the expert parameters to require less auxiliary storage:</p><p>The Adam optimizer <ref type="bibr">(Kingma &amp; Ba, 2015</ref>) keeps first and second moment estimates of the perparameter gradients. This triples the required memory. To avoid keeping a first-moment estimator, we set β 1 = 0. To reduce the size of the second moment estimator, we replace it with a factored approximation. For a matrix of parameters, instead of maintaining a full matrix of second-moment estimators, we maintain vectors of row-wise and column-wise averages of that matrix. At each step, the matrix of estimators is taken to be the outer product of those two vectors divided by the mean of either one. This technique could similarly be applied to <ref type="bibr">Adagrad (Duchi et al., 2010</ref>). Results: We evaluate our model using perplexity on a holdout dataset. Results are reported in <ref type="table" target="#tab_9">Table 8</ref>. Perplexity after 100 billion training words is 39% lower for the 68-billion-parameter MoE model than for the baseline model. It is notable that the measured computational efficiency of the largest model (0.30 TFLOPS/GPU) is very low compared to the other models. This is likely a result of the fact that, for purposes of comparison to the other models, we did not increase the training batch size proportionally to the number of GPUs. For comparison, we include results for a computationally matched baseline model consisting of 4 LSTMs, and for an unpruned 5-gram model with Kneser-Ney smoothing <ref type="bibr">(Kneser &amp; Ney, 1995)</ref>. <ref type="bibr">4</ref> </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>E MACHINE TRANSLATION -EXPERIMENTAL DETAILS</head><p>Model Architecture for Single Language Pair MoE Models: Our model is a modified version of the GNMT model described in ( <ref type="bibr" target="#b12">Wu et al., 2016)</ref>. To reduce computation, we decrease the number of LSTM layers in the encoder and decoder from 9 and 8 to 3 and 2 respectively. We insert MoE layers in both the encoder (between layers 2 and 3) and the decoder (between layers 1 and 2). We use an attention mechanism between the encoder and decoder, with the first decoder LSTM receiving output from and providing input for the attention <ref type="bibr">5</ref> . All of the layers in our model have input and output dimensionality of 512. Our LSTM layers have 2048 hidden units, with a 512-dimensional output projection. We add residual connections around all LSTM and MoE layers to encourage gradient flow ( <ref type="bibr">He et al., 2015)</ref>. Similar to GNMT, to effectively deal with rare words, we used subword units (also known as "wordpieces") <ref type="bibr">(Schuster &amp; Nakajima, 2012</ref>) for inputs and outputs in our system.</p><p>We use a shared source and target vocabulary of 32K wordpieces. We also used the same beam search technique as proposed in ( <ref type="bibr" target="#b12">Wu et al., 2016</ref>). Model Architecture for Multilingual MoE Model: We used the same model architecture as for the single-language-pair models, with the following exceptions: We used noisy-top-k gating as described in Section 2.1, not the scheme from Appendix F. The MoE layers in the encoder and decoder are non-hierarchical MoEs with n = 512 experts, and k = 2. Each expert has a larger hidden layer of size 8192. This doubles the amount of computation in the MoE layers, raising the computational budget of the entire model from 85M to 102M ops/timestep.</p><p>Training: We trained our networks using the Adam optimizer <ref type="bibr">(Kingma &amp; Ba, 2015)</ref>. The base learning rate was increased linearly for the first 2000 training steps, held constant for an additional 8000 steps, and decreased after that so as to be proportional to the inverse square root of the step number. For the single-language-pair models, similarly to ( <ref type="bibr" target="#b12">Wu et al., 2016</ref>), we applied dropout ( <ref type="bibr" target="#b14">Zaremba et al., 2014</ref>) to the output of all embedding, LSTM and MoE layers, using DropP rob = 0.4. Training was done synchronously on a cluster of up to 64 GPUs as described in section 3. Each training batch consisted of a set of sentence pairs containing roughly 16000 words per GPU.</p><p>To ensure balanced expert utilization we set w importance = 0.01 and w load = 0.01, as described in Section 4 and Appendix A.</p><p>Metrics: We evaluated our models using the perplexity and the standard BLEU score metric. We reported tokenized BLEU score as computed by the multi-bleu.pl script, downloaded from the public implementation of Moses (on Github), which was also used in ( <ref type="bibr">Luong et al., 2015a</ref>).</p><p>Results: <ref type="table" target="#tab_3">Tables 2, 3</ref> and 4 in Section 5.3 show comparisons of our results to other published methods. <ref type="figure" target="#fig_6">Figure 4</ref> shows test perplexity as a function of number of words in the (training data's) source sentences processed for models with different numbers of experts. As can be seen from the <ref type="figure">Figure,</ref> as we increased the number of experts to approach 2048, the test perplexity of our model continued to improve. We found that the experts indeed become highly specialized by syntax and/or semantics, as can be seen in <ref type="table">Table 9</ref>. For example, one expert is used when the indefinite article "a" introduces the direct object in a verb phrase indicating importance or leadership. <ref type="table">Table 9</ref>: Contexts corresponding to a few of the 2048 experts in the MoE layer in the encoder portion of the WMT'14 En→ Fr translation model. For each expert i, we sort the inputs in a training batch in decreasing order of G(x) i , and show the words surrounding the corresponding positions in the input sentences.</p><formula xml:id="formula_11">G(x) i = G σ (x) i M (G σ (x)) i n j=1 G σ (x) j M (G σ (x)) j<label>(16)</label></formula><p>Top-K Mask: To implement top-k gating in this formulation, we would let M (v) = T opK(v, k), where:</p><p>T opK(v, k) i = 1 if v i is in the top k elements of v. 0 otherwise.</p><p>Batchwise Mask: To force each expert to receive the exact same number of examples, we introduce an alternative mask function, M batchwise (X, m), which operates over batches of input vectors. Instead of keeping the top k values per example, we keep the top m values per expert across the training batch, where m = k|X| n , so that each example is sent to an average of k experts.</p><p>M batchwise (X, m) j,i = 1 if X j,i is in the top m values for to expert i 0 otherwise <ref type="formula" target="#formula_0">(18)</ref> As our experiments suggest and also observed in <ref type="bibr">(Ioffe &amp; Szegedy, 2015)</ref>, using a batchwise function during training (such as M batchwise ) requires modifications to the inference when we may not have a large batch of examples. Our solution to this is to train a vector T of per-expert threshold values to approximate the effects of the batchwise mask. We use the following mask at inference time:</p><formula xml:id="formula_13">M threshold (x, T ) i = 1 if x i &gt; T i 0 otherwise<label>(19)</label></formula><p>To learn the threshold values, we apply an additional loss at training time which is minimized when the batchwise mask and the threshold mask are identical.</p><formula xml:id="formula_14">L batchwise (X, T, m) = |X| j=1 n i=1 (M threshold (x, T ) i − M batchwise (X, m) j,i )(X j,i − T i ) (20) G ATTENTION FUNCTION</formula><p>The attention mechanism described in GNMT ( <ref type="bibr" target="#b12">Wu et al., 2016</ref>) involves a learned "Attention Function" A(x i , y j ) which takes a "source vector" x i and a "target vector" y j , and must be computed for every source time step i and target time step j. In GNMT, the attention function is implemented as a feed forward neural network with a hidden layer of size n. It can be expressed as:</p><formula xml:id="formula_15">A GN M T (x i , y j ) = n d=1 V d tanh((x i U ) d + (y j W ) d )<label>(21)</label></formula><p>Where U and W are trainable weight matrices and V is a trainable weight vector.</p><p>For performance reasons, in our models, we used a slightly different attention function:</p><formula xml:id="formula_16">A(x i , y j ) = n d=1 V d tanh((x i U ) d )tanh((y j W ) d )<label>(22)</label></formula><p>With our attention function, we can simultaneously compute the attention function on multiple source time steps and multiple target time steps using optimized matrix multiplications. We found little difference in quality between the two functions.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: A Mixture of Experts (MoE) layer embedded within a recurrent language model. In this case, the sparse gating function selects two experts to perform computations. Their outputs are modulated by the outputs of the gating network.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>5</head><label></label><figDesc>.1 1 BILLION WORD LANGUAGE MODELING BENCHMARK Dataset: This dataset, introduced by (Chelba et al., 2013) consists of shuffled unique sentences from news articles, totaling approximately 829 million words, with a vocabulary of 793,471 words. Previous State-of-the-Art: The best previously published results (Jozefowicz et al., 2016) use models consisting of one or more stacked Long Short-Term Memory (LSTM) layers (Hochreiter &amp; Schmidhuber, 1997; Gers et al., 2000). The number of parameters in the LSTM layers of these models vary from 2 million to 151 million. Quality increases greatly with parameter count, as do computational costs. Results for these models form the top line of Figure 2-right.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Model comparison on 1-Billion-Word Language-Modeling Benchmark. On the left, we plot test perplexity as a function of model capacity for models with similar computational budgets of approximately 8-million-ops-per-timestep. On the right, we plot test perplexity as a function of computational budget. The top line represents the LSTM models from (Jozefowicz et al., 2016). The bottom line represents 4-billion parameter MoE models with different computational budgets.</figDesc><graphic url="image-1.png" coords="6,110.71,478.38,194.04,146.25" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Language modeling on a 100 billion word corpus. Models have similar computational budgets (8 million ops/timestep).</figDesc><graphic url="image-3.png" coords="7,207.00,451.58,198.00,149.23" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head></head><label></label><figDesc>MoE Layer Architecture: Each expert in the MoE layer is a feed forward network with one ReLU-activated hidden layer of size 1024 and an output layer of size 512. Thus, each expert contains [512 * 1024] + [1024 * 512] = 1M parameters. The output of the MoE layer is passed through a sigmoid function before dropout. We varied the number of experts between models, using ordinary MoE layers with 4, 32 and 256 experts and hierarchical MoE layers with 256, 1024 and 4096 experts.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head></head><label></label><figDesc>We train models with different numbers of experts in the MoE layers. In addition to a baseline model with no MoE layers, we train models with flat MoE layers containing 32 experts, and models with hierarchical MoE layers containing 512 and 2048 experts. The flat MoE layers use k = 4 and the hierarchical MoE models use k = 2 at each level of the gating network. Thus, each input is processed by exactly 4 experts in each MoE layer. Each expert in the MoE layer is a feed forward network with one hidden layer of size 2048 and ReLU activation. Thus, each expert contains [512 * 2048] + [2048 * 512] = 2M parameters. The output of the MoE layer is passed through a sigmoid function. We use the strictly-balanced gating function described in Appendix F.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Perplexity on WMT'14 En→ Fr (left) and Google Production En→ Fr (right) datasets as a function of number of words processed. The large differences between models at the beginning of training are due to different batch sizes. All models incur the same computational budget (85M ops/timestep) except the one with no experts.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>). Details in Appendix C.</head><label></label><figDesc></figDesc><table>Test 
+Test 
+#Parameters 
+ops/timestep 
+Training 
+TFLOPS 
+Perplexity Perplexity excluding embedding 
+Time 
+/GPU 
+10 epochs 100 epochs and softmax layers 
+10 epochs 
+Best Published Results 
+34.7 
+30.6 
+151 million 
+151 million 59 hours, 32 k40s 
+1.09 
+Low-Budget MoE Model 
+34.1 
+4303 million 
+8.9 million 15 hours, 16 k40s 
+0.74 
+Medium-Budget MoE Model 
+31.3 
+4313 million 
+33.8 million 17 hours, 32 k40s 
+1.22 
+High-Budget MoE Model 
+28.0 
+4371 million 
+142.7 million 47 hours, 32 k40s 
+1.56 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Results on WMT'14 En→ Fr newstest2014 (bold values represent best results). 
+
+Model 
+Test 
+Test ops/timenstep 
+Total 
+Training 
+Perplexity BLEU 
+#Parameters 
+Time 
+MoE with 2048 Experts 
+2.69 
+40.35 
+85M 
+8.7B 
+3 days/64 k40s 
+MoE with 2048 Experts (longer training) 
+2.63 
+40.56 
+85M 
+8.7B 
+6 days/64 k40s 
+GNMT (Wu et al., 2016) 
+2.79 
+39.22 
+214M 
+278M 
+6 days/96 k80s 
+GNMT+RL (Wu et al., 2016) 
+2.96 
+39.92 
+214M 
+278M 
+6 days/96 k80s 
+PBMT (Durrani et al., 2014) 
+37.0 
+LSTM (6-layer) (Luong et al., 2015b) 
+31.5 
+LSTM (6-layer+PosUnk) (Luong et al., 2015b) 
+33.1 
+DeepAtt (Zhou et al., 2016) 
+37.7 
+DeepAtt+PosUnk (Zhou et al., 2016) 
+39.2 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Results on WMT'14 En → De newstest2014 (bold values represent best results). 
+
+Model 
+Test 
+Test 
+ops/timestep 
+Total 
+Training 
+Perplexity BLEU 
+#Parameters 
+Time 
+MoE with 2048 Experts 
+4.64 
+26.03 
+85M 
+8.7B 
+1 day/64 k40s 
+GNMT (Wu et al., 2016) 
+5.25 
+24.91 
+214M 
+278M 
+1 day/96 k80s 
+GNMT +RL (Wu et al., 2016) 
+8.08 
+24.66 
+214M 
+278M 
+1 day/96 k80s 
+PBMT (Durrani et al., 2014) 
+20.7 
+DeepAtt (Zhou et al., 2016) 
+20.6 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 4 : Results on the Google Production En→ Fr dataset (bold values represent best results).</head><label>4</label><figDesc></figDesc><table>Model 
+Eval 
+Eval 
+Test 
+Test 
+ops/timestep 
+Total 
+Training 
+Perplexity BLEU Perplexity BLEU 
+#Parameters 
+Time 
+MoE with 2048 Experts 
+2.60 
+37.27 
+2.69 
+36.57 
+85M 
+8.7B 
+1 day/64 k40s 
+GNMT (Wu et al., 2016) 
+2.78 
+35.80 
+2.87 
+35.56 
+214M 
+278M 
+6 days/96 k80s </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Multilingual Machine Translation (bold values represent best results). 
+
+GNMT-Mono GNMT-Multi 
+MoE-Multi 
+MoE-Multi vs. 
+GNMT-Multi 
+Parameters 278M / model 
+278M 
+8.7B 
+ops/timestep 
+212M 
+212M 
+102M 
+training time, hardware 
+various 
+21 days, 96 k20s 12 days, 64 k40s 
+Perplexity (dev) 
+4.14 
+3.35 
+-19% 
+French → English Test BLEU 
+36.47 
+34.40 
+37.46 
++3.06 
+German → English Test BLEU 
+31.77 
+31.17 
+34.80 
++3.63 
+Japanese → English Test BLEU 
+23.41 
+21.62 
+25.91 
++4.29 
+Korean → English Test BLEU 
+25.42 
+22.87 
+28.71 
++5.84 
+Portuguese → English Test BLEU 
+44.40 
+42.53 
+46.13 
++3.60 
+Spanish → English Test BLEU 
+38.00 
+36.04 
+39.39 
++3.35 
+English → French Test BLEU 
+35.37 
+34.00 
+36.59 
++2.59 
+English → German Test BLEU 
+26.43 
+23.15 
+24.53 
++1.38 
+English → Japanese Test BLEU 
+23.66 
+21.10 
+22.78 
++1.68 
+English → Korean Test BLEU 
+19.75 
+18.41 
+16.62 
+-1.79 
+English → Portuguese Test BLEU 
+38.40 
+37.35 
+37.90 
++0.55 
+English → Spanish Test BLEU 
+34.50 
+34.25 
+36.21 
++1.96 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head>Table 6 :</head><label>6</label><figDesc></figDesc><table>Experiments with different combinations of losses. 
+
+w importance w load Test Perplexity CV (Importance(X)) CV (Load(X)) max(Load(X)) 
+
+mean(Load(X)) 
+
+0.0 
+0.0 
+39.8 
+3.04 
+3.01 
+17.80 
+0.2 
+0.0 
+35.6 
+0.06 
+0.17 
+1.47 
+0.0 
+0.2 
+35.7 
+0.22 
+0.04 
+1.15 
+0.1 
+0.1 
+35.6 
+0.06 
+0.05 
+1.14 
+0.01 
+0.01 
+35.7 
+0.48 
+0.11 
+1.37 
+1.0 
+1.0 
+35.7 
+0.03 
+0.02 
+1.07 </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="false"><head>Table 7 :</head><label>7</label><figDesc></figDesc><table>Model comparison on 1 Billion Word Language Modeling Benchmark. Models marked 
+with * are from (Jozefowicz et al., 2016). 
+
+Model 
+Test 
+Test 
+ops/timestep #Params excluding Total Drop-TFLOPS 
+Perplexity Perplexity (millions) embed. &amp; softmax #Params P rob per GPU 
+10 epochs 
+(final) 
+(millions) 
+(billions) 
+(observed) 
+Kneser-Ney 5-gram* 
+67.6 
+0.00001 
+1.8 
+LSTM-512-512* 
+54.1 
+2.4 
+2.4 
+0.8 
+0.1 
+LSTM-1024-512* 
+48.2 
+4.7 
+4.7 
+0.8 
+0.1 
+LSTM-2048-512* 
+45.0 
+43.7 
+9.4 
+9.4 
+0.8 
+0.1 
+0.61 
+LSTM-2048-512 
+44.7 
+9.4 
+9.4 
+0.8 
+0.1 
+1.21 
+4xLSTM-512 
+46.0 
+8.4 
+8.4 
+0.8 
+0.1 
+1.07 
+MoE-1-Wide 
+46.1 
+8.4 
+8.4 
+0.8 
+0.1 
+1.29 
+MoE-1-Deep 
+45.7 
+8.4 
+8.4 
+0.8 
+0.1 
+1.29 
+MoE-4 
+45.0 
+8.4 
+8.4 
+0.8 
+0.1 
+0.52 
+MoE-32 
+39.7 
+8.4 
+37.8 
+0.9 
+0.1 
+0.87 
+MoE-256 
+35.7 
+8.6 
+272.9 
+1.1 
+0.1 
+0.81 
+MoE-256-h 
+36.0 
+8.4 
+272.9 
+1.1 
+0.1 
+0.89 
+MoE-1024-h 
+34.6 
+8.5 
+1079.0 
+1.9 
+0.2 
+0.90 
+MoE-4096-h 
+34.1 
+8.9 
+4303.4 
+5.1 
+0.2 
+0.74 
+2xLSTM-8192-1024* 
+34.7 
+30.6 
+151.0 
+151.0 
+1.8 
+0.25 
+1.09 
+MoE-34M 
+31.3 
+33.8 
+4313.9 
+6.0 
+0.3 
+1.22 
+MoE-143M 
+28.0 
+142.7 
+4371.1 
+6.0 
+0.4 
+1.56 </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_9" validated="true"><head>Table 8 : Model comparison on 100 Billion Word Google News Dataset</head><label>8</label><figDesc></figDesc><table>Model 
+Test 
+Test 
+ops/timestep #Params excluding Total 
+TFLOPS 
+Perplexity Perplexity (millions) embed. &amp; softmax #Params per GPU 
+.1 epochs 1 epoch 
+(millions) 
+(billions) (observed) 
+Kneser-Ney 5-gram 
+67.1 
+45.3 
+0.00001 
+76.0 
+4xLSTM-512 
+54.5 
+47.0 
+8.4 
+8.4 
+0.1 
+1.23 
+MoE-32 
+48.5 
+40.4 
+8.4 
+37.8 
+0.1 
+0.83 
+MoE-256-h 
+42.8 
+35.3 
+8.4 
+272.9 
+0.4 
+1.11 
+MoE-1024-h 
+40.3 
+32.7 
+8.5 
+1079.0 
+1.2 
+1.14 
+MoE-4096-h 
+38.9 
+30.9 
+8.6 
+4303.4 
+4.4 
+1.07 
+MoE-16384-h 
+38.2 
+29.7 
+8.8 
+17201.0 
+17.3 
+0.96 
+MoE-65536-h 
+38.2 
+28.9 
+9.2 
+68791.0 
+68.9 
+0.72 
+MoE-131072-h 
+39.8 
+29.2 
+9.7 
+137577.6 
+137.7 
+0.30 
+
+</table></figure>
+
+			<note place="foot" n="1"> Bengio et al. (2015) also include two additional losses. One controls per-example sparsity, which we do not need since it is enforced by the fixed value of k. A third loss encourages diversity of gate values. In our experiments, we find that the gate values naturally diversify as the experts specialize (in a virtuous cycle), and we do not need to enforce diversity of gate values.</note>
+
+			<note place="foot" n="2"> Reported perplexities relative to the tokenization used by both our models and GNMT.</note>
+
+			<note place="foot" n="3"> We have not found the need for deeper hierarchies.</note>
+
+			<note place="foot" n="4"> While the original size of the corpus was 130 billion words, the neural models were trained for a maximum of 100 billion words. The reported Kneser-Ney 5-gram models were trained over 13 billion and 130 billion words respectively, giving them a slight advantage over the other reported results. 5 For performance reasons, we use a slightly different attention function from the one described in (Wu et al., 2016) -See Appendix G</note>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Tensorflow: Large-scale machine learning on heterogeneous distributed systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martín</forename><surname>Abadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Agarwal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Barham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Brevdo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhifeng</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Craig</forename><surname>Citro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gregory</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andy</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Dean</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthieu</forename><surname>Devin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sanjay</forename><surname>Ghemawat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ian</forename><forename type="middle">J</forename><surname>Goodfellow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Harp</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Irving</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Isard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yangqing</forename><surname>Jia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Józefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Manjunath</forename><surname>Kudlur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Josh</forename><surname>Levenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Mané</surname></persName>
+		</author>
+		<idno>abs/1603.04467</idno>
+		<ptr target="http://arxiv.org/abs/1603.04467" />
+	</analytic>
+	<monogr>
+		<title level="j">CoRR</title>
+		<editor>Kunal Talwar, Paul A. Tucker, Vincent Vanhoucke, Vijay Vasudevan, Fernanda B. Viégas, Oriol Vinyals, Pete Warden, Martin Wattenberg, Martin Wicke, Yuan Yu, and Xiaoqiang Zheng</editor>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Expert gate: Lifelong learning with a network of experts. CoRR, abs/1611.06194</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rahaf</forename><surname>Aljundi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Punarjay</forename><surname>Chakravarty</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tinne</forename><surname>Tuytelaars</surname></persName>
+		</author>
+		<ptr target="http://arxiv.org/abs/1611.06194" />
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Dynamic Capacity Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Almahairi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Cooijmans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Zheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Larochelle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Courville</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2015-11" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Deep speech 2: End-to-end speech recognition in english and mandarin</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dario</forename><surname>Amodei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rishita</forename><surname>Anubhai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><surname>Battenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carl</forename><surname>Case</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jared</forename><surname>Casper</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bryan</forename><surname>Catanzaro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jingdong</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Chrzanowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Coates</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Diamos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erich</forename><surname>Elsen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jesse</forename><surname>Engel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Linxi</forename><surname>Fan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Fougner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tony</forename><surname>Han</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Awni</forename><forename type="middle">Y</forename><surname>Hannun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Billy</forename><surname>Jun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Patrick</forename><surname>Legresley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Libby</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sharan</forename><surname>Narang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><forename type="middle">Y</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sherjil</forename><surname>Ozair</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Prenger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename><surname>Raiman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sanjeev</forename><surname>Satheesh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Seetapun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shubho</forename><surname>Sengupta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yi</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiqian</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chong</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bo</forename><surname>Xiao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dani</forename><surname>Yogatama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Zhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhenyao</forename><surname>Zhu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1512.02595</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Neural machine translation by jointly learning to align and translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.0473</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emmanuel</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pierre-Luc</forename><surname>Bacon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joelle</forename><surname>Pineau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Doina</forename><surname>Precup</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.06297</idno>
+		<title level="m">Conditional computation in neural networks for faster models</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Estimating or propagating gradients through stochastic neurons for conditional computation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicholas</forename><surname>Léonard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Courville</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1308.3432</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">One billion word benchmark for measuring progress in statistical language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ciprian</forename><surname>Chelba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qi</forename><surname>Ge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thorsten</forename><surname>Brants</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phillipp</forename><surname>Koehn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tony</forename><surname>Robinson</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1312.3005</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Exponentially Increasing the Capacity-to-Computation Ratio for Conditional Computation in Deep Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014-06" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Sequence to sequence learning with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc</forename><forename type="middle">V</forename><surname>Le</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Generative image modeling using spatial LSTMs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lucas</forename><surname>Theis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthias</forename><surname>Bethge</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Mixtures of Gaussian Processes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Volker Tresp</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhifeng</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc</forename><forename type="middle">V</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohammad</forename><surname>Norouzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wolfgang</forename><surname>Macherey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maxim</forename><surname>Krikun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuan</forename><surname>Cao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qin</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Macherey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Klingner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Apurva</forename><surname>Shah</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Melvin</forename><surname>Johnson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaobing</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Łukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephan</forename><surname>Gouws</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshikiyo</forename><surname>Kato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Taku</forename><surname>Kudo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hideto</forename><surname>Kazawa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Keith</forename><surname>Stevens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">George</forename><surname>Kurian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nishant</forename><surname>Patil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Wang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.08144</idno>
+		<title level="m">Oriol Vinyals, Greg Corrado, Macduff Hughes, and Jeffrey Dean. Google&apos;s neural machine translation system: Bridging the gap between human and machine translation</title>
+		<meeting><address><addrLine>Cliff Young, Jason Smith, Jason Riesa, Alex Rudnick</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Hierarchical mixture of classification experts uncovers interactions between brain regions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bangpeng</forename><surname>Yao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dirk</forename><surname>Walther</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diane</forename><surname>Beck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Fei-Fei</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wojciech</forename><surname>Zaremba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.2329</idno>
+		<title level="m">Ilya Sutskever, and Oriol Vinyals. Recurrent neural network regularization</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Deep recurrent models with fast-forward connections for neural machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jie</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ying</forename><surname>Cao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuguang</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peng</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Xu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.04199</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

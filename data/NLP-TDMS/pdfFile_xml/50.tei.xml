@@ -1,0 +1,914 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:58+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Dense Event Ordering with a Multi-Pass Architecture</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nathanael</forename><surname>Chambers</surname></persName>
+							<email>nchamber@usna.edu</email>
+							<affiliation key="aff0">
+								<orgName type="laboratory">Army Research Lab IBM Research</orgName>
+								<orgName type="institution" key="instit1">Naval Academy</orgName>
+								<orgName type="institution" key="instit2">Carnegie Mellon University</orgName>
+								<orgName type="institution" key="instit3">University of Alabama at Birmingham</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Taylor</forename><surname>Cassidy</surname></persName>
+							<email>taylorcassidy64@gmail.com</email>
+							<affiliation key="aff0">
+								<orgName type="laboratory">Army Research Lab IBM Research</orgName>
+								<orgName type="institution" key="instit1">Naval Academy</orgName>
+								<orgName type="institution" key="instit2">Carnegie Mellon University</orgName>
+								<orgName type="institution" key="instit3">University of Alabama at Birmingham</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bill</forename><surname>Mcdowell</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="laboratory">Army Research Lab IBM Research</orgName>
+								<orgName type="institution" key="instit1">Naval Academy</orgName>
+								<orgName type="institution" key="instit2">Carnegie Mellon University</orgName>
+								<orgName type="institution" key="instit3">University of Alabama at Birmingham</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Bethard</surname></persName>
+							<email>bethard@cis.uab.edu</email>
+							<affiliation key="aff0">
+								<orgName type="laboratory">Army Research Lab IBM Research</orgName>
+								<orgName type="institution" key="instit1">Naval Academy</orgName>
+								<orgName type="institution" key="instit2">Carnegie Mellon University</orgName>
+								<orgName type="institution" key="instit3">University of Alabama at Birmingham</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Dense Event Ordering with a Multi-Pass Architecture</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>The past 10 years of event ordering research has focused on learning partial orderings over document events and time expressions. The most popular corpus, the TimeBank, contains a small subset of the possible ordering graph. Many evaluations follow suit by only testing certain pairs of events (e.g., only main verbs of neighboring sentences). This has led most research to focus on specific learners for partial labelings. This paper attempts to nudge the discussion from identifying some relations to all relations. We present new experiments on strongly connected event graphs that contain ∼10 times more relations per document than the TimeBank. We also describe a shift away from the single learner to a sieve-based architecture that naturally blends multiple learners into a precision-ranked cascade of sieves. Each sieve adds labels to the event graph one at a time, and earlier sieves inform later ones through transitive closure. This paper thus describes innovations in both approach and task. We experiment on the densest event graphs to date and show a 14% gain over state-of-the-art.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Event ordering in the NLP community usually refers to a specific labeling task: given pairs of events and time expressions, choose ordering relations for them. The TimeBank corpus ( <ref type="bibr" target="#b20">Pustejovsky et al., 2003</ref>) provided a corpus of labeled pairs that motivated machine learning approaches to this task. However, only a small subset of possible pairs are labeled. The annotators identified the most central and obvious relations, and left the rest unlabeled. Partly because of this, there has been little research into complete event graphs. This paper describes our recent exploration into the dramatic changes required of both learning algorithms and experimental setup when faced with the task of a more complete graph labeling.</p><p>The most obvious shift required of a complete graph labeling algorithm is that of relation identification. Research on the TimeBank and in the TempEval contests has largely focused on relation classification. The event pairs are given, and the task is to classify them. We are now forced to first determine which events should be paired up before classification. Our experiments here fully integrate and evaluate both identification and classification.</p><p>We are not the first to approach relation identification with classification, but this paper is the first to directly and comprehensively address it. Most recently, <ref type="bibr">TempEval 3 (UzZaman et al., 2013a</ref>) proposed a labeling of raw text without prior relation identification, but the challenge ultimately relied on the TimeBank. Systems were only evaluated on its subset of labeled event pairs. This meant that relation identification was largely ignored. The top system optimized only relation classification and intentionally left many pairs unlabeled <ref type="bibr" target="#b2">(Bethard, 2013)</ref>. This paper presents CAEVO, a CAscading EVent Ordering architecture. It is a novel sieve-based architecture for temporal event ordering that directly addresses the interplay between identification and classification. We shift away from the idea of monolithic learners, and propose smaller specialized classifiers. Inspiration comes from the recent success in named entity coreference with sieve-based learning ( <ref type="bibr" target="#b18">Lee et al., 2013)</ref>. CAEVO contains a host of classi-fiers that each specialize on different types of edges. The classifiers are ordered by their individual precision, and run in order starting with the most precise. Each sieve informs those below it by passing on its decisions as graph constraints. These more precise constraints are then used by later sieves to assist their less precise decisions.</p><p>One of the main advantages of this CAEVO architecture is the natural inclusion of transitive reasoning. After each sieve proposes its labels, the architecture infers transitive links from the new labels and adds them to the graph. This type of expansion has not been adequately evaluated due to our community's sparsely labeled corpora. We are the first to report the surprising result that edges from transitive closure are more precise than the original sieve-provided labels.</p><p>Finally, CAEVO enables quick experimentation. Classifiers are pulled in and out with ease, quickly testing new theories. As in D' <ref type="bibr">Souza and Ng (2013)</ref>, we created rule-based classifiers based on linguistic theory. We naturally integrate these with machine learned classifiers using the sieve architecture. Each classifier focuses on its independent decisions, and the architecture then imposes transitivity constraints. CAEVO contains 12 sieves ordered by precision, and it outperforms the top systems in event ordering.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Previous Work</head><p>Two lines of research are particularly relevant to our work: research on event ordering annotation, and research on event ordering models. We briefly review both here.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Event Ordering Annotation</head><p>Most prior annotation efforts constructed corpora with only a small subset of temporal relations annotated. In the TimeBank ( <ref type="bibr" target="#b20">Pustejovsky et al., 2003)</ref>, temporal relations were only annotated when the relation was judged to be salient by the annotator. The TempEval competitions <ref type="bibr" target="#b26">(Verhagen et al., 2007;</ref><ref type="bibr">Ver- hagen et al., 2010;</ref><ref type="bibr" target="#b25">UzZaman et al., 2013b</ref>) aimed to improve coverage by annotating relations between all events and times in the same sentence. However, event tokens that were mentioned fewer than 20 times were excluded and only one TempEval task considered relations between events in different sentences. <ref type="table" target="#tab_1">TimeBank  7935 1414  6418 0.7  Bramsen 2006  627  - 615 1.0  TempEval 2007  6832 1249  5790 0.7  TempEval 2010  5688 2117  4907 0.6  TempEval 2013 11145 2078  11098 0.8  Kolomiyets 2012 1233  - 1139 0.9  Do 2012 1  324  232  3132 5.6  This work  1729  289  12715 6.3   Table 1</ref>: Events, times, temporal relations and the ratio of relations to events + times (R) in various corpora.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Events Times Relations R</head><p>To avoid such sparse annotations, researchers have explored schemes that encourage annotators to connect all events. <ref type="bibr" target="#b6">Bramsen et al. (2006)</ref> annotated timelines as directed acyclic graphs, though they annotated multi-sentence segments of text rather than individual events. <ref type="bibr" target="#b17">Kolomiyets et al. (2012)</ref> annotated "temporal dependency structures" (i.e. dependency trees of temporal relations), though they only focused on pairs of events. In <ref type="bibr" target="#b14">Do et al. (2012)</ref>, "the annotator was not required to annotate all pairs of event mentions, but as many as possible", and then more relations were automatically inferred after the annotation was complete. In contrast, in our work we required annotators to label every possible pair of events/times in a given window, and our event graphs are guaranteed to be strongly connected, with every edge verified by the annotators. <ref type="table" target="#tab_3">Table 1</ref> compares the density of relation annotation across various corpora.</p><p>A major dilemma from this prior work is that unlabeled event/time pairs are inherently ambiguous. The unlabeled pair holds 3 possibilities:</p><p>1. The annotator looked at the pair of events and decided that multiple valid relations could apply.</p><p>2. The annotator looked at the pair of events and decided that no temporal relation exists 3. The annotator failed to look at the pair of events, so a single relation may exist. This ambiguity makes accurate training and evaluation difficult. In the current work, we adopt the VAGUE relation, introduced by TempEval 2007, and force our annotators to indicate pairs for which no clear temporal relation exists. We are thus the first to eliminate the 3rd possibility from our corpus.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Event Ordering Models</head><p>In part because of the sparsity of temporal relations in the available training corpora, most existing models formulate temporal ordering as a pair-wise classification task, where each pair of events and/or times is examined and classified as having a temporal relation or not. Early work on the TimeBank took this approach <ref type="bibr" target="#b3">(Boguraev and Ando, 2005</ref>), classifying relations between all events and times within 64 tokens of each other. Most of the top-performing systems in the TempEval competitions also took this pairwise classification approach for both event-time and event-event temporal relations <ref type="bibr" target="#b1">(Bethard and Martin, 2007;</ref><ref type="bibr" target="#b11">Cheng et al., 2007;</ref><ref type="bibr" target="#b23">UzZaman and Allen, 2010;</ref><ref type="bibr" target="#b19">Llorens et al., 2010;</ref><ref type="bibr" target="#b2">Bethard, 2013)</ref>. These systems have sometimes even explicitly focused on a small subset of temporal relations; for example, the topranked ordering system in TempEval 2013 <ref type="bibr" target="#b2">(Bethard, 2013)</ref> only classified relations in certain syntactic constructions and with certain relation types.</p><p>Systems have tried to take advantage of global information to ensure that the pair-wise classifications satisfy temporal logic transitivity constraints, using frameworks like integer linear programming and Markov logic networks ( <ref type="bibr" target="#b6">Bramsen et al., 2006;</ref><ref type="bibr" target="#b9">Chambers and Jurafsky, 2008;</ref><ref type="bibr" target="#b22">Tatu and Srikanth, 2008;</ref><ref type="bibr" target="#b28">Yoshikawa et al., 2009;</ref><ref type="bibr" target="#b23">UzZaman and Allen, 2010</ref>). The gains have been small, likely because of the disconnectedness that is common in sparsely annotated corpora <ref type="bibr" target="#b9">(Chambers and Jurafsky, 2008</ref>).</p><p>An approach that has not been leveraged for event ordering, but that has been successful in the coreference community is the sieve-based architecture. The top performer in CoNLL-2011 shared task was one such system ( <ref type="bibr" target="#b18">Lee et al., 2013</ref>). The core idea is to begin with the most reliable classifier first, and inform those below it. This idea also appeared in the early IBM MT models ( <ref type="bibr" target="#b7">Brown et al., 1993)</ref> and in the "islands of reliability" approaches to parsing and speech <ref type="bibr" target="#b5">(Borghesi and Favareto, 1982;</ref><ref type="bibr" target="#b12">Corazza et al., 1991)</ref>. D' <ref type="bibr">Souza and Ng (2013)</ref> recently combined a rule-based model with a machine learned model, but lacked the fine-grained formality of a cascade of sieves. This paper is inspired by the above and is the first to apply it to temporal ordering as an extensible, formal architecture.</p><p>There were four or five people inside, and they just started firing Ms. Sanders was hit several times and was pronounced dead at the scene.</p><p>The other customers fled, and the police said it did not appear that anyone else was injured.</p><p>There were four or five people inside, and they just started firing Ms. Sanders was hit several times and was pronounced dead at the scene.</p><p>The other customers fled, and the police said it did not appear that anyone else was injured.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>The TimeBank</head><p>TimeBank-Dense </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">TimeBank-Dense: A Dense Ordering</head><p>We use a new corpus, called TimeBank-Dense <ref type="bibr">(Cas- sidy et al., 2014</ref>), to motivate and evaluate our architecture. This section highlights its main features. The TimeBank-Dense corpus was created to address the sparsity in current corpora. It is unique in that the annotators were forced to label all local edges, even in ambiguous cases. The corpus is not a complete graph over events and time expressions, but it approximates completeness by labeling locally complete graphs over neighboring sentences. All pairs of events and time expressions in the same sentence and all pairs of events and time expressions in the immediately following sentence were labeled. It also includes edges between every event and the document creation time (DCT). The document event graphs in TimeBank-Dense are thus strongly connected 2 , but they are not complete graphs because edges that cross 2 or more sentences are not explicitly included <ref type="bibr">3</ref> . See <ref type="figure" target="#fig_0">Figure 1</ref> for an illustration of the significant difference between a TimeBank document and a TimeBank-Dense document. The specific edges that were labeled are as follows: TimeBank-Dense contains 12,715 labeled relations over 36 TimeBank newspaper articles. It uses TimeBank annotated events and time expressions, and then annotates the edges between them. The set of temporal relations are a subset of the 13 original Allen relations <ref type="bibr" target="#b0">(Allen, 1983)</ref>. The TempEval contests have used both a smaller set of relations (TempEval 1) and all 13 relations (TempEval 3). Published work mirrors this trend, and different groups focus on different aspects of the semantics. The TimeBankDense set is a middle ground between coarse and finegrained distinctions: BEFORE, AFTER, INCLUDES, IS INCLUDED, SIMULTANEOUS, and VAGUE.</p><p>The main reason for not using a more fine-grained set is because we annotate pairs that are more ambiguous than those considered in previous efforts. Decisions between relations like BEFORE and IM-MEDIATELY BEFORE complicate an already difficult task. The added benefit of a system that makes finegrained distinctions is also not clear. We lean toward higher annotator agreement by using relations that have a greater separation between their semantics. <ref type="bibr">4</ref> Annotators of TimeBank-Dense also had to mutually agree on each labeled edge, otherwise it was labeled VAGUE. Precision between annotators averaged 65.1%, and the kappa ranged from .56 to .64. For comparison, TimeBank annotators averaged 77% precision with a .71 kappa. The breakdown of relation counts is shown in <ref type="table" target="#tab_1">Table 2</ref>. T3 refers to TempEval-3. TempEval-3 used TimeBank documents, but removed a small portion of its events. This paper evaluates on T3 data to maintain a connection to the recent competition, but this resulted in the removal of a portion of the densely annotated edges.</p><p>The most significant change in this new corpus is the inclusion of the VAGUE relation. This allows a system to separate relation identification from classification, if desired. The VAGUE relation makes up 46% of the annotated graph. This is the first empirical measurement of how many edges do not carry a clear semantics. This annotation eliminates 1 of the 3 ambiguities (discussed in Section 2) that has plagued ordering research: the annotator failed to look at the pair of events, so a single relation may exist.  <ref type="table" target="#tab_1">b  a  i  ii  s  v  Total  All  2590 2104 836 1060 215 5910 12715  T3 train 1444 1148 473 629 120 3013 6827  T3 dev 242 218 37 73 20 359  949  T3 test 589 428 116 159 39 900 2231</ref>   This is a significant improvement over previous ordering annotations. Several questions can now be answered to benefit learning algorithms. Which set of edges in the graph are unambiguous? Can I know for certain that I have all BEFORE relations in this document? These questions are critical to supervised learning, and we see the removal of this ambiguity as an important step toward better classification.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>TimeBank-Dense Relation Count</head><p>Of course, an ambiguity still remains: does VAGUE mean that no relation exists, or that multiple relations are possible? This is not unique to our corpus, but is present in all current ordering corpora. We erred on the side of caution because it is not clear how this can be resolved. Though we don't solve this problem here, we can more deeply analyze how VAGUE relations come about during annotation. <ref type="table" target="#tab_2">Table 3</ref> shows the 3 annotation scenarios that result in a VAGUE relation, and how often each occurred: (1) mutual vague: annotators agreed on VAGUE, (2) partial vague: one annotator chose VAGUE but the other chose a nonvague relation, and (3) no vague: annotators chose different non-vague relations. These disagreements will be released with the corpus, enabling future research into distinguishing these fine-grained semantics.</p><p>TimeBank-Dense is split into a 22 document training set, 5 document dev set, and a 9 document test set <ref type="bibr">5</ref> . We follow this split in all experiments.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Sieve-Based Temporal Ordering</head><p>The sieve architecture applies a sequence of temporal relation classifiers, one at a time, to label the edges of a graph of events and time expressions. The individual classifiers are called sieves, and each sieve passes its temporal relation decisions onto the next sieve. The input to each sieve is the partially labeled graph from previous sieves. These previous decisions can help inform a sieve's own decisions. The sieves are ordered by precision, running the most precise models first. Events and time expressions are assumed to be annotated with their standard attributes (such as verb tense). This work uses gold event attributes for consistent analysis of ordering decisions.</p><p>One of the benefits of this architecture is the seamless enforcement of transitivity constraints. Independent pairwise classifiers often produce inconsistent labelings. The architecture avoids inconsistent graphs by inferring all transitive relations from each sieve's output before the graph is passed on to the next one. Specifically, the n th sieve cannot add an inconsistent edge that is inferrable from the previous n − 1 sieves. Transitive inference is run after each stage, so it is not possible to relabel an already inferred edge. In a similar fashion, the architecture enforces the precision preference rule: the n th sieve may not label edge e if one of the previous n − 1 sieves has already labeled it. Transitive inferences are made with all possible relations (e.g., A before B and B includes C infers A before C). The only relation that does not infer new edges is VAGUE.</p><p>This architecture facilitates a seamless integration of a wide variety of classifiers. We experimented with both rule-based and machine learned classifiers. The following subsections describe the final set of 12 temporal classifiers in CAEVO. We begin with the deterministic rule-based sieves.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Deterministic Sieves</head><p>The most precise sieves come from linguistic insight into syntactic and semantic patterns. Many pairs of events share common syntactic attributes that clearly indicate a temporal relation. Machine learning is not needed for these known linguistic phenomena, and a trained classifier can incorrectly label these obvious pairs if other features incorrectly override the decision. We therefore rely on deterministic rulebased approaches to capture these phenomena.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.1">Verb/Timex Adjacency</head><p>Many prepositions in English carry either explicit (e.g., before, during) or implicit temporal semantics (e.g., in, over). Several are so reliable that a simple <ref type="bibr">SI- MULTANEOUS.</ref> In the absence of a preposition, a timex might simply be a modifier of the verb. The following is one such example.</p><note type="other">series of rules can label event-timex edges with very high precision. This Verb/Timex Adjacency sieve thus applies to event words and time expressions that are connected by a direct path in the syntactic parse tree, as well as all event/time pairs such that the event is at most 2 tokens before the time expression. Time expressions under a preposition are handled with specific rules. For instance, in, on, over, during, and within all resolve to IS INCLUDED. The prepositions for, at, and throughout resolve to</note><p>Police confirmed Friday that the body found along a highway...</p><p>The confirmed event IS INCLUDED in Friday. The edge between an event and a direct time modifier all default to IS INCLUDED. The precision of this sieve on the development set is 92%, the top performer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.2">Timex-Timex Relations</head><p>One of the most precise sieves is a small set of deterministic rules that address relations between time expressions (including the DCT). This sieve uses the normalized time values for time expressions to compare their start/end times. Given two time spans with defined starting and ending time points, the temporal relation is unambiguous.</p><p>The more difficult cases involve time expressions without stated start/end points. Examples of these include references to the abstract future or past, such as in phrases like 'last year' and 'next quarter'. This sieve chooses BEFORE if the abstract references are not the same, but in clear opposition to each other. For instance, a past reference and a future reference are labeled BEFORE. If the abstract references are the same, then VAGUE is typically applied. We defer to the publicly released code for further details.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.3">Reporting Event with DCT</head><p>Newspaper articles contain an abundance of reporting events (e.g., said, reply, tell). We crafted a targeted sieve to handle this genre-specific phenomena. Since the document creation time is often the day of the reporting events, edges between reporting events and the DCT are labeled as IS INCLUDED. This is essentially a high baseline for event-DCT edges. One of the advantages of the sieve-based architecture is that this sieve can be placed later in the cascade of sieves. More sophisticated reasoners run before this one, making more informed decisions when appropriate, and this sieve cleans up the remaining reporting-DCT edges that are still unlabeled.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.4">Reporting Event with Dominated Event</head><p>We also created rules for edges between a reporting event and another event that is syntactically dominated by the reporting event. Statistical classifiers can pick up patterns for reporting verbs, but the labels are consistent enough that a few deterministic rules can handle many of the cases. The following rules are solely based on the tense and grammatical aspect of each event.</p><p>The following is a sampling of these rules, where gov is the governing event and dep the dependent. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.5">General Event with Dominated Event</head><p>We generalized the above reporting-event sieve to apply to all types of events. This 'backoff' sieve handles the non-reporting event pairs where one event immediately dominates another. It operates similar to the preceding sieve and uses event features like tense and aspect to make its decisions. However, unlike the preceding, the decisions are split into different rule sets based on the specific typed dependency relation that connects the two events. We have separate rules nsubj, dobj, xcomp, ccomp, advcl, and conj.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.6">Reichenbach Rules</head><p>Reichenbach (1947) defined the role played by the various tenses of English verbs in conveying temSimple Past: John left the room</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>E,R S</head><p>Anterior Past: John had left the room E R S</p><p>Posterior Past: (I did not know that) John would leave the room R E,S <ref type="figure">Figure 2</ref>: Timelines in which the ordering S &lt; R is fixed because the verb to leave is in the past tense.</p><p>poral information in a discourse. Each tense is distinguished in terms of the relative ordering of the following time points:</p><p>• Point of speech (S) The time at which an act of speech is performed.</p><p>• Point of event (E) The time at which the the event referred to by the verb occurs.</p><p>• Point of reference (R) A single time with respect to which S is ordered by one dimension of tense, and to which E is ordered by another.</p><p>Reichenbach's account maps the set of possible orderings of S, E, and R, where each pair of elements can be ordered with &lt; (before), = (simultaneous), or &gt; (after), onto a set of tense names given by: {anterior, simple, posterior} × {past, present, f uture}. The relative ordering of E and R is indicated by the first dimension, while that of S and R is given by the second. <ref type="figure">Figure 2</ref> depicts examples of the ordering R &lt; S.</p><p>Similar to Derczynski and Gaizauskas (2013) we map a subset of Reichenbach's tenses onto pairs of TimeML tense and aspect attribute values, which are given by {simple, perf ect, progressive} × {past, present, f uture}, where the first dimension is grammatical aspect and the second is tense. We refer to an event's tense/aspect combination as its tense-aspect profile. Consider two events e 1 and e 2 associated with S 1 /E 1 /R 1 and S 2 /E 2 /R 2 . Intuitively, given R 1 = R 2 and the time point orderings for each event (derived from its tense-aspect profile) we can enumerate the possible interval relations that might hold between E 1 and E 2 , which we can interpret as a disjunction of the possible orderings of e 1 and e 2 (Derczynski and <ref type="bibr" target="#b13">Gaizauskas, 2013)</ref>. We identify a subset of tense/aspect profile pairs that unambiguously yield an interval relation from our 6 relations, and implement them as rules in the Reichenbach Sieve. Three such rules are given here:</p><p>1. If e1 is past/simple and e2 is past/perfect then (e1 AFTER e2)</p><p>2. If e1 is future/simple and e2 is present/perfect then (e1 AFTER e2)</p><p>3. If e1 is past/simple and e2 is future/simple then (e1 BEFORE e2)</p><p>The Reichenbach sieve achieved a precision of 61% on the entire dataset, and 91% when links labeled VAGUE were excluded, a notably larger increase over other sieves. The lower 61% is primarily due to the abundance of non-canonical usages of various tense/aspect profiles. For example, the present tense may convey habitual action, an event conveyed with the future tense in a quotation may have already occurred, the present perfect may be used to indicate that an event occurred at least once in the past, etc.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.7">WordNet Rules</head><p>Determining whether two words are precisely coreferent is notoriously difficult ( <ref type="bibr" target="#b16">Hovy et al., 2013</ref>). Synonymous words, or even those sharing the same surface form may be only partially co-referent and thus likely labeled VAGUE by annotators. For example, news articles state what someone said multiple times without revealing temporal ordering between the events. Event-event edges whose events share the same lemma, or are each a member of the same synset are thus labeled VAGUE. Time-time edges with the same lemma/synset are labeled SIMULTANEOUS.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.8">All Vague</head><p>The majority class baseline for this task is to label all edges as VAGUE. This sieve is added to the end of the gauntlet, labeling any remaining unlabeled edges.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Machine Learned Sieves</head><p>Current state-of-the-art models for temporal ordering are machine learned classifiers. The top systems in the latest TempEval-3 contest used supervised classifiers for the different types of edges in the event graph <ref type="bibr" target="#b2">(Bethard, 2013;</ref><ref type="bibr" target="#b10">Chambers, 2013)</ref>. In the spirit of the sieve architecture, rather than training one large classifier for all types of edges, we create targeted classifiers for each type of edge. The resulting models are again ranked by precision and mutually</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Event-Time Features</head><p>Token, lemma, POS tag of event Tense, aspect, class of event Bigram of event and time expression words Token path from event to time Syntactic parse tree path between the event and time Typed dependency edge path between the events Boolean: syntactically dominates or is-dominated Boolean: time expression concludes sentence? Boolean: time expression day of week? inform each other through the architecture's transitive constraints. All models use the MaxEnt classifier from the Stanford CoreNLP with its default settings. Below we describe the features for each sieve.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.1">Event-Time Edges</head><p>We created two different sieves for labeling edges between an event and a time expression. Similar to the event-event distinction, one classifier applies to intra-sentence edges and the other to inter-sentence. The features for these classifiers are shown in <ref type="figure" target="#fig_2">Fig- ure 3</ref>. The same features from the above eventevent classifier are used where applicable. These include the parse paths, syntactic dominance, and event features with POS tags and token context. Features specific to event-time edges include the event word's tense, aspect, and class (included independently from the time expression). Time features included a boolean feature if it was a day of the week, the head word of the expression, and the entire expression if it is more than one word. A boolean feature indicating if the time expression ended the sentence is also included.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.2">Event-Event Edges</head><p>We created three different sieves for event-event edges. They use the same features, but are trained and applied to different subsets of the graph edges.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Event-Event Features</head><p>Text order normalized (put the first event first) Boolean: syntactically dominates or is-dominated Boolean: is there an event in between these two? Syntactic parse tree path between the events Typed dependency edge path between the events Token n-grams, POS tag n-grams Pairs of tense, aspect, event class Prepositions attached to each event, if any The features for these classifiers are summarized in <ref type="figure" target="#fig_3">Figure 4</ref>. The POS tag features for each event include its previous two tags, the event word's tag, and the POS bigram ending on the event word. A POS bigram is also created from the POS tag of each event. The token word, its lemma, its WordNet synset, and the token bigram from each event word are also used. Various syntactic features are used, including preposition words that dominate either event, boolean dominance features if one event is above the other in the parse tree, the parse path between the two events (append the non-terminals together), and the typed dependency path between the two. Finally, we use event attributes of tense, aspect, and class to create event pairs of their values (e.g., if both events are past tense, then the feature's value is 'past past').</p><p>The final CAEVO architecture includes both intrasentence learners, but not inter-sentence. The latter's precision was not high enough to warrant its inclusion. As mirrored in recent TempEval competition results, inter-sentence event relations continue to be an area of future research.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.3">Event-DCT Edges</head><p>Temporal relations between events and the document creation time (DCT) are also separately classified. The features for this machine-learned sieve focus solely on the event word, including its POS tag, the two previous POS tags, event lemma, WordNet synset, token unigrams from a window of size 2, and event attributes: tense, aspect, and class. Since this sieve relies entirely on the event's features with no DCT specific features, it can be viewed as a singleevent classifier. We also experimented with a number of rule-based sieves for Event-DCT classification, but they were all outperformed by the machine-learning sieve on the training and development sets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">The Complete Sieve Gauntlet</head><p>We now present the sieves used by CAEVO. Although the final system contains 12 sieves, we experimented with over 25 different classifiers. The final set of 12 are sorted by precision:</p><formula xml:id="formula_0">precision(sieve) = #correct #proposed by sieve (1)</formula><p>Transitive closure is not included when calculating precision. Sieves are ranked according to precision, placed in order from highest to lowest. Sieves with a precision lower than the All Vague baseline were removed. <ref type="table" target="#tab_5">Table 4</ref> shows the final sieve order.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Experiments and Results</head><p>We now present the first experiments on the TimeBank-Dense corpus, using the set of events used for TempEval-3. These experiments highlight two separate contributions. The first is a new approach to temporal ordering, the CAEVO architecture with a cascade of classifiers. The second is an evaluation of an ordering system on the densest event graphs to date. We provide per-sieve results and compare against two state-of-the-art systems. All sieves were developed on and motivated by the TimeBank-Dense training data. Precision was initially computed on the development set, and final sieve ordering is based on individual performance. Final performance is reported on the test set.</p><p>We compare against the All Vague baseline that labels all edges as VAGUE. We also compare against the winner of TempEval-3, ClearTK <ref type="bibr" target="#b2">(Bethard, 2013)</ref>. We include ClearTK in four configurations: (1) the base TempEval-3 system, (2) with CAEVO transitivity, (3) with transitivity and altered to output a VAGUE relation where it normally would have skipped the decision, and (4) retrained models on TimeBank-Dense with transitivity and all VAGUE. We also include the second place TempEval-3 system, NavyTime <ref type="bibr">(Cham- bers, 2013</ref>), retrained and run as (3) and (4). Results are shown in <ref type="table">Table 5</ref>. The optimized TempEval-3 systems ultimately achieve ∼44 F1. The transitivity architecture automatically boosted ClearTK from .147 to .264 with no additional changes. CAEVO outperforms at 50.7 F1, improving over the retrained TempEval-3 systems by 14% relative F1.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Ordered Sieves</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Dev</head><p>Test Sieve</p><p>Brief Description P R P R Verb/Time Adjacent Rules for edges between one verbal event and one Timex .92 .01 .74 .01 TimeTime Rules for edges between two Timex .88 .02 .90 .02 Reporting Governor Rules for when a reporting event dominates an event .69 .01 .91 .01 Reichenbach</p><p>Rules following Reichenbach theory for edges between two events .63 .02 .67 .03 General Governor Rules for edges where one event dominates another via typed dependencies .63 .04 .51 .02 WordNet Rules for edges between two events/times based on WordNet synonym lookup .52 .02 .57 .01 Reporting DCT Rules for reporting events and the DCT 1.0 .00 1.0 .00 ML-E-T SameSent Trained classifier for event-time edges .50 .03 .42 .03 ML-E-E SameSent Trained classifier for all intra-sentence event-event edges</p><p>.   <ref type="table">Table 5</ref>: Comparison with top systems. The "Dense" systems were retrained on TimeBank-Dense. The "Opt" systems were optimized to label unknown edges as VAGUE.</p><p>The bottom of <ref type="table">Table 6</ref> illustrates the contribution of transitive closure in the labeling decisions. Prior research has hypothesized that transitive closure should help individual decisions <ref type="bibr" target="#b9">(Chambers and Jurafsky, 2008;</ref><ref type="bibr" target="#b28">Yoshikawa et al., 2009)</ref>, but this has not been adequately tested due to the sparsely labeled graphs available to the community. We computed the precision of edges directly labeled by sieves, and the precision of edges inferred from transitive closure. Transitive inferences achieve better performance than directly classified edges (54.5% to 49.8% precision). <ref type="table" target="#tab_8">Table 7</ref> breaks apart precision by edge type. Since CAEVO labels all edges, precision and recall are the same. Edges between an event and the DCT show 55% precision, while event-event and event-  <ref type="table">Table 6</ref>: System precision on the test set with and without transitivity, and precision of transitive labels. time edges achieve the lowest performance at 49%. Linking time expressions to each other is helpful. While far less numerous, time-time edges are the easiest to classify (71% precision). Upon removing the Time-Time sieve, overall results drop almost 5%, despite the time-time edges only making up a smaller 2.6% of the data. Combined with transitive closure, they positively influence the other event decisions.</p><p>Finally, <ref type="table" target="#tab_9">Table 8</ref> shows CAEVO's per-relation results. We also reversed the order of sieves (but with all vague still last) to see what effect it has. Performance on the dev set dropped from .48 F1 to .46.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Discussion</head><p>These are the first experiments on event ordering where the document event graphs were annotated so as to guarantee high density of relations and strong   connectivity. Most related to our experiments is the dense annotation work of <ref type="bibr" target="#b14">Do et al. (2012)</ref>, but as they did not force annotators to label every pair, unannotated pairs in their corpus are ambiguous between a VAGUE relation and a relation that was simply missed by the annotators. This ambiguity causes problems for evaluation that are not present in a corpus where annotators were required to annotate all pairs.</p><p>Constructing event ordering systems that will be evaluated on dense, strongly connected document event graphs is fundamentally different than optimizing a system to label a subset of edges. This can be seen in the performance of the ClearTK-TimeML system, which achieved the top performance (36.26) on the sparse relation task of TempEval 2013, but performed dramatically worse (15.8) on our dense relation task. This is not to fault ClearTK, but to illustrate the difference of evaluating only a subset of an event graph's edges rather than the entire graph.</p><p>We also presented the first sieve-based architecture for event/time ordering. The CAEVO architecture allowed us to focus on specific classifiers for local decisions, and leave constraint enforcement to the architecture itself. There are several intangible benefits to this setup that don't appear in the results: (1) seamless integration of new/existing classifiers, (2) extremely quick ablation experiments by adding/removing sieves, and (3) facilitation of the development of specific classifiers that are agnostic to global constraints.</p><p>The final results are encouraging. Our multi-pass system achieved an F1 of 50.7, a full 10 F1 points over the All-Vague baseline, and a 14% relative increase over the top two systems in TempEval 3. This increase is based not just on the top systems out of the box, but after retraining them with TimeBankDense. The largest factor contributing to this gain is the enforcement of global constraints. Transitive inference alone boosted performance by about 10%.</p><p>Finally, we note that a lot of effort was put into linguistically motivated rule-based classifiers. The overall gain from these high precision sieves was 2 F1 points. The Reichenbach sieve's application of a more traditional linguistic theory of time helped increase performance. Error analysis reveals there are inherent difficulties in relying solely on tense and aspect for ordering decisions, but we hope to continue experiments into this and other theories.</p><p>CAEVO and its code is now publicly available 6 . In addition to temporal classification (the focus of this paper), it also automatically extracts events and time expressions. CAEVO is a complete system that produces dense event/time graphs from raw text. We hope it provides a new platform for quick experimentation and development. The TimeBank-Dense corpus is also publicly available, as well as the new annotation tool that forces annotators to label all edges. It is a unique tool that helps with transitive inference as annotators work. We hope it encourages further dense data creation for temporal research.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: TimeBank document on the left with TimeBankDense on the right. Solid arrows indicate BEFORE and dotted INCLUDED IN. Relations with the DCT not shown.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>1 .</head><label>1</label><figDesc>Event-Event, Event-Time, and Time-Time pairs in the same sentence 2. Event-Event, Event-Time, and Time-Time pairs be- tween the current and next sentence 3. Event-DCT pairs for every event in the document (DCT is the document creation time) 4. Time-DCT pairs for every time expression in the document</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Features for event-time edges.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Features for intra-sentence event-event edges.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head></head><label></label><figDesc>4 For instance, a relation like STARTS is a special case of INCLUDES if events are viewed as open intervals, and IMME- DIATELY BEFORE is a special case of BEFORE. We avoid this overlap and only use INCLUDES and BEFORE.</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>The number of each relation type in the 
+TimeBank-Dense corpus. T3 is the TempEval3 version 
+used in this paper's experiments. 
+
+# of Mutual Vague Partial Vague No Vague 
+1657 (28%) 
+3234 (55%) 1019 (17%) 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>VAGUE relation origins. Partial vague: one anno-
+tator does not choose vague. No vague: neither annotator 
+chooses vague, but they disagree on the specific relation. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>1 .</head><label>1</label><figDesc></figDesc><table>If gov is present, and dep is past 
+then (gov AFTER dep) 
+2. If gov is present, and dep is present perfect 
+then (gov AFTER dep) 
+3. If gov is present, and dep is future 
+then (gov BEFORE dep) 
+4. If gov is past, and dep is past perfective 
+then (gov AFTER dep) 
+5. If gov is past, and dep is past progressive 
+then (gov IS INCLUDED dep) 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head></head><label></label><figDesc>45 .11 .44 .10 ML-E-E Dominate Trained classifier for edges where one event syntactically dominates another .41 .05 .44 .05 ML-E-DCT Trained classifier for all event-DCT edges .40 .06 .53 .07 AllVague Labels all edges as VAGUE .38 .38 .40 .40</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>The final order of sieves in CAEVO. Precision was computed on the development set. ReportingDCT only 
+matched one pair in the dev set, so we moved it below the other more common rule-based sieves. 
+
+System Comparison 
+
+System 
+P 
+R 
+F1 
+ClearTK 
+.397 .091 .147 
+ClearTK + trans 
+.390 .199 .264 
+ClearTK VAGUE + trans 
+.431 .431 .431 
+ClearTK Dense VAGUE + trans .460 .426 .442 
+NavyT Dense VAGUE 
+.485 .415 .447 
+NavyT Dense VAGUE + trans .483 .427 .453 
+Baseline: All Vague 
+.405 .405 .405 
+CAEVO 
+.508 .506 .507 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="false"><head>Table 7 :</head><label>7</label><figDesc></figDesc><table>The number of edges for each edge type, and the 
+system's overall precision on each. Since CAEVO labels 
+all possible edges, precision and recall are the same. 
+
+Per-Relation Performance 
+
+Relation 
+P R F1 
+
+BEFORE 
+
+.52 .45 .49 
+
+AFTER 
+
+.55 .38 .45 
+
+INCLUDES 
+
+.44 .21 .28 
+
+IS INCLUDED 
+
+.57 .43 .49 
+SIMULTANEOUS .71 .31 .43 
+
+VAGUE 
+
+.48 .66 .56 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_9" validated="false"><head>Table 8 :</head><label>8</label><figDesc>Performance on individual relation types.</figDesc><table></table></figure>
+
+			<note place="foot" n="1"> Do 2012 reports 6264 relations, but we list half of this because they include relations and their inverses in the count.</note>
+
+			<note place="foot" n="2"> Viewed as an undirected graph: since all events connect the DCT, there exists a path from every event to every other event. 3 Though many are inferred through transitive closure.</note>
+
+			<note place="foot" n="5"> Available at http://www.usna.edu/Users/cs/nchamber/caevo/</note>
+
+			<note place="foot" n="1">. intra-sentence: Label edges between all event pairs that occur in the same sentence. 2. intra-sentence dominance: Label edges between all event pairs that occur in the same sentence and one event dominates the other in the syntactic parse tree. 3. inter-sentence: Label edges between all event pairs that occur in neighboring sentences.</note>
+
+			<note place="foot" n="6"> http://www.usna.edu/Users/cs/nchamber/caevo</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>This work was supported, in part, by the Johns Hopkins Human Language Technology Center of Excellence. Any opinions, findings, and conclusions or recommendations expressed in this material are those of the authors. It was also supported by Grant Number R01LM010090 from the National Library Of Medicine. Finally, thanks to Benjamin Van Durme for assistance and insight.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Maintaining knowledge about temporal intervals</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>James F Allen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications of the ACM</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="issue">11</biblScope>
+			<biblScope unit="page" from="832" to="843" />
+			<date type="published" when="1983" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">CU-TMP: Temporal relation classification using syntactic and semantic features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Bethard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><forename type="middle">H</forename><surname>Martin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Fourth International Workshop on Semantic Evaluations (SemEval-2007)</title>
+		<meeting>the Fourth International Workshop on Semantic Evaluations (SemEval-2007)<address><addrLine>Prague, Czech Republic</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2007-06" />
+			<biblScope unit="page" from="129" to="132" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">ClearTK-TimeML: A minimalist approach to tempeval</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Bethard</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Seventh International Workshop on Semantic Evaluation</title>
+		<meeting>the Seventh International Workshop on Semantic Evaluation<address><addrLine>Atlanta, Georgia, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2013-06" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="10" to="14" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Branimir</forename><surname>Boguraev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rie Kubota</forename><surname>Ando</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">TimeBank-driven TimeML analysis. In Annotating, Extracting and Reasoning about Time and Events</title>
+		<imprint>
+			<publisher>Springer</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Flexible parsing of discretely uttered sentences</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luigi</forename><surname>Borghesi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chiara</forename><surname>Favareto</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 9th conference on Computational linguistics</title>
+		<meeting>the 9th conference on Computational linguistics</meeting>
+		<imprint>
+			<publisher>Academia Praha</publisher>
+			<date type="published" when="1982" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="37" to="42" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Yoong Keok Lee, and Regina Barzilay</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philip</forename><surname>Bramsen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pawan</forename><surname>Deshpande</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2006 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2006 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="189" to="198" />
+		</imprint>
+	</monogr>
+	<note>Inducing temporal graphs</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">The mathematics of statistical machine translation: Parameter estimation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent J Della</forename><surname>Peter F Brown</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen A Della</forename><surname>Pietra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert L</forename><surname>Pietra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mercer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational linguistics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="263" to="311" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">An annotation framework for dense event ordering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Taylor</forename><surname>Cassidy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bill</forename><surname>Mcdowell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nathanael</forename><surname>Chambers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Bethard</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The 52nd Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting><address><addrLine>Baltimore, MD, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2014-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Jointly combining implicit constraints improves temporal ordering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nathanael</forename><surname>Chambers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Jurafsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="698" to="706" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Navytime: Event and time ordering from raw text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nathanael</forename><surname>Chambers</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Seventh International Workshop on Semantic Evaluation</title>
+		<meeting>the Seventh International Workshop on Semantic Evaluation<address><addrLine>Atlanta, Georgia, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2013-06" />
+			<biblScope unit="volume">2</biblScope>
+		</imprint>
+	</monogr>
+	<note>Second Joint Conference on Lexical and Computational Semantics (*SEM)</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Japan: Temporal relation identification using dependency parsed tree</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuchang</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Masayuki</forename><surname>Asahara</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuji</forename><surname>Matsumoto</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Fourth International Workshop on Semantic Evaluations (SemEval-2007)</title>
+		<meeting>the Fourth International Workshop on Semantic Evaluations (SemEval-2007)<address><addrLine>Prague, Czech Republic</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2007-06" />
+			<biblScope unit="page" from="245" to="248" />
+		</imprint>
+		<respStmt>
+			<orgName>NAIST</orgName>
+		</respStmt>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Stochastic context-free grammars for island-driven probabilistic parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Corazza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">De</forename><surname>Mori</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Gretter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Satta</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Second International Workshop on Parsing Technologies (IWPT91)</title>
+		<meeting>Second International Workshop on Parsing Technologies (IWPT91)</meeting>
+		<imprint>
+			<date type="published" when="1991" />
+			<biblScope unit="page" from="210" to="217" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Empirical validation of reichenbach&apos;s tense framework</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Leon</forename><surname>Derczynski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert</forename><surname>Gaizauskas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 10th International Conference on Computational Semantics (IWCS 2013)</title>
+		<meeting>the 10th International Conference on Computational Semantics (IWCS 2013)</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="71" to="82" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Joint inference for event timeline construction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quang</forename><surname>Do</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2012 Joint Conference on Empirical Methods in Natural Language Processing and Computational Natural Language Learning</title>
+		<meeting>the 2012 Joint Conference on Empirical Methods in Natural Language Processing and Computational Natural Language Learning<address><addrLine>Jeju Island, Korea</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2012-07" />
+			<biblScope unit="page" from="677" to="687" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Classifying temporal relations with rich linguistic knowledge</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jennifer</forename><surname>Dsouza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent</forename><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NAACL-HLT</title>
+		<meeting>NAACL-HLT</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="918" to="927" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Events are not simple: Identity, non-identity, and quasi-identity</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Teruko</forename><surname>Mitamura</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Felisa</forename><surname>Verdejo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Araki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Philpot</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2013" />
+			<publisher>NAACL HLT</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Extracting narrative timelines as temporal dependency structures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oleksandr</forename><surname>Kolomiyets</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Bethard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mariefrancine</forename><surname>Moens</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 50th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 50th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Jeju Island, Korea</addrLine></address></meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2012-07" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="88" to="97" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title level="m" type="main">Deterministic coreference resolution based on entitycentric, precision-ranked rules</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Heeyoung</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Angel</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yves</forename><surname>Peirsman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nathanael</forename><surname>Chambers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mihai</forename><surname>Surdeanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Jurafsky</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+	<note>Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Evaluating CRFs and semantic roles in TempEval-2</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hector</forename><surname>Llorens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Estela</forename><surname>Saquete</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Borja</forename><surname>Navarro</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 5th International Workshop on Semantic Evaluation</title>
+		<meeting>the 5th International Workshop on Semantic Evaluation<address><addrLine>Uppsala, Sweden</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2010-07" />
+			<biblScope unit="page" from="284" to="291" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">The timebank corpus</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Pustejovsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Patrick</forename><surname>Hanks</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roser</forename><surname>Sauri</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>See</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert</forename><surname>Gaizauskas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrea</forename><surname>Setzer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dragomir</forename><surname>Radev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Beth</forename><surname>Sundheim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Day</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lisa</forename><surname>Ferro</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Corpus linguistics</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page">40</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Elements of Symbolic Logic</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hans</forename><surname>Reichenbach</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1947" />
+			<publisher>Macmillan</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Experiments with reasoning for temporal relations between events</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marta</forename><surname>Tatu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Munirathnam</forename><surname>Srikanth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 22nd International Conference on Computational Linguistics</title>
+		<meeting>the 22nd International Conference on Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2008" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="857" to="864" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">TRIPS and TRIOS system for TempEval-2: Extracting temporal information from text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Naushad</forename><surname>Uzzaman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Allen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 5th International Workshop on Semantic Evaluation</title>
+		<meeting>the 5th International Workshop on Semantic Evaluation<address><addrLine>Uppsala, Sweden</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2010-07" />
+			<biblScope unit="page" from="276" to="283" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Semeval-2013 task 1: Tempeval-3: Evaluating time expressions, events, and temporal relations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Naushad</forename><surname>Uzzaman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hector</forename><surname>Llorens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Leon</forename><surname>Derczynski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Allen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marc</forename><surname>Verhagen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Pustejovsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Seventh International Workshop on Semantic Evaluation</title>
+		<meeting>the Seventh International Workshop on Semantic Evaluation<address><addrLine>Atlanta, Georgia, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2013-06" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="1" to="9" />
+		</imprint>
+	</monogr>
+	<note>Second Joint Conference on Lexical and Computational Semantics (*SEM)</note>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Naushad</forename><surname>Uzzaman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hector</forename><surname>Llorens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Leon</forename><surname>Derczynski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marc</forename><surname>Verhagen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Allen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Pustejovsky</surname></persName>
+		</author>
+		<title level="m">Semeval-2013 task 1: Tempeval-3: Evaluating time expressions, events, and temporal relations</title>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+	<note>Proceedings of the 7th International Workshop on Semantic Evaluation</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Semeval-2007 task 15: Tempeval temporal relation identification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marc</forename><surname>Verhagen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert</forename><surname>Gaizauskas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Frank</forename><surname>Schilder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Hepple</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Graham</forename><surname>Katz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Pustejovsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 4th International Workshop on Semantic Evaluations</title>
+		<meeting>the 4th International Workshop on Semantic Evaluations</meeting>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="75" to="80" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Semeval-2010 task 13: Tempeval-2</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marc</forename><surname>Verhagen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roser</forename><surname>Sauri</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tommaso</forename><surname>Caselli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Pustejovsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 5th International Workshop on Semantic Evaluation</title>
+		<meeting>the 5th International Workshop on Semantic Evaluation</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="57" to="62" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Jointly identifying temporal relations with Markov Logic</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Katsumasa</forename><surname>Yoshikawa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Riedel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Masayuki</forename><surname>Asahara</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuji</forename><surname>Matsumoto</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Joint Conference of the 47th Annual Meeting of the ACL and the 4th International Joint Conference on Natural Language Processing of the AFNLP</title>
+		<meeting>the Joint Conference of the 47th Annual Meeting of the ACL and the 4th International Joint Conference on Natural Language Processing of the AFNLP</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="405" to="413" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

@@ -1,0 +1,1198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:40+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Devlin</surname></persName>
+							<email>jacobdevlin@google.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming-Wei</forename><surname>Chang</surname></persName>
+							<email>mingweichang@google.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+							<email>kentonl@google.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kristina</forename><forename type="middle">Toutanova</forename><surname>Google</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">I</forename><surname>Language</surname></persName>
+						</author>
+						<title level="a" type="main">BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We introduce a new language representation model called BERT, which stands for Bidirectional Encoder Representations from Transformers. Unlike recent language representation models (Peters et al., 2018; Radford et al., 2018), BERT is designed to pre-train deep bidirectional representations by jointly conditioning on both left and right context in all layers. As a result, the pre-trained BERT representations can be fine-tuned with just one additional output layer to create state-of-the-art models for a wide range of tasks, such as question answering and language inference, without substantial task-specific architecture modifications. BERT is conceptually simple and empirically powerful. It obtains new state-of-the-art results on eleven natural language processing tasks, including pushing the GLUE benchmark to 80.4% (7.6% absolute improvement), MultiNLI accuracy to 86.7% (5.6% absolute improvement) and the SQuAD v1.1 question answering Test F1 to 93.2 (1.5 absolute improvement), outperforming human performance by 2.0.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Language model pre-training has shown to be effective for improving many natural language processing tasks <ref type="bibr" target="#b12">(Dai and Le, 2015;</ref><ref type="bibr" target="#b25">Peters et al., 2017</ref><ref type="bibr" target="#b26">Peters et al., , 2018</ref><ref type="bibr" target="#b27">Radford et al., 2018;</ref><ref type="bibr" target="#b16">Howard and Ruder, 2018)</ref>. These tasks include sentence-level tasks such as natural language inference <ref type="bibr">(Bow- man et al., 2015;</ref><ref type="bibr">Williams et al., 2018</ref>) and paraphrasing ( <ref type="bibr" target="#b14">Dolan and Brockett, 2005)</ref>, which aim to predict the relationships between sentences by analyzing them holistically, as well as token-level tasks such as named entity recognition <ref type="bibr" target="#b31">(Tjong Kim Sang and De Meulder, 2003)</ref> and SQuAD question answering ( <ref type="bibr" target="#b28">Rajpurkar et al., 2016)</ref>, where models are required to produce fine-grained output at the token-level.</p><p>There are two existing strategies for applying pre-trained language representations to downstream tasks: feature-based and fine-tuning. The feature-based approach, such as ELMo ( <ref type="bibr" target="#b26">Peters et al., 2018)</ref>, uses tasks-specific architectures that include the pre-trained representations as additional features. The fine-tuning approach, such as the Generative Pre-trained Transformer (OpenAI GPT) ( <ref type="bibr" target="#b27">Radford et al., 2018)</ref>, introduces minimal task-specific parameters, and is trained on the downstream tasks by simply fine-tuning the pretrained parameters. In previous work, both approaches share the same objective function during pre-training, where they use unidirectional language models to learn general language representations.</p><p>We argue that current techniques severely restrict the power of the pre-trained representations, especially for the fine-tuning approaches. The major limitation is that standard language models are unidirectional, and this limits the choice of architectures that can be used during pre-training. For example, in OpenAI GPT, the authors use a leftto-right architecture, where every token can only attended to previous tokens in the self-attention layers of the Transformer ( <ref type="bibr" target="#b33">Vaswani et al., 2017)</ref>. Such restrictions are sub-optimal for sentencelevel tasks, and could be devastating when applying fine-tuning based approaches to token-level tasks such as SQuAD question answering <ref type="bibr">(Ra- jpurkar et al., 2016)</ref>, where it is crucial to incorporate context from both directions.</p><p>In this paper, we improve the fine-tuning based approaches by proposing BERT: Bidirectional Encoder Representations from Transformers. BERT addresses the previously mentioned unidirectional constraints by proposing a new pre-training objective: the "masked language model" (MLM), inspired by the Cloze task <ref type="bibr">(Tay- lor, 1953)</ref>. The masked language model randomly masks some of the tokens from the input, and the objective is to predict the original vocabulary id of the masked word based only on its context. Unlike left-to-right language model pre-training, the MLM objective allows the representation to fuse the left and the right context, which allows us to pre-train a deep bidirectional Transformer. In addition to the masked language model, we also introduce a "next sentence prediction" task that jointly pre-trains text-pair representations.</p><p>The contributions of our paper are as follows:</p><p>• We demonstrate the importance of bidirectional pre-training for language representations. Unlike <ref type="bibr" target="#b27">Radford et al. (2018)</ref>, which uses unidirectional language models for pretraining, BERT uses masked language models to enable pre-trained deep bidirectional representations. This is also in contrast to <ref type="bibr" target="#b26">Peters et al. (2018)</ref>, which uses a shallow concatenation of independently trained leftto-right and right-to-left LMs.</p><p>• We show that pre-trained representations eliminate the needs of many heavilyengineered task-specific architectures. BERT is the first fine-tuning based representation model that achieves state-of-the-art performance on a large suite of sentence-level and token-level tasks, outperforming many systems with task-specific architectures.</p><p>• BERT advances the state-of-the-art for eleven NLP tasks. We also report extensive ablations of BERT, demonstrating that the bidirectional nature of our model is the single most important new contribution. The code and pre-trained model will be available at goo.gl/language/bert. 1</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>There is a long history of pre-training general language representations, and we briefly review the most popular approaches in this section.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Feature-based Approaches</head><p>Learning widely applicable representations of words has been an active area of research for decades, including non-neural ( <ref type="bibr" target="#b5">Brown et al., 1992;</ref><ref type="bibr"></ref> 1 Will be released before the end of October 2018. <ref type="bibr" target="#b1">Ando and Zhang, 2005;</ref><ref type="bibr" target="#b3">Blitzer et al., 2006</ref>) and neural <ref type="bibr" target="#b10">(Collobert and Weston, 2008;</ref><ref type="bibr" target="#b24">Pennington et al., 2014</ref>) methods. Pretrained word embeddings are considered to be an integral part of modern NLP systems, offering significant improvements over embeddings learned from scratch ( <ref type="bibr" target="#b32">Turian et al., 2010)</ref>. These approaches have been generalized to coarser granularities, such as sentence embeddings ( <ref type="bibr" target="#b18">Kiros et al., 2015;</ref><ref type="bibr" target="#b21">Logeswaran and Lee, 2018)</ref> or paragraph embeddings ( <ref type="bibr" target="#b19">Le and Mikolov, 2014)</ref>. As with traditional word embeddings, these learned representations are also typically used as features in a downstream model. <ref type="bibr">ELMo (Peters et al., 2017</ref>) generalizes traditional word embedding research along a different dimension. They propose to extract contextsensitive features from a language model. When integrating contextual word embeddings with existing task-specific architectures, ELMo advances the state-of-the-art for several major NLP benchmarks ( <ref type="bibr" target="#b26">Peters et al., 2018)</ref> including question answering ( <ref type="bibr" target="#b28">Rajpurkar et al., 2016</ref>) on SQuAD, sentiment analysis <ref type="bibr" target="#b29">(Socher et al., 2013)</ref>, and named entity recognition <ref type="bibr">(Tjong Kim Sang and De Meul- der, 2003</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Fine-tuning Approaches</head><p>A recent trend in transfer learning from language models (LMs) is to pre-train some model architecture on a LM objective before fine-tuning that same model for a supervised downstream task <ref type="bibr" target="#b12">(Dai and Le, 2015;</ref><ref type="bibr" target="#b16">Howard and Ruder, 2018;</ref><ref type="bibr" target="#b27">Radford et al., 2018)</ref>. The advantage of these approaches is that few parameters need to be learned from scratch. At least partly due this advantage, OpenAI GPT ( <ref type="bibr" target="#b27">Radford et al., 2018</ref>) achieved previously state-of-the-art results on many sentencelevel tasks from the GLUE benchmark ( <ref type="bibr" target="#b35">Wang et al., 2018</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Transfer Learning from Supervised Data</head><p>While the advantage of unsupervised pre-training is that there is a nearly unlimited amount of data available, there has also been work showing effective transfer from supervised tasks with large datasets, such as natural language inference <ref type="bibr">(Con- neau et al., 2017)</ref> and machine translation <ref type="bibr">(Mc- Cann et al., 2017)</ref>. Outside of NLP, computer vision research has also demonstrated the importance of transfer learning from large pre-trained models, where an effective recipe is to fine-tune  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">BERT</head><p>We introduce BERT and its detailed implementation in this section. We first cover the model architecture and the input representation for BERT.</p><p>We then introduce the pre-training tasks, the core innovation in this paper, in Section 3.3. The pre-training procedures, and fine-tuning procedures are detailed in Section 3.4 and 3.5, respectively. Finally, the differences between BERT and OpenAI GPT are discussed in Section 3.6.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Model Architecture</head><p>BERT's model architecture is a multi-layer bidirectional Transformer encoder based on the original implementation described in <ref type="bibr" target="#b33">Vaswani et al. (2017)</ref> and released in the tensor2tensor library. <ref type="bibr">2</ref> Because the use of Transformers has become ubiquitous recently and our implementation is effectively identical to the original, we will omit an exhaustive background description of the model architecture and refer readers to <ref type="bibr" target="#b33">Vaswani et al. (2017)</ref> as well as excellent guides such as "The Annotated Transformer." <ref type="bibr">3</ref> In this work, we denote the number of layers (i.e., Transformer blocks) as L, the hidden size as H, and the number of self-attention heads as A. In all cases we set the feed-forward/filter size to be 4H, i.e., 3072 for the H = 768 and 4096 for the H = 1024. We primarily report results on two model sizes:</p><p>• BERT BASE was chosen to have an identical model size as OpenAI GPT for comparison purposes. Critically, however, the BERT Transformer uses bidirectional self-attention, while the GPT Transformer uses constrained self-attention where every token can only attend to context to its left. We note that in the literature the bidirectional Transformer is often referred to as a "Transformer encoder" while the left-context-only version is referred to as a "Transformer decoder" since it can be used for text generation. The comparisons between BERT, OpenAI GPT and ELMo are shown visually in <ref type="figure" target="#fig_0">Figure 1</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Input Representation</head><p>Our input representation is able to unambiguously represent both a single text sentence or a pair of text sentences (e.g., <ref type="bibr">[Question, Answer]</ref>) in one token sequence. <ref type="bibr">4</ref> For a given token, its input representation is constructed by summing the corresponding token, segment and position embeddings. A visual representation of our input representation is given in <ref type="figure">Figure 2</ref>.</p><p>The specifics are:</p><p>• We use WordPiece embeddings ( <ref type="bibr">Wu et al., 2016</ref>) with a 30,000 token vocabulary. We denote split word pieces with ##.</p><p>• We use learned positional embeddings with supported sequence lengths up to 512 tokens.</p><p>[CLS]</p><p>he likes play ##ing <ref type="bibr">[SEP]</ref> my dog is cute <ref type="bibr">[SEP]</ref> Input E <ref type="bibr">[CLS]</ref> E </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Position Embeddings</head><p>Figure 2: BERT input representation. The input embeddings is the sum of the token embeddings, the segmentation embeddings and the position embeddings.</p><p>• The first token of every sequence is always the special classification embedding ( <ref type="bibr">[CLS]</ref>). The final hidden state (i.e., output of Transformer) corresponding to this token is used as the aggregate sequence representation for classification tasks. For nonclassification tasks, this vector is ignored.</p><p>• Sentence pairs are packed together into a single sequence. We differentiate the sentences in two ways. First, we separate them with a special token ( <ref type="bibr">[SEP]</ref>). Second, we add a learned sentence A embedding to every token of the first sentence and a sentence B embedding to every token of the second sentence.</p><p>• For single-sentence inputs we only use the sentence A embeddings.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Pre-training Tasks</head><p>Unlike Peters et al. <ref type="formula">(2018)</ref> and <ref type="bibr" target="#b27">Radford et al. (2018)</ref>, we do not use traditional left-to-right or right-to-left language models to pre-train BERT. Instead, we pre-train BERT using two novel unsupervised prediction tasks, described in this section.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3.1">Task #1: Masked LM</head><p>Intuitively, it is reasonable to believe that a deep bidirectional model is strictly more powerful than either a left-to-right model or the shallow concatenation of a left-to-right and right-toleft model. Unfortunately, standard conditional language models can only be trained left-to-right or right-to-left, since bidirectional conditioning would allow each word to indirectly "see itself" in a multi-layered context. In order to train a deep bidirectional representation, we take a straightforward approach of masking some percentage of the input tokens at random, and then predicting only those masked tokens. We refer to this procedure as a "masked LM" (MLM), although it is often referred to as a Cloze task in the literature <ref type="bibr" target="#b30">(Taylor, 1953)</ref>. In this case, the final hidden vectors corresponding to the mask tokens are fed into an output softmax over the vocabulary, as in a standard LM. In all of our experiments, we mask 15% of all WordPiece tokens in each sequence at random. In contrast to denoising auto-encoders ( <ref type="bibr" target="#b34">Vincent et al., 2008)</ref>, we only predict the masked words rather than reconstructing the entire input.</p><p>Although this does allow us to obtain a bidirectional pre-trained model, there are two downsides to such an approach. The first is that we are creating a mismatch between pre-training and finetuning, since the <ref type="bibr">[MASK]</ref> token is never seen during fine-tuning. To mitigate this, we do not always replace "masked" words with the actual <ref type="bibr">[MASK]</ref> token. Instead, the training data generator chooses 15% of tokens at random, e.g., in the sentence my dog is hairy it chooses hairy. It then performs the following procedure:</p><p>• Rather than always replacing the chosen words with <ref type="bibr">[MASK]</ref>, the data generator will do the following:</p><p>• 80% of the time: Replace the word with the <ref type="bibr">[MASK]</ref> token, e.g., my dog is hairy → my dog is <ref type="bibr">[MASK]</ref> • 10% of the time: Replace the word with a random word, e.g., my dog is hairy → my dog is apple</p><p>• 10% of the time: Keep the word unchanged, e.g., my dog is hairy → my dog is hairy. The purpose of this is to bias the representation towards the actual observed word.</p><p>The Transformer encoder does not know which words it will be asked to predict or which have been replaced by random words, so it is forced to keep a distributional contextual representation of every input token. Additionally, because random replacement only occurs for 1.5% of all tokens (i.e., 10% of 15%), this does not seem to harm the model's language understanding capability.</p><p>The second downside of using an MLM is that only 15% of tokens are predicted in each batch, which suggests that more pre-training steps may be required for the model to converge. In Section 5.3 we demonstrate that MLM does converge marginally slower than a left-to-right model (which predicts every token), but the empirical improvements of the MLM model far outweigh the increased training cost.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3.2">Task #2: Next Sentence Prediction</head><p>Many important downstream tasks such as Question Answering (QA) and Natural Language Inference (NLI) are based on understanding the relationship between two text sentences, which is not directly captured by language modeling. In order to train a model that understands sentence relationships, we pre-train a binarized next sentence prediction task that can be trivially generated from any monolingual corpus. Specifically, when choosing the sentences A and B for each pretraining example, 50% of the time B is the actual next sentence that follows A, and 50% of the time it is a random sentence from the corpus. </p><formula xml:id="formula_0">Label = NotNext</formula><p>We choose the NotNext sentences completely at random, and the final pre-trained model achieves 97%-98% accuracy at this task. Despite its simplicity, we demonstrate in Section 5.1 that pretraining towards this task is very beneficial to both QA and NLI.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Pre-training Procedure</head><p>The pre-training procedure largely follows the existing literature on language model pre-training.</p><p>For the pre-training corpus we use the concatenation of BooksCorpus (800M words) ( <ref type="bibr" target="#b18">Zhu et al., 2015)</ref> and English Wikipedia (2,500M words). For Wikipedia we extract only the text passages and ignore lists, tables, and headers. It is critical to use a document-level corpus rather than a shuffled sentence-level corpus such as the Billion Word Benchmark ( <ref type="bibr" target="#b7">Chelba et al., 2013</ref>) in order to extract long contiguous sequences.</p><p>To generate each training input sequence, we sample two spans of text from the corpus, which we refer to as "sentences" even though they are typically much longer than single sentences (but can be shorter also). The first sentence receives the A embedding and the second receives the B embedding. 50% of the time B is the actual next sentence that follows A and 50% of the time it is a random sentence, which is done for the "next sentence prediction" task. They are sampled such that the combined length is ≤ 512 tokens. The LM masking is applied after WordPiece tokenization with a uniform masking rate of 15%, and no special consideration given to partial word pieces.</p><p>We train with batch size of 256 sequences (256 sequences * 512 tokens = 128,000 tokens/batch) for 1,000,000 steps, which is approximately 40 epochs over the 3.3 billion word corpus. We use Adam with learning rate of 1e-4, β 1 = 0.9, β 2 = 0.999, L2 weight decay of 0.01, learning rate warmup over the first 10,000 steps, and linear decay of the learning rate. We use a dropout probability of 0.1 on all layers. We use a gelu activation <ref type="bibr" target="#b15">(Hendrycks and Gimpel, 2016</ref>) rather than the standard relu, following OpenAI GPT. The training loss is the sum of the mean masked LM likelihood and mean next sentence prediction likelihood.</p><p>Training of BERT BASE was performed on 4 Cloud TPUs in Pod configuration (16 TPU chips total). <ref type="bibr">5</ref> Training of BERT LARGE was performed on 16 Cloud TPUs (64 TPU chips total). Each pretraining took 4 days to complete.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Fine-tuning Procedure</head><p>For sequence-level classification tasks, BERT fine-tuning is straightforward. In order to obtain a fixed-dimensional pooled representation of the input sequence, we take the final hidden state (i.e., the output of the Transformer) for the first token in the input, which by construction corresponds to the the special <ref type="bibr">[CLS]</ref> word embedding. We denote this vector as C ∈ R H . The only new parameters added during fine-tuning are for a classification layer W ∈ R K×H , where K is the number of classifier labels. The label probabilities P ∈ R K are computed with a standard softmax, P = softmax(CW T ). All of the parameters of BERT and W are fine-tuned jointly to maximize the log-probability of the correct label. For spanlevel and token-level prediction tasks, the above procedure must be modified slightly in a taskspecific manner. Details are given in the corresponding subsection of Section 4.</p><p>For fine-tuning, most model hyperparameters are the same as in pre-training, with the exception of the batch size, learning rate, and number of training epochs. The dropout probability was always kept at 0.1. The optimal hyperparameter values are task-specific, but we found the following range of possible values to work well across all tasks:</p><p>• Batch size: 16, 32 • Learning rate (Adam): 5e-5, 3e-5, 2e-5 • Number of epochs: 3, 4</p><p>We also observed that large data sets (e.g., 100k+ labeled training examples) were far less sensitive to hyperparameter choice than small data sets. Fine-tuning is typically very fast, so it is reasonable to simply run an exhaustive search over the above parameters and choose the model that performs best on the development set.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.6">Comparison of BERT and OpenAI GPT</head><p>The most comparable existing pre-training method to BERT is OpenAI GPT, which trains a left-toright Transformer LM on a large text corpus. In fact, many of the design decisions in BERT were intentionally chosen to be as close to GPT as possible so that the two methods could be minimally compared. The core argument of this work is that the two novel pre-training tasks presented in Section 3.3 account for the majority of the empirical improvements, but we do note that there are several other differences between how BERT and GPT were trained:</p><p>• GPT is trained on the BooksCorpus (800M words); BERT is trained on the BooksCorpus (800M words) and Wikipedia (2,500M words).</p><p>• GPT uses a sentence separator ( <ref type="bibr">[SEP]</ref>) and classifier token ( <ref type="bibr">[CLS]</ref>) which are only introduced at fine-tuning time; BERT learns <ref type="bibr">[SEP]</ref>, <ref type="bibr">[CLS]</ref> and sentence A/B embeddings during pre-training.</p><p>• GPT was trained for 1M steps with a batch size of 32,000 words; BERT was trained for 1M steps with a batch size of 128,000 words.</p><p>• GPT used the same learning rate of 5e-5 for all fine-tuning experiments; BERT chooses a task-specific fine-tuning learning rate which performs the best on the development set.</p><p>To isolate the effect of these differences, we perform ablation experiments in Section 5.1 which demonstrate that the majority of the improvements are in fact coming from the new pre-training tasks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Experiments</head><p>In this section, we present BERT fine-tuning results on 11 NLP tasks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">GLUE Datasets</head><p>The General Language Understanding Evaluation (GLUE) benchmark ( <ref type="bibr" target="#b35">Wang et al., 2018</ref>) is a collection of diverse natural language understanding tasks. Most of the GLUE datasets have already existed for a number of years, but the purpose of GLUE is to (1) distribute these datasets with canonical Train, Dev, and Test splits, and (2) set up an evaluation server to mitigate issues with evaluation inconsistencies and Test set overfitting. GLUE does not distribute labels for the Test set and users must upload their predictions to the GLUE server for evaluation, with limits on the number of submissions.</p><p>The GLUE benchmark includes the following datasets, the descriptions of which were originally summarized in <ref type="bibr" target="#b35">Wang et al. (2018)</ref>:</p><p>MNLI Multi-Genre Natural Language Inference is a large-scale, crowdsourced entailment classification task ( <ref type="bibr">Williams et al., 2018)</ref>. Given a pair of sentences, the goal is to predict whether the second sentence is an entailment, contradiction, or neutral with respect to the first one.</p><p>QQP Quora Question Pairs is a binary classification task where the goal is to determine if two questions asked on Quora are semantically equivalent ( <ref type="bibr" target="#b8">Chen et al., 2018)</ref>.</p><formula xml:id="formula_1">BERT E [CLS] E 1 E [SEP]</formula><p>...</p><formula xml:id="formula_2">E N E 1 '</formula><p>...</p><formula xml:id="formula_3">E M ' C T 1 T [SEP]</formula><p>...</p><formula xml:id="formula_4">T N T 1 '</formula><p>...</p><formula xml:id="formula_5">T M ' [CLS] Tok 1 [SEP]</formula><p>... ...</p><formula xml:id="formula_6">E M ' C T 1</formula><p>T <ref type="bibr">[SEP]</ref> ...</p><formula xml:id="formula_7">T N T 1 '</formula><p>... ...</p><p>[CLS]</p><p>Tok 1 <ref type="bibr">[CLS]</ref> [CLS]</p><p>Tok 1 <ref type="bibr">[SEP]</ref> ... CoLA The Corpus of Linguistic Acceptability is a binary single-sentence classification task, where the goal is to predict whether an English sentence is linguistically "acceptable" or not ( <ref type="bibr">Warstadt et al., 2018</ref>).</p><p>STS-B The Semantic Textual Similarity Benchmark is a collection of sentence pairs drawn from news headlines and other sources (Cer et al., 2017). They were annotated with a score from 1 to 5 denoting how similar the two sentences are in terms of semantic meaning.</p><p>MRPC Microsoft Research Paraphrase Corpus consists of sentence pairs automatically extracted from online news sources, with human annotations for whether the sentences in the pair are semantically equivalent <ref type="bibr" target="#b14">(Dolan and Brockett, 2005</ref>). WNLI Winograd NLI is a small natural language inference dataset deriving from (Levesque et al., 2011). The GLUE webpage notes that there are issues with the construction of this dataset, 7 and every trained system that's been submitted to GLUE has has performed worse than the 65.1 baseline accuracy of predicting the majority class. We therefore exclude this set out of fairness to OpenAI GPT. For our GLUE submission, we always predicted the majority class.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>System</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>MNLI-(m/mm) QQP QNLI SST-2 CoLA STS-B MRPC RTE Average</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.1">GLUE Results</head><p>To fine-tune on GLUE, we represent the input sequence or sequence pair as described in Section 3, and use the final hidden vector C ∈ R H corresponding to the first input token ( <ref type="bibr">[CLS]</ref>) as the aggregate representation. This is demonstrated visually in <ref type="figure" target="#fig_2">Figure 3</ref> (a) and (b). The only new parameters introduced during fine-tuning is a classification layer W ∈ R K×H , where K is the number of labels. We compute a standard classification loss with C and W , i.e., log(softmax(CW T )).</p><p>We use a batch size of 32 and 3 epochs over the data for all GLUE tasks. For each task, we ran fine-tunings with learning rates of 5e-5, 4e-5, 3e-5, and 2e-5 and selected the one that performed best on the Dev set. Additionally, for BERT LARGE we found that fine-tuning was sometimes unstable on <ref type="bibr">6</ref> Note that we only report single-task fine-tuning results in this paper. Multitask fine-tuning approach could potentially push the results even further. For example, we did observe substantial improvements on RTE from multi-task training with MNLI.</p><p>7 https://gluebenchmark.com/faq small data sets (i.e., some runs would produce degenerate results), so we ran several random restarts and selected the model that performed best on the Dev set. With random restarts, we use the same pre-trained checkpoint but perform different finetuning data shuffling and classifier layer initialization. We note that the GLUE data set distribution does not include the Test labels, and we only made a single GLUE evaluation server submission for each BERT BASE and BERT LARGE .</p><p>Results are presented in <ref type="table">Table 1</ref>. Both BERT BASE and BERT LARGE outperform all existing systems on all tasks by a substantial margin, obtaining 4.4% and 6.7% respective average accuracy improvement over the state-of-the-art. Note that BERT BASE and OpenAI GPT are nearly identical in terms of model architecture outside of the attention masking. For the largest and most widely reported GLUE task, MNLI, BERT obtains a 4.7% absolute accuracy improvement over the state-of-the-art. On the official GLUE leaderboard, <ref type="bibr">8</ref> BERT LARGE obtains a score of 80.4, compared to the top leaderboard system, OpenAI GPT, which obtains 72.8 as of the date of writing.</p><p>It is interesting to observe that BERT LARGE significantly outperforms BERT BASE across all tasks, even those with very little training data. The effect of BERT model size is explored more thoroughly in Section 5.2.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">SQuAD v1.1</head><p>The Standford Question Answering Dataset (SQuAD) is a collection of 100k crowdsourced question/answer pairs ( <ref type="bibr" target="#b28">Rajpurkar et al., 2016)</ref>. Given a question and a paragraph from Wikipedia containing the answer, the task is to predict the answer text span in the paragraph. For example:</p><p>• Input Question:</p><p>Where do water droplets collide with ice crystals to form precipitation?</p><p>• Input Paragraph:</p><p>... Precipitation forms as smaller droplets coalesce via collision with other rain drops or ice crystals within a cloud. ...</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>• Output Answer:</head><p>within a cloud This type of span prediction task is quite different from the sequence classification tasks of GLUE, but we are able to adapt BERT to run on SQuAD in a straightforward manner. Just as with GLUE, we represent the input question and paragraph as a single packed sequence, with the question using the A embedding and the paragraph using the B embedding. The only new parameters learned during fine-tuning are a start vector S ∈ R H and an end vector E ∈ R H . Let the final hidden vector from BERT for the i th input token be denoted as T i ∈ R H . See <ref type="figure" target="#fig_2">Figure 3</ref> (c) for a visualization. Then, the probability of word i being the start of the answer span is computed as a dot product between T i and S followed by a softmax over all of the words in the paragraph:</p><formula xml:id="formula_8">P i = e S·T i j e S·T j</formula><p>The same formula is used for the end of the answer span, and the maximum scoring span is used as the prediction. The training objective is the loglikelihood of the correct start and end positions.</p><p>We train for 3 epochs with a learning rate of 5e-5 and a batch size of 32. At inference time, since the end prediction is not conditioned on the start, we add the constraint that the end must come after the start, but no other heuristics are used. The tokenized labeled span is aligned back to the original untokenized input for evaluation.</p><p>Results are presented in <ref type="table" target="#tab_7">Table 2</ref>. SQuAD uses a highly rigorous testing procedure where the submitter must manually contact the SQuAD organizers to run their system on a hidden test set, so we only submitted our best system for testing. The result shown in the table is our first and only Test submission to SQuAD. We note that the top results</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>System</head><p>Dev Test EM F1 EM F1 Leaderboard (Oct 8th, 2018) Human --82.3 91.2 #1 Ensemble -nlnet --86.0 91.7 #2 Ensemble -QANet --84.5 90.5 #1 Single -nlnet --83.5 90.1 #2 Single -QANet --82.5 89.  from the SQuAD leaderboard do not have up-todate public system descriptions available, and are allowed to use any public data when training their systems. We therefore use very modest data augmentation in our submitted system by jointly training on SQuAD and TriviaQA ( <ref type="bibr" target="#b17">Joshi et al., 2017)</ref>. Our best performing system outperforms the top leaderboard system by +1.5 F1 in ensembling and +1.3 F1 as a single system. In fact, our single BERT model outperforms the top ensemble system in terms of F1 score. If we fine-tune on only SQuAD (without TriviaQA) we lose 0.1-0.4 F1 and still outperform all existing systems by a wide margin.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Named Entity Recognition</head><p>To evaluate performance on a token tagging task, we fine-tune BERT on the CoNLL 2003 Named Entity Recognition (NER) dataset. This dataset consists of 200k training words which have been annotated as Person, Organization, Location, Miscellaneous, or Other (non-named entity).</p><p>For fine-tuning, we feed the final hidden representation T i ∈ R H for to each token i into a classification layer over the NER label set. The predictions are not conditioned on the surrounding predictions (i.e., non-autoregressive and no CRF). To make this compatible with WordPiece tokenization, we feed each CoNLL-tokenized input word into our WordPiece tokenizer and use the hidden state corresponding to the first  sub-token as input to the classifier. For example:</p><p>Jim Hen ##son was a puppet ##eer</p><formula xml:id="formula_9">I-PER I-PER X O O O X</formula><p>Where no prediction is made for X. Since the WordPiece tokenization boundaries are a known part of the input, this is done for both training and test. A visual representation is also given in <ref type="figure" target="#fig_2">Figure 3 (d)</ref>. A cased WordPiece model is used for NER, whereas an uncased model is used for all other tasks. Results are presented in <ref type="table" target="#tab_6">Table 3</ref>. BERT LARGE outperforms the existing SOTA, Cross-View Training with multi-task learning , by +0.2 on CoNLL-2003 NER Test.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">SWAG</head><p>The Situations With Adversarial Generations (SWAG) dataset contains 113k sentence-pair completion examples that evaluate grounded commonsense inference ( <ref type="bibr">Zellers et al., 2018)</ref>.</p><p>Given a sentence from a video captioning dataset, the task is to decide among four choices the most plausible continuation. For example:</p><p>A girl is going across a set of monkey bars. She (i) jumps up across the monkey bars.</p><p>(ii) struggles onto the bars to grab her head.</p><p>(iii) gets to the end and stands on a wooden plank.</p><p>(iv) jumps up and does a back flip.</p><p>Adapting BERT to the SWAG dataset is similar to the adaptation for GLUE. For each example, we construct four input sequences, which each contain the concatenation of the the given sentence (sentence A) and a possible continuation (sentence B). The only task-specific parameters we introduce is a vector V ∈ R H , whose dot product with the final aggregate representation C i ∈ R H denotes a  score for each choice i. The probability distribution is the softmax over the four choices:</p><formula xml:id="formula_10">P i = e V ·C i 4 j=1 e V ·C j</formula><p>We fine-tune the model for 3 epochs with a learning rate of 2e-5 and a batch size of 16. Results are presented in <ref type="table" target="#tab_11">Table 4</ref>. BERT LARGE outperforms the authors' baseline ESIM+ELMo system by +27.1%.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Ablation Studies</head><p>Although we have demonstrated extremely strong empirical results, the results presented so far have not isolated the specific contributions from each aspect of the BERT framework. In this section, we perform ablation experiments over a number of facets of BERT in order to better understand their relative importance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Effect of Pre-training Tasks</head><p>One of our core claims is that the deep bidirectionality of BERT, which is enabled by masked LM pre-training, is the single most important improvement of BERT compared to previous work. To give evidence for this claim, we evaluate two new models which use the exact same pre-training data, fine-tuning scheme and Transformer hyperparameters as BERT BASE :</p><p>1. No NSP: A model which is trained using the "masked LM" (MLM) but without the "next sentence prediction" (NSP) task.</p><p>2. LTR &amp; No NSP: A model which is trained using a Left-to-Right (LTR) LM, rather than an MLM. In this case, we predict every input word and do not apply any masking. The left-only constraint was also applied at finetuning, because we found it is always worse to pre-train with left-only-context and finetune with bidirectional context. Additionally, this model was pre-trained without the NSP task. This is directly comparable to OpenAI GPT, but using our larger training dataset, our input representation, and our fine-tuning scheme.</p><p>Results are presented in <ref type="table" target="#tab_13">Table 5</ref>. We first examine the impact brought by the NSP task. We can see that removing NSP hurts performance significantly on QNLI, MNLI, and SQuAD. These results demonstrate that our pre-training method is critical in obtaining the strong empirical results presented previously.</p><p>Next, we evaluate the impact of training bidirectional representations by comparing "No NSP" to "LTR &amp; No NSP". The LTR model performs worse than the MLM model on all tasks, with extremely large drops on MRPC and SQuAD. For SQuAD it is intuitively clear that an LTR model will perform very poorly at span and token prediction, since the token-level hidden states have no right-side context. For MRPC is unclear whether the poor performance is due to the small data size or the nature of the task, but we found this poor performance to be consistent across a full hyperparameter sweep with many random restarts.</p><p>In order make a good faith attempt at strengthening the LTR system, we tried adding a randomly initialized BiLSTM on top of it for finetuning. This does significantly improve results on SQuAD, but the results are still far worse than the  pre-trained bidirectional models. It also hurts performance on all four GLUE tasks. We recognize that it would also be possible to train separate LTR and RTL models and represent each token as the concatenation of the two models, as ELMo does. However: (a) this is twice as expensive as a single bidirectional model; (b) this is non-intuitive for tasks like QA, since the RTL model would not be able to condition the answer on the question; (c) this it is strictly less powerful than a deep bidirectional model, since a deep bidirectional model could choose to use either left or right context.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Effect of Model Size</head><p>In this section, we explore the effect of model size on fine-tuning task accuracy. We trained a number of BERT models with a differing number of layers, hidden units, and attention heads, while otherwise using the same hyperparameters and training procedure as described previously.</p><p>Results on selected GLUE tasks are shown in <ref type="table">Table 6</ref>. In this table, we report the average Dev Set accuracy from 5 random restarts of fine-tuning. We can see that larger models lead to a strict accuracy improvement across all four datasets, even for MRPC which only has 3,600 labeled training examples, and is substantially different from the pre-training tasks. It is also perhaps surprising that we are able to achieve such significant improvements on top of models which are already quite large relative to the existing literature. For example, the largest Transformer explored in <ref type="bibr" target="#b33">Vaswani et al. (2017)</ref> is (L=6, H=1024, A=16) with 100M parameters for the encoder, and the largest Transformer we have found in the literature is (L=64, H=512, A=2) with 235M parameters (Al- <ref type="bibr" target="#b0">Rfou et al., 2018</ref>  <ref type="table">Table 6</ref>: Ablation over BERT model size. #L = the number of layers; #H = hidden size; #A = number of attention heads. "LM (ppl)" is the masked LM perplexity of held-out training data.</p><p>contains 110M parameters and BERT LARGE contains 340M parameters. It has been known for many years that increasing the model size will lead to continual improvements on large-scale tasks such as machine translation and language modeling, which is demonstrated by the LM perplexity of held-out training data shown in <ref type="table">Table 6</ref>. However, we believe that this is the first work to demonstrate that scaling to extreme model sizes also leads to large improvements on very small scale tasks, provided that the model has been sufficiently pre-trained. <ref type="figure" target="#fig_3">Figure 4</ref> presents MNLI Dev accuracy after finetuning from a checkpoint that has been pre-trained for k steps. This allows us to answer the following questions:</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Effect of Number of Training Steps</head><p>1. Question: Does BERT really need such a large amount of pre-training (128,000 words/batch * 1,000,000 steps) to achieve high fine-tuning accuracy? Answer: Yes, BERT BASE achieves almost 1.0% additional accuracy on MNLI when trained on 1M steps compared to 500k steps.</p><p>2. Question: Does MLM pre-training converge slower than LTR pre-training, since only 15% of words are predicted in each batch rather than every word?</p><p>Answer: The MLM model does converge slightly slower than the LTR model. However, in terms of absolute accuracy the MLM model begins to outperform the LTR model almost immediately. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Feature-based Approach with BERT</head><p>All of the BERT results presented so far have used the fine-tuning approach, where a simple classification layer is added to the pre-trained model, and all parameters are jointly fine-tuned on a downstream task. However, the feature-based approach, where fixed features are extracted from the pretrained model, has certain advantages. First, not all NLP tasks can be easily be represented by a Transformer encoder architecture, and therefore require a task-specific model architecture to be added. Second, there are major computational benefits to being able to pre-compute an expensive representation of the training data once and then run many experiments with less expensive models on top of this representation.</p><p>In this section we evaluate how well BERT performs in the feature-based approach by generating ELMo-like pre-trained contextual representations on the CoNLL-2003 NER task. To do this, we use the same input representation as in Section 4.3, but use the activations from one or more layers without fine-tuning any parameters of BERT. These contextual embeddings are used as input to a randomly initialized two-layer 768-dimensional BiL-STM before the classification layer.</p><p>Results are shown in <ref type="table">Table 7</ref>. The best performing method is to concatenate the token representations from the top four hidden layers of the pretrained Transformer, which is only 0.3 F1 behind fine-tuning the entire model. This demonstrates that BERT is effective for both the fine-tuning and feature-based approaches.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Layers</head><p>Dev  <ref type="table">Table 7</ref>: Ablation using BERT with a feature-based approach on CoNLL-2003 NER. The activations from the specified layers are combined and fed into a two-layer BiLSTM, without backpropagation to BERT.</p><p>Recent empirical improvements due to transfer learning with language models have demonstrated that rich, unsupervised pre-training is an integral part of many language understanding systems. In particular, these results enable even low-resource tasks to benefit from very deep unidirectional architectures. Our major contribution is further generalizing these findings to deep bidirectional architectures, allowing the same pre-trained model to successfully tackle a broad set of NLP tasks. While the empirical results are strong, in some cases surpassing human performance, important future work is to investigate the linguistic phenomena that may or may not be captured by BERT.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Differences in pre-training model architectures. BERT uses a bidirectional Transformer. OpenAI GPT uses a left-to-right Transformer. ELMo uses the concatenation of independently trained left-to-right and rightto-left LSTM to generate features for downstream tasks. Among three, only BERT representations are jointly conditioned on both left and right context in all layers.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head></head><label></label><figDesc>For ex- ample: Input = [CLS] the man went to [MASK] store [SEP] he bought a gallon [MASK] milk [SEP] Label = IsNext Input = [CLS] the man [MASK] to the store [SEP] penguin [MASK] are flight ##less birds [SEP]</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Our task specific models are formed by incorporating BERT with one additional output layer, so a minimal number of parameters need to be learned from scratch. Among the tasks, (a) and (b) are sequence-level tasks while (c) and (d) are token-level tasks. In the figure, E represents the input embedding, T i represents the contextual representation of token i, [CLS] is the special symbol for classification output, and [SEP] is the special symbol to separate non-consecutive token sequences.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Ablation over number of training steps. This shows the MNLI accuracy after fine-tuning, starting from model parameters that have been pre-trained for k steps. The x-axis is the value of k.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head>BERT (Ours)</head><label>BERT</label><figDesc></figDesc><table>Trm 
+Trm 
+Trm 
+
+Trm 
+Trm 
+Trm 
+
+... 
+
+... 
+
+Trm 
+Trm 
+Trm 
+
+Trm 
+Trm 
+Trm 
+
+... 
+
+... 
+
+OpenAI GPT 
+
+Lstm 
+
+ELMo 
+
+Lstm 
+Lstm 
+
+Lstm 
+Lstm 
+Lstm 
+
+Lstm 
+Lstm 
+Lstm 
+
+Lstm 
+Lstm 
+Lstm 
+
+T 1 
+T 2 
+T N 
+
+... 
+
+... 
+
+... 
+
+... 
+
+... 
+
+E 1 
+E 2 
+E N 
+
+... 
+
+T 1 
+T 2 
+T N 
+
+... 
+
+E 1 
+E 2 
+E N 
+
+... 
+
+T 1 
+T 2 
+T N 
+
+... 
+
+E 1 
+E 2 
+E N 
+
+... 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>3</head><label>3</label><figDesc></figDesc><table>Published 
+BiDAF+ELMo (Single) 
+-85.8 -
+-
+R.M. Reader (Single) 
+78.9 86.3 79.5 86.6 
+R.M. Reader (Ensemble) 
+81.2 87.9 82.3 88.5 
+
+Ours 
+BERTBASE (Single) 
+80.8 88.5 -
+-
+BERTLARGE (Single) 
+84.1 90.9 -
+-
+BERTLARGE (Ensemble) 
+85.8 91.8 -
+-
+BERTLARGE (Sgl.+TriviaQA) 84.2 91.1 85.1 91.8 
+BERTLARGE (Ens.+TriviaQA) 86.2 92.2 87.4 93.2 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head>Table 2 :</head><label>2</label><figDesc>SQuAD results. The BERT ensemble is 7x systems which use different pre-training checkpoints and fine-tuning seeds.</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_9" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>CoNLL-2003 Named Entity Recognition re-
+sults. The hyperparameters were selected using the 
+Dev set, and the reported Dev and Test scores are aver-
+aged over 5 random restarts using those hyperparame-
+ters. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_11" validated="false"><head>Table 4 :</head><label>4</label><figDesc>SWAG Dev and Test accuracies. Test results were scored against the hidden labels by the SWAG au- thors. † Human performance is measure with 100 sam- ples, as reported in the SWAG paper.</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_13" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Ablation over the pre-training tasks using the 
+BERT BASE architecture. "No NSP" is trained without 
+the next sentence prediction task. "LTR &amp; No NSP" is 
+trained as a left-to-right LM without the next sentence 
+prediction, like OpenAI GPT. "+ BiLSTM" adds a ran-
+domly initialized BiLSTM on top of the "LTR + No 
+NSP" model during fine-tuning. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_14" validated="false"><head>). By contrast, BERT BASE</head><label></label><figDesc></figDesc><table>Hyperparams 
+Dev Set Accuracy 
+
+#L 
+#H #A LM (ppl) MNLI-m MRPC SST-2 
+
+3 768 12 
+5.84 
+77.9 
+79.8 
+88.4 
+6 768 3 
+5.24 
+80.6 
+82.2 
+90.7 
+6 768 12 
+4.68 
+81.9 
+84.8 
+91.3 
+12 768 12 
+3.99 
+84.4 
+86.7 
+92.9 
+12 1024 16 
+3.54 
+85.7 
+86.9 
+93.3 
+24 1024 16 
+3.23 
+86.6 
+87.8 
+93.7 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_15" validated="false"><head>F1</head><label></label><figDesc></figDesc><table>Finetune All 
+96.4 
+
+First Layer (Embeddings) 91.0 
+Second-to-Last Hidden 
+95.6 
+Last Hidden 
+94.9 
+Sum Last Four Hidden 
+95.9 
+Concat Last Four Hidden 
+96.1 
+Sum All 12 Layers 
+95.5 
+
+</table></figure>
+
+			<note place="foot" n="4"> Throughout this work, a &quot;sentence&quot; can be an arbitrary span of contiguous text, rather than an actual linguistic sentence. A &quot;sequence&quot; refers to the input token sequence to BERT, which may be a single sentence or two sentences packed together.</note>
+
+			<note place="foot" n="5"> https://cloudplatform.googleblog.com/2018/06/Cloud-TPU-now-offers-preemptible-pricing-and-globalavailability.html</note>
+
+			<note place="foot" n="8"> https://gluebenchmark.com/leaderboard</note>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Character-level language modeling with deeper self-attention</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rami</forename><surname>Al-Rfou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dokook</forename><surname>Choe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><surname>Constant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mandy</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Llion</forename><surname>Jones</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1808.04444</idno>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">A framework for learning predictive structures from multiple tasks and unlabeled data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kubota</forename><surname>Rie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tong</forename><surname>Ando</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="page" from="1817" to="1853" />
+			<date type="published" when="2005-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">The fifth PASCAL recognizing textual entailment challenge</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luisa</forename><surname>Bentivogli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bernardo</forename><surname>Magnini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ido</forename><surname>Dagan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hoa</forename><forename type="middle">Trang</forename><surname>Dang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danilo</forename><surname>Giampiccolo</surname></persName>
+		</author>
+		<editor>TAC. NIST</editor>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Domain adaptation with structural correspondence learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Blitzer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Mcdonald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fernando</forename><surname>Pereira</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2006 conference on empirical methods in natural language processing</title>
+		<meeting>the 2006 conference on empirical methods in natural language processing</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="120" to="128" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">A large annotated corpus for learning natural language inference</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Samuel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gabor</forename><surname>Bowman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Angeli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Potts</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP. Association for Computational Linguistics</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Class-based n-gram models of natural language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Peter F Brown</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Peter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert</forename><forename type="middle">L</forename><surname>Desouza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent J Della</forename><surname>Mercer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jenifer C</forename><surname>Pietra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lai</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational linguistics</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="467" to="479" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Cer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mona</forename><surname>Diab</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eneko</forename><surname>Agirre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Inigo</forename><surname>Lopezgazpio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lucia</forename><surname>Specia</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1708.00055</idno>
+		<title level="m">Semeval-2017 task 1: Semantic textual similarity-multilingual and cross-lingual focused evaluation</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">One billion word benchmark for measuring progress in statistical language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ciprian</forename><surname>Chelba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qi</forename><surname>Ge</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1312.3005</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+	<note>Thorsten Brants, Phillipp Koehn, and Tony Robinson</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Quora question pairs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Zhao</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Semi-supervised sequence modeling with cross-view training</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minh-Thang</forename><surname>Luong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc V</forename><surname>Le</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1809.08370</idno>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">A unified architecture for natural language processing: Deep neural networks with multitask learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronan</forename><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 25th International Conference on Machine Learning, ICML &apos;08</title>
+		<meeting>the 25th International Conference on Machine Learning, ICML &apos;08</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Supervised learning of universal sentence representations from natural language inference data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexis</forename><surname>Conneau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Douwe</forename><surname>Kiela</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Holger</forename><surname>Schwenk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lo¨ıclo¨ıc</forename><surname>Barrault</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2017 Conference on Empirical Methods in Natural Language Processing<address><addrLine>Copenhagen, Denmark</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="670" to="680" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Semi-supervised sequence learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Andrew</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc V</forename><surname>Dai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Le</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="3079" to="3087" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">ImageNet: A Large-Scale Hierarchical Image Database</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Deng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Dong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L.-J</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Feifei</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CVPR09</title>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Automatically constructing a corpus of sentential paraphrases</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>William</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dolan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Brockett</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Third International Workshop on Paraphrasing (IWP2005)</title>
+		<meeting>the Third International Workshop on Paraphrasing (IWP2005)</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Bridging nonlinearities and stochastic regularizers with gaussian error linear units</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Hendrycks</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Gimpel</surname></persName>
+		</author>
+		<idno>abs/1606.08415</idno>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Universal language model fine-tuning for text classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeremy</forename><surname>Howard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Ruder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Triviaqa: A large scale distantly supervised challenge dataset for reading comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mandar</forename><surname>Joshi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eunsol</forename><surname>Choi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Daniel S Weld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Skip-thought vectors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Kiros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yukun</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Ruslan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raquel</forename><surname>Zemel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antonio</forename><surname>Urtasun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sanja</forename><surname>Torralba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Fidler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="3294" to="3302" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Distributed representations of sentences and documents</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Machine Learning</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1188" to="1196" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">The winograd schema challenge</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ernest</forename><surname>Hector J Levesque</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Leora</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Morgenstern</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Aaai spring symposium: Logical formalizations of commonsense reasoning</title>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="volume">46</biblScope>
+			<biblScope unit="page">47</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">An efficient framework for learning sentence representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lajanugen</forename><surname>Logeswaran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Honglak</forename><surname>Lee</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Learned in translation: Contextualized word vectors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bryan</forename><surname>Mccann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Distributed representations of words and phrases and their compositionality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<publisher>Curran Associates, Inc</publisher>
+			<date type="published" when="2013" />
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="page" from="3111" to="3119" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Empirical Methods in Natural Language Processing (EMNLP)</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1532" to="1543" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Semi-supervised sequence tagging with bidirectional language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Peters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Waleed</forename><surname>Ammar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chandra</forename><surname>Bhagavatula</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Russell</forename><surname>Power</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Deep contextualized word representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Peters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Neumann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohit</forename><surname>Iyyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matt</forename><surname>Gardner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Improving language understanding with unsupervised learning. Technical report</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alec</forename><surname>Radford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karthik</forename><surname>Narasimhan</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2018" />
+			<publisher>OpenAI</publisher>
+		</imprint>
+	</monogr>
+	<note>Tim Salimans, and Ilya Sutskever</note>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">Squad: 100,000+ questions for machine comprehension of text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pranav</forename><surname>Rajpurkar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Konstantin</forename><surname>Lopyrev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.05250</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Recursive deep models for semantic compositionality over a sentiment treebank</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Perelygin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jean</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Chuang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Christopher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Potts</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2013 conference on empirical methods in natural language processing</title>
+		<meeting>the 2013 conference on empirical methods in natural language processing</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1631" to="1642" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">cloze procedure: A new tool for measuring readability</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Wilson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Taylor</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journalism Bulletin</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="415" to="433" />
+			<date type="published" when="1953" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Introduction to the conll-2003 shared task: Language-independent named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erik F Tjong Kim</forename><surname>Sang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fien De</forename><surname>Meulder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the seventh conference on Natural language learning at HLT-NAACL 2003</title>
+		<meeting>the seventh conference on Natural language learning at HLT-NAACL 2003</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="142" to="147" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Word representations: A simple and general method for semi-supervised learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joseph</forename><surname>Turian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lev</forename><surname>Ratinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 48th Annual Meeting of the Association for Computational Linguistics, ACL &apos;10</title>
+		<meeting>the 48th Annual Meeting of the Association for Computational Linguistics, ACL &apos;10</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="384" to="394" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Attention is all you need</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Vaswani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Niki</forename><surname>Parmar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jakob</forename><surname>Uszkoreit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Llion</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aidan</forename><forename type="middle">N</forename><surname>Gomez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Illia</forename><surname>Polosukhin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="6000" to="6010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Extracting and composing robust features with denoising autoencoders</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pascal</forename><surname>Vincent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hugo</forename><surname>Larochelle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pierre-Antoine</forename><surname>Manzagol</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 25th international conference on Machine learning</title>
+		<meeting>the 25th international conference on Machine learning</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="1096" to="1103" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Amapreet</forename><surname>Singh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julian</forename><surname>Michael</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Felix</forename><surname>Hill</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Omer</forename><surname>Levy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samuel R</forename><surname>Bowman</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1804.07461</idno>
+		<title level="m">Glue: A multi-task benchmark and analysis platform for natural language understanding</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

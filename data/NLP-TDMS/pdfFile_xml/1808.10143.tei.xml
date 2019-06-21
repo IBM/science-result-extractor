@@ -1,0 +1,1340 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:44+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Direct Output Connection for a High-Rank Language Model</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sho</forename><surname>Takase</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">†NTT Communication Science Laboratories ‡Tohoku University</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Suzuki</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">†NTT Communication Science Laboratories ‡Tohoku University</orgName>
+							</affiliation>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Masaaki</forename><surname>Nagata</surname></persName>
+							<email>nagata.masaaki@lab.ntt.co.jpjun.suzuki@ecei.tohoku.ac.jp</email>
+							<affiliation key="aff0">
+								<orgName type="institution">†NTT Communication Science Laboratories ‡Tohoku University</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Direct Output Connection for a High-Rank Language Model</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>This paper proposes a state-of-the-art recurrent neural network (RNN) language model that combines probability distributions computed not only from a final RNN layer but also from middle layers. Our proposed method raises the expressive power of a language model based on the matrix factorization interpretation of language modeling introduced by Yang et al. (2018). The proposed method improves the current state-of-the-art language model and achieves the best score on the Penn Treebank and WikiText-2, which are the standard benchmark datasets. Moreover, we indicate our proposed method contributes to two application tasks: machine translation and headline generation. Our code is publicly available at: https://github.com/nttcslab-nlp/doc lm.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Neural network language models have played a central role in recent natural language processing (NLP) advances. For example, neural encoderdecoder models, which were successfully applied to various natural language generation tasks including machine translation ), summarization <ref type="bibr" target="#b28">(Rush et al., 2015)</ref>, and dialogue ( <ref type="bibr" target="#b38">Wen et al., 2015</ref>), can be interpreted as conditional neural language models. Neural language models also positively influence syntactic parsing ( <ref type="bibr" target="#b4">Dyer et al., 2016;</ref><ref type="bibr" target="#b3">Choe and Charniak, 2016)</ref>. Moreover, such word embedding methods as Skipgram ( <ref type="bibr" target="#b22">Mikolov et al., 2013</ref>) and vLBL <ref type="bibr" target="#b23">(Mnih and Kavukcuoglu, 2013</ref>) originated from neural language models designed to handle much larger vocabulary and data sizes. Neural language models can also be used as contextualized word representations ( <ref type="bibr" target="#b25">Peters et al., 2018</ref>). Thus, language modeling is a good benchmark task for investigating the general frameworks of neural methods in NLP field.</p><p>In language modeling, we compute joint probability using the product of conditional probabilities. Let w 1:T be a word sequence with length T : w 1 , ..., w T . We obtain the joint probability of word sequence w 1:T as follows: p(w 1:T ) = p(w 1 )</p><p>T −1 t=1 p(w t+1 |w 1:t ).</p><p>(1) p(w 1 ) is generally assumed to be 1 in this literature, that is, p(w 1 ) = 1, and thus we can ignore its calculation. See the implementation of <ref type="bibr" target="#b40">Zaremba et al. (2014)</ref> 1 , for an example. RNN language models obtain conditional probability p(w t+1 |w 1:t ) from the probability distribution of each word. To compute the probability distribution, RNN language models encode sequence w 1:t into a fixed-length vector and apply a transformation matrix and the softmax function. Previous researches demonstrated that RNN language models achieve high performance by using several regularizations and selecting appropriate hyperparameters ( <ref type="bibr" target="#b18">Melis et al., 2018;</ref><ref type="bibr" target="#b19">Merity et al., 2018</ref>). However, <ref type="bibr" target="#b39">Yang et al. (2018)</ref> proved that existing RNN language models have low expressive power due to the Softmax bottleneck, which means the output matrix of RNN language models is low rank when we interpret the training of RNN language models as a matrix factorization problem. To solve the Softmax bottleneck, <ref type="bibr" target="#b39">Yang et al. (2018)</ref> proposed Mixture of Softmaxes (MoS), which increases the rank of the matrix by combining multiple probability distributions computed from the encoded fixed-length vector.</p><p>In this study, we propose Direct Output Connection (DOC) as a generalization of MoS. For stacked RNNs, DOC computes the probability distributions from the middle layers including input embeddings. In addition to raising the rank, the proposed method helps weaken the vanishing gradient problem in backpropagation because DOC provides a shortcut connection to the output.</p><p>We conduct experiments on standard benchmark datasets for language modeling: the Penn Treebank and WikiText-2. Our experiments demonstrate that DOC outperforms MoS and achieves state-of-theart perplexities on each dataset. Moreover, we investigate the effect of DOC on two applications: machine translation and headline generation. We indicate that DOC can improve the performance of an encoder-decoder with an attention mechanism, which is a strong baseline for such applications. In addition, we conduct an experiment on the Penn Treebank constituency parsing task to investigate the effectiveness of DOC.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RNN Language Model</head><p>In this section, we briefly overview RNN language models. Let V be the vocabulary size and let P t ∈ R V be the probability distribution of the vocabulary at timestep t. Moreover, let D h n be the dimension of the hidden state of the n-th RNN, and let D e be the dimensions of the embedding vectors. Then the RNN language models predict probability distribution P t+1 by the following equation:</p><formula xml:id="formula_0">P t+1 = softmax(W h N t ),<label>(2)</label></formula><formula xml:id="formula_1">h n t = f (h n−1 t , h n t−1 ),<label>(3)</label></formula><formula xml:id="formula_2">h 0 t = Ex t ,<label>(4)</label></formula><p>where W ∈ R V ×D h N is a weight matrix 2 , E ∈ R De×V is a word embedding matrix, x t ∈ {0, 1} V is a one-hot vector of input word w t at timestep t, and h n t ∈ R D h n is the hidden state of the n-th RNN at timestep t. We define h n t at timestep t = 0 as a zero vector: h n 0 = 0. Let f (·) represent an abstract function of an RNN, which might be the Elman network <ref type="bibr" target="#b5">(Elman, 1990)</ref>, the Long Short-Term Memory (LSTM) <ref type="bibr" target="#b9">(Hochreiter and Schmidhuber, 1997</ref>  <ref type="bibr" target="#b39">Yang et al. (2018)</ref> indicated that the training of language models can be interpreted as a matrix factorization problem. In this section, we briefly introduce their description. Let word sequence w 1:t be context c t . Then we can regard a natural language as a finite set of the pairs of a context and its conditional probability distribution:</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Language Modeling as Matrix Factorization</head><formula xml:id="formula_3">L = {(c 1 , P * (X|c 1 )), ..., (c U , P * (X|c U ))},</formula><p>where U is the number of possible contexts and X ∈ {0, 1} V is a variable representing a onehot vector of a word. Here, we consider matrix A ∈ R U ×V that represents the true log probability distributions and matrix H ∈ R U ×D h N that contains the hidden states of the final RNN layer for each context c t :</p><formula xml:id="formula_4">A =     logP * (X|c 1 ) logP * (X|c 2 ) ... logP * (X|c U )     ; H =     h N c 1 h N c 2 ... h N c U     . (5)</formula><p>Then we obtain set of matrices F (A) = {A + ΛS}, where S ∈ R U ×V is an all-ones matrix, and Λ ∈ R U ×U is a diagonal matrix. F (A) contains matrices that shifted each row of A by an arbitrary real number. In other words, if we take a matrix from F (A) and apply the softmax function to each of its rows, we obtain a matrix that consists of true probability distributions. Therefore, for some A ∈ F (A), training RNN language models is to find the parameters satisfying the following equation:  In summary, <ref type="bibr" target="#b39">Yang et al. (2018)</ref> indicated that D h N is much smaller than rank(A) because its scale is usually 10 2 and vocabulary size V is at least 10 4 .</p><formula xml:id="formula_5">HW = A .<label>(6</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Proposed Method: Direct Output Connection</head><p>To construct a high-rank matrix, <ref type="bibr" target="#b39">Yang et al. (2018)</ref> proposed Mixture of Softmaxes (MoS). MoS computes multiple probability distributions from the hidden state of final RNN layer h N and regards the weighted average of the probability distributions as the final distribution. In this study, we propose Direct Output Connection (DOC), which is a generalization method of MoS. DOC computes probability distributions from the middle layers in addition to the final layer. In other words, DOC directly connects the middle layers to the output. <ref type="figure" target="#fig_0">Figure 1</ref> shows an overview of DOC, that uses the middle layers (including word embeddings) to compute the probability distributions. <ref type="figure" target="#fig_0">Figure 1</ref> computes three probability distributions from all the layers, but we can vary the number of probability distributions for each layer and select some layers to avoid. In our experiments, we search for the appropriate number of probability distributions for each layer.</p><p>Formally, instead of Equation 2, DOC computes the output probability distribution at timestep t + 1 by the following equation:</p><formula xml:id="formula_6">P t+1 = J j=1 π j,ct softmax( ˜ W k j,ct ),<label>(7)</label></formula><p>s.t.</p><formula xml:id="formula_7">J j=1 π j,ct = 1,<label>(8)</label></formula><p>where π j,ct is a weight for each probability distribution, k j,ct ∈ R d is a vector computed from each hidden state h n , and˜Wand˜ and˜W ∈ R V ×d is a weight matrix. Thus, P t+1 is the weighted average of J probability distributions. We define the U × U diagonal matrix whose elements are weight π j,c for each context c as Φ. Then we obtain matrix˜Amatrix˜ matrix˜A ∈ R U ×V :</p><formula xml:id="formula_8">˜ A = log J j=1 Φ softmax(K j ˜ W ),<label>(9)</label></formula><p>where K j ∈ R U ×d is a matrix whose rows are vector k j,c . ˜ A can be an arbitrary high rank because the righthand side of Equation 9 computes not only the matrix multiplication but also a nonlinear function. Therefore, an RNN language model with DOC can output a distribution matrix whose rank is identical to one of the true distributions. In other words, ˜ A is a better approximation of A than the output of a standard RNN language model.</p><p>Next we describe how to acquire weight π j,ct and vector k j,ct . Let π ct ∈ R J be a vector whose elements are weight π j,ct . Then we compute π ct from the hidden state of the final RNN layer:</p><formula xml:id="formula_9">π ct = softmax(W π h N t ),<label>(10)</label></formula><p>where W π ∈ R J×D h N is a weight matrix. We next compute k j,ct from the hidden state of the n-th RNN layer:</p><formula xml:id="formula_10">k j,ct = W j h n t ,<label>(11)</label></formula><p>where W j ∈ R d×D h n is a weight matrix. In addition, let i n be the number of k j,ct from h n t . Then we define the sum of i n for all n as J; that is, N n=0 i n = J. In short, DOC computes J probability distributions from all the layers, including the input embedding (h 0 ). For i N = J, DOC becomes identical to MoS. In addition to increasing the rank, we expect that DOC weakens the vanishing gradient problem during backpropagation because a middle layer is directly connected to the output, such as with the auxiliary classifiers described in <ref type="bibr" target="#b35">Szegedy et al. (2015)</ref>.</p><p>For a network that computes the weights for several vectors, such as Equation 10, <ref type="bibr" target="#b30">Shazeer et al. (2017)</ref> indicated that it often converges to a state where it always produces large weights for few vectors. In fact, we observed that DOC tends to assign large weights to shallow layers. To prevent this phenomenon, we compute the coefficient of variation of Equation 10 in each mini-batch as a regularization term following <ref type="bibr" target="#b30">Shazeer et al. (2017)</ref>. In other words, we try to adjust the sum of the weights for each probability distribution with identical values in each mini-batch. Formally, we compute the following equation for a mini-batch consisting of w b , w b+1 , ..., w ˜ b :</p><formula xml:id="formula_11">B = ˜ b t=b π ct (12) β = std(B) avg(B) 2 ,<label>(13)</label></formula><p>where functions std(·) and avg(·) are functions that respectively return an input's standard deviation and its average. In the training step, we add λ β multiplied by weight coefficient β to the loss function.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Experiments on Language Modeling</head><p>We investigate the effect of DOC on the language modeling task. In detail, we conduct word-level prediction experiments and show that DOC improves the performance of MoS, which only uses the final layer to compute the probability distributions. Moreover, we evaluate various combinations of layers to explore which combination achieves the best score.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Datasets</head><p>We used the Penn Treebank (PTB) ( </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Hyperparameters</head><p>Our implementation is based on the averaged stochastic gradient descent Weight-Dropped LSTM (AWD-LSTM) <ref type="bibr">5</ref> proposed by <ref type="bibr" target="#b19">Merity et al. (2018</ref>   dropout rate for vector k j,ct and the non-monotone interval. Since we found that the dropout rate for vector k j,ct greatly influences β in Equation 13, we varied it from 0.3 to 0.6 with 0.1 intervals. We selected 0.6 because this value achieved the best score on the PTB validation dataset. For the nonmonotone interval, we adopted the same value as <ref type="bibr" target="#b43">Zolna et al. (2018)</ref>. <ref type="table" target="#tab_4">Table 2</ref> summarizes the hyperparameters of our experiments.    represents the number of probability distributions from hidden state h n t . To find the best combination, we varied the number of probability distributions from each layer by fixing their total to 20: J = 20. Moreover, the top row of <ref type="table" target="#tab_5">Table 3</ref> shows the perplexity of AWD-LSTM with MoS reported in <ref type="bibr" target="#b39">Yang et al. (2018)</ref> for comparison. <ref type="table" target="#tab_5">Table 3</ref> indicates that language models using middle layers outperformed one using only the final layer. In addition, <ref type="table" target="#tab_5">Table  3</ref> shows that increasing the distributions from the final layer (i 3 = 20) degraded the score from the language model with i 3 = 15 (the top row of Table 3). Thus, to obtain a superior language model, we should not increase the number of distributions from the final layer; we should instead use the middle layers, as with our proposed DOC. <ref type="table" target="#tab_5">Table 3</ref> shows that the i 3 = 15, i 2 = 5 setting achieved the best performance and the other settings with shallow layers have a little effect. This result implies that we need some layers to output accurate distributions. In fact, most previous studies adopted two LSTM layers for language modeling. This suggests that we need at least two layers to obtain high-quality distributions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Results</head><p>For the i 3 = 15, i 2 = 5 setting, we explored  <ref type="table">Table 6</ref>: Perplexities of our implementations and reruns on the PTB dataset. We set the non-monotone interval to 60. † represents results obtained by original implementations with identical hyperparameters except for non-monotone interval. ‡ indicates the result obtained by our AWD-LSTM-MoS implementation with identical dropout rates as AWD-LSTM-DOC. For (fin), we repeated fine-tuning until convergence. the effect of λ β in {0, 0.01, 0.001, 0.0001}. Although <ref type="table" target="#tab_5">Table 3</ref> shows that λ β = 0.001 achieved the best perplexity, the effect is not consistent. <ref type="table" target="#tab_7">Ta- ble 4</ref> shows the coefficient of variation of Equation 10, i.e., √ β in the PTB dataset. This table demonstrates that the coefficient of variation decreases with growth in λ β . In other words, the model trained with a large λ β assigns balanced weights to each probability distribution. These results indicate that it is not always necessary to equally use each probability distribution, but we can acquire a better model in some λ β . Hereafter, we refer to the setting that achieved the best score (i 3 = 15, i 2 = 5, λ β = 0.001) as AWD-LSTM-DOC. <ref type="table" target="#tab_8">Table 5</ref> shows the ranks of matrices containing log probability distributions from each method. In other words, <ref type="table" target="#tab_8">Table 5</ref> describes˜Adescribes˜ describes˜A in Equation 9 for each method. As shown by this table, the output of AWD-LSTM is restricted to D 3 7 . In contrast, AWD-LSTM-MoS ( <ref type="bibr" target="#b39">Yang et al., 2018)</ref> and AWD-LSTM-DOC outputted matrices whose ranks equal the vocabulary size. This fact indicates that DOC (including MoS) can output the same matrix as the true distributions in view of a rank. <ref type="figure" target="#fig_1">Figure 2</ref> illustrates the learning curves of each method on PTB. This figure contains the validation scores of AWD-LSTM, AWD-LSTM-MoS, and AWD-LSTM-DOC at each training epoch. We trained AWD-LSTM and AWD-LSTM-MoS by setting the non-monotone interval to 60, as with AWD-LSTM-DOC. In other words, we used hyperparameters identical to the original ones to train AWD-LSTM and AWD-LSTM-MoS, except for the non-monotone interval. We note that the optimization method converts the ordinary stochastic   <ref type="bibr" target="#b7">Gal and Ghahramani, 2016)</ref> 20M 81.9 ± 0.2 79.7 ± 0.1 Variational LSTM (large) ( <ref type="bibr" target="#b7">Gal and Ghahramani, 2016</ref>   gradient descent (SGD) into the averaged SGD at the point where convergence almost occurs. In <ref type="figure" target="#fig_1">Fig- ure 2</ref>, the turning point is the epoch when each method drastically decreases the perplexity. <ref type="figure" target="#fig_1">Figure  2</ref> shows that each method similarly reduces the perplexity at the beginning. AWD-LSTM and AWD-LSTM-MoS were slow to decrease the perplexity from 50 epochs. In contrast, AWD-LSTM-DOC constantly decreased the perplexity and achieved a lower value than the other methods with ordinary SGD. Therefore, we conclude that DOC positively affects the training of language modeling. <ref type="table">Table 6</ref> shows the AWD-LSTM, AWD-LSTMMoS, and AWD-LSTM-DOC results in our configurations. For AWD-LSTM-MoS, we trained our implementation with the same dropout rates as AWD-LSTM-DOC for a fair comparison. AWD-LSTM-DOC outperformed both the original AWD-LSTM-MoS and our implementation. In other words, DOC outperformed MoS.</p><p>Since the averaged SGD uses the averaged parameters from each update step, the parameters of the early steps are harmful to the final parameters. Therefore, when the model converges, recent studies and ours eliminate the history of and then retrains the model. <ref type="bibr" target="#b19">Merity et al. (2018)</ref> referred to this retraining process as fine-tuning. Although most previous studies only conducted fine-tuning once, <ref type="bibr" target="#b43">Zolna et al. (2018)</ref> argued that two finetunings provided additional improvement. Thus, we repeated fine-tuning until we achieved no more improvements in the validation data. We refer to the model as AWD-LSTM-DOC (fin) in <ref type="table">Table 6</ref>, which shows that repeated fine-tunings improved the perplexity by about 0.5. <ref type="table" target="#tab_12">Tables 7 and 8</ref> respectively show the perplexities of AWD-LSTM-DOC and previous studies on PTB and WikiText-2 8 . These tables show that AWD-LSTM-DOC achieved the best perplexity. AWD-LSTM-DOC improved the perplexity by almost 2.0 on PTB and 3.5 on WikiText-2 from the state-of-the-art scores. The ensemble technique provided further improvement, as described in previous studies ( <ref type="bibr" target="#b40">Zaremba et al., 2014;</ref>, and improved the perplexity by at least 4 points on both datasets. Finally, the ensemble of the repeated finetuning models achieved 47.17 on the PTB test and 53.09 on the WikiText-2 test.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Experiments on Application Tasks</head><p>As described in Section 1, a neural encoder-decoder model can be interpreted as a conditional language model. To investigate the effect of DOC on an encoder-decoder model, we incorporate DOC into the decoder and examine its performance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Dataset</head><p>We conducted experiments on machine translation and headline generation tasks. For machine translation, we used two kinds of sentence pairs (EnglishGerman and English-French) in the IWSLT 2016 dataset <ref type="bibr">9</ref> . The training set respectively contains about 189K and 208K sentence pairs of EnglishGerman and English-French. We experimented in four settings: from English to German (En-De), its reverse (De-En), from English to French (En-Fr), and its reverse (Fr-En).</p><p>Headline generation is a task that creates a short summarization of an input sentence( <ref type="bibr" target="#b28">Rush et al., 2015)</ref>. <ref type="bibr" target="#b28">Rush et al. (2015)</ref> constructed a headline generation dataset by extracting pairs of first sentences of news articles and their headlines from the annotated English Gigaword corpus ( <ref type="bibr" target="#b24">Napoles et al., 2012</ref>). They also divided the extracted sentenceheadline pairs into three parts: training, validation, and test sets. The training set contains about 3.8M sentence-headline pairs. For our evaluation, we used the test set constructed by <ref type="bibr" target="#b41">Zhou et al. (2017)</ref> because the one constructed by <ref type="bibr" target="#b28">Rush et al. (2015)</ref> contains some invalid instances, as reported in <ref type="bibr" target="#b41">Zhou et al. (2017)</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Encoder-Decoder Model</head><p>For the base model, we adopted an encoder-decoder with an attention mechanism described in <ref type="bibr" target="#b12">Kiyono et al. (2017)</ref>. The encoder consists of a 2-layer bidirectional LSTM, and the decoder consists of a 2-layer LSTM with attention proposed by <ref type="bibr" target="#b16">Luong et al. (2015)</ref>. We interpreted the layer after computing the attention as the 3rd layer of the decoder. We refer to this encoder-decoder as EncDec. For the hyperparameters, we followed the setting of <ref type="bibr" target="#b12">Kiyono et al. (2017)</ref> except for the sizes of hidden states and embeddings. We used 500 for machine   translation and 400 for headline generation. We constructed a vocabulary set by using Byte-PairEncoding 10 (BPE) ( <ref type="bibr" target="#b29">Sennrich et al., 2016)</ref>. We set the number of BPE merge operations at 16K for the machine translation and 5K for the headline generation.</p><note type="other">Model En-De De-En En-Fr Fr-En EncDec 23</note><p>In this experiment, we compare DOC to the base EncDec. We prepared two DOC settings: using only the final layer, that is, a setting that is identical to MoS, and using both the final and middle layers. We used the 2nd and 3rd layers in the latter setting because this case achieved the best performance on the language modeling task in Section 5.3. We set i 3 = 2 and i 2 = 2, i 3 = 2. For this experiment, we modified a publicly available encode-decoder implementation 11 . <ref type="table" target="#tab_15">Table 9</ref> shows the BLEU scores of each method. Since an initial value often drastically varies the result of a neural encoder-decoder, we reported the average of three models trained from different initial values and random seeds. <ref type="table" target="#tab_15">Table 9</ref> indicates that EncDec+DOC outperformed EncDec. <ref type="table" target="#tab_16">Table 10</ref> shows the ROUGE F1 scores of each method. In addition to the results of our implementations (the upper part), the lower part represents the published scores reported in previous studies. For the upper part, we reported the average of three models (as in <ref type="table" target="#tab_15">Table 9</ref>). EncDec+DOC outperformed EncDec on all scores. Moreover, EncDec outperformed the state-of-the-art method ( <ref type="bibr" target="#b41">Zhou et al., 2017</ref>) on the ROUGE-2 and ROUGE-L F1 scores. In other words, our baseline is already very strong. We believe that this is because we adopted a larger embedding size than <ref type="bibr" target="#b41">Zhou et al. (2017)</ref>. It is noteworthy that DOC improved the performance of EncDec even though EncDec is very strong.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Results</head><p>These results indicate that DOC positively influences a neural encoder-decoder model. Using the middle layer also yields further improvement because EncDec+DOC (i 3 = i 2 = 2) outperformed EncDec+DOC (i 3 = 2).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Experiments on Constituency Parsing</head><p>Choe and Charniak (2016) achieved high F1 scores on the Penn Treebank constituency parsing task by transforming candidate trees into a symbol sequence (S-expression) and reranking them based on the perplexity obtained by a neural language model. To investigate the effectiveness of DOC, we evaluate our language models following their configurations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.1">Dataset</head><p>We used the Wall Street Journal of the Penn Treebank dataset. We used the section 2-21 for training, 22 for validation, and 23 for testing. We applied the preprocessing codes of <ref type="bibr">Choe and Char- niak (2016)</ref>  <ref type="bibr">12</ref> to the dataset and converted a token that appears fewer than ten times in the training dataset into a special token unk. For reranking, we prepared 500 candidates obtained by the Charniak parser <ref type="bibr" target="#b1">(Charniak, 2000</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.2">Models</head><p>We compare AWD-LSTM-DOC with AWD-LSTM ( <ref type="bibr" target="#b19">Merity et al., 2018)</ref> and AWD-LSTMMoS ( <ref type="bibr" target="#b39">Yang et al., 2018)</ref>. We trained each model with the same hyperparameters from our language modeling experiments (Section 5). We selected the model that achieved the best perplexity on the validation set during the training. <ref type="table" target="#tab_17">Table 11</ref> shows the bracketing F1 scores on the PTB test set. This table is divided into three parts by horizontal lines; the upper part describes the scores by single language modeling based rerankers, the middle part shows the results by ensembling five rerankers, and the lower part represents the current state-of-the-art scores in the set- </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.3">Results</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>Base Rerank Reranking with single model <ref type="bibr" target="#b3">Choe and Charniak (2016)</ref> 89.7 92.6 AWD-LSTM 89.7 93.2 AWD-LSTM-MoS 89.7 93.2 AWD-LSTM-DOC 89.7 93.3 Reranking with model ensemble AWD-LSTM × 5 (ensemble) 89.7 93.4 AWD-LSTM-MoS × 5 (ensemble) 89.7</p><p>93.4 AWD-LSTM-DOC × 5 (ensemble) 89.7 93.5 AWD-LSTM-DOC × 5 (ensemble) 91.2 94.29 AWD-LSTM-DOC × 5 (ensemble) 93.12 94.47</p><p>State-of-the-art results <ref type="bibr" target="#b4">Dyer et al. (2016)</ref> 91.7 93.3 Fried et al. <ref type="formula" target="#formula_0">(2017) (ensemble)</ref> 92.72 94.25 <ref type="bibr">Suzuki et al. (2018) (ensemble)</ref> 92.74 94.32 <ref type="bibr" target="#b11">Kitaev and Klein (2018)</ref> 95.13 -  <ref type="bibr" target="#b3">and Charniak, 2016)</ref>. Moreover, AWD-LSTM-DOC outperformed AWD-LSTM and AWD-LSTM-MoS. These results correspond to the performance on the language modeling task (Section 5.3). The middle part shows that AWD-LSTM-DOC also outperformed AWD-LSTM and AWD-LSTMMoS in the ensemble setting. In addition, we can improve the performance by exchanging the base parser with a stronger one. In fact, we achieved 94.29 F1 score by reranking the candidates from retrained Recurrent Neural Network Grammars (RNNG) <ref type="bibr" target="#b4">(Dyer et al., 2016)</ref>  <ref type="bibr">13</ref> , that achieved 91.2 F1 score in our configuration. Moreover, the lowest row of the middle part indicates the result by reranking the candidates from the retrained neural encoder-decoder based parser ( <ref type="bibr" target="#b34">Suzuki et al., 2018)</ref>. Our base parser has two different parts from <ref type="bibr" target="#b34">Suzuki et al. (2018)</ref>. First, we used the sum of the hidden states of the forward and backward RNNs as the hidden layer for each RNN <ref type="bibr">14</ref> . Second, we tied the embedding matrix to the weight matrix to compute the probability distributions in the decoder. The retrained parser achieved 93.12 F1 score. Finally, we achieved 94.47 F1 score by reranking its candidates with AWD-LSTM-DOC. We expect that we can achieve even better score by replacing the base parser with the current state-of-the-art one <ref type="bibr" target="#b11">(Kitaev and Klein, 2018</ref>). <ref type="bibr" target="#b0">Bengio et al. (2003)</ref> are pioneers of neural language models. To address the curse of dimensionality in language modeling, they proposed a method using word embeddings and a feed-forward neural network <ref type="figure">(FFNN)</ref>. They demonstrated that their approach outperformed n-gram language models, but FFNN can only handle fixed-length contexts. Instead of FFNN, <ref type="bibr" target="#b21">Mikolov et al. (2010</ref><ref type="bibr">) applied RNN (Elman, 1990</ref> to language modeling to address the entire given sequence as a context. Their method outperformed the Kneser-Ney smoothed 5-gram language model <ref type="bibr" target="#b13">(Kneser and Ney, 1995;</ref><ref type="bibr" target="#b2">Chen and Goodman, 1996)</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Related Work</head><p>Researchers continue to try to improve the performance of RNN language models. <ref type="bibr" target="#b40">Zaremba et al. (2014)</ref> used LSTM <ref type="bibr" target="#b9">(Hochreiter and Schmidhuber, 1997</ref>) instead of a simple RNN for language modeling and significantly improved an RNN language model by applying dropout ( <ref type="bibr" target="#b31">Srivastava et al., 2014</ref>) to all the connections except for the recurrent connections. To regularize the recurrent connections, <ref type="bibr" target="#b7">Gal and Ghahramani (2016)</ref> proposed variational inference-based dropout. Their method uses the same dropout mask at each timestep. <ref type="bibr" target="#b43">Zolna et al. (2018)</ref> proposed fraternal dropout, which minimizes the differences between outputs from different dropout masks to be invariant to the dropout mask. <ref type="bibr" target="#b18">Melis et al. (2018)</ref>   <ref type="bibr" target="#b27">Press and Wolf (2017)</ref> proposed the word tying method (WT), which unifies word embeddings (E in Equation 4) with the weight matrix to compute probability distributions (W in Equation 2). In addition to quantitative evaluation, <ref type="bibr" target="#b10">Inan et al. (2017)</ref> provided a theoretical justification for WT and proposed the augmented loss technique (AL), which computes an objective probability based on word embeddings. In addition to these regularization techniques, <ref type="bibr" target="#b19">Merity et al. (2018)</ref> used DropConnect ( <ref type="bibr" target="#b37">Wan et al., 2013</ref>) and averaged SGD <ref type="bibr" target="#b26">(Polyak and Juditsky, 1992)</ref> for an LSTM language model. Their AWD-LSTM achieved lower perplexity than <ref type="bibr" target="#b18">Melis et al. (2018)</ref> on PTB and WikiText-2.</p><p>Previous studies also explored superior architecture for language modeling. <ref type="bibr" target="#b42">Zilly et al. (2017)</ref> proposed recurrent highway networks that use highway layers <ref type="bibr" target="#b32">(Srivastava et al., 2015)</ref> to deepen recurrent connections. <ref type="bibr" target="#b44">Zoph and Le (2017)</ref> adopted reinforcement learning to construct the best RNN structure. However, as mentioned, <ref type="bibr" target="#b18">Melis et al. (2018)</ref> established that the standard LSTM is superior to these architectures. Apart from RNN architecture,  proposed the input-tooutput gate (IOG), which boosts the performance of trained language models.</p><p>As described in Section 3, <ref type="bibr" target="#b39">Yang et al. (2018)</ref> interpreted training language modeling as matrix factorization and improved performance by computing multiple probability distributions. In this study, we generalized their approach to use the middle layers of RNNs. Finally, our proposed method, DOC, achieved the state-of-the-art score on the standard benchmark datasets.</p><p>Some studies provided methods that boost performance by using statistics obtained from test data. <ref type="bibr" target="#b8">Grave et al. (2017)</ref> extended a cache model <ref type="bibr" target="#b15">(Kuhn and De Mori, 1990)</ref> for RNN language models. <ref type="bibr" target="#b14">Krause et al. (2017)</ref> proposed dynamic evaluation that updates parameters based on a recent sequence during testing. Although these methods might also improve the performance of DOC, we omitted such investigation to focus on comparisons among methods trained only on the training set.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9">Conclusion</head><p>We proposed Direct Output Connection (DOC), a generalization method of MoS introduced by <ref type="bibr" target="#b39">Yang et al. (2018)</ref>. DOC raises the expressive power of RNN language models and improves quality of the model. DOC outperformed MoS and achieved the best perplexities on the standard benchmark datasets of language modeling: PTB and WikiText-2. Moreover, we investigated its effectiveness on machine translation and headline generation. Our results show that DOC also improved the performance of EncDec and using a middle layer positively affected such application tasks.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Overview of the proposed method: DOC. This figure represents the example of N = 2 and i 0 = i 1 = i 2 = 3.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Perplexities of each method on the PTB validation set.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Model</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>F1</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="true"><head>Table 2 : Hyperparameters used for training DOC.</head><label>2</label><figDesc></figDesc><table>#DOC 
+i3 i2 i1 i0 
+λ β 
+Valid 
+Test 
+15 0 
+0 
+0 
+0 56.54 † 54.44 † 
+20 0 
+0 
+0 
+0 56.88 ‡ 54.79 ‡ 
+15 0 
+0 
+5 
+0 
+56.21 
+54.28 
+15 0 
+5 
+0 
+0 
+55.26 
+53.52 
+15 5 
+0 
+0 
+0 
+54.87 
+53.15 
+15 5 
+0 
+0 0.0001 
+54.95 
+53.16 
+15 5 
+0 
+0 
+0.001 
+54.62 
+52.87 
+15 5 
+0 
+0 
+0.01 
+55.13 
+53.39 
+10 5 
+0 
+5 
+0 
+56.46 
+54.18 
+10 5 
+5 
+0 
+0 
+56.00 
+54.37 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Perplexities of AWD-LSTM with DOC on the 
+PTB dataset. We varied the number of probability dis-
+tributions from each layer in situation J = 20 except 
+for the top row. The top row ( †) represents MoS scores 
+reported in Yang et al. (2018) as a baseline.  ‡ represents 
+the perplexity obtained by the implementation of Yang 
+et al. (2018) 6 with identical hyperparameters except for 
+i 3 . 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 3 shows</head><label>3</label><figDesc></figDesc><table>the perplexities of AWD-LSTM with 
+DOC on the PTB dataset. Each value of columns i n </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head>Table 4 : Coefficient of variation of Equation 10: √ β in validation and test sets of PTB.</head><label>4</label><figDesc></figDesc><table>Model 
+Valid 
+Test 
+AWD-LSTM 
+401 
+401 
+AWD-LSTM-MoS 10000 10000 
+AWD-LSTM-DOC 10000 10000 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Rank of output matrix ( ˜ 
+A in Equation 9) on 
+the PTB dataset. D 3 of AWD-LSTM is 400. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_12" validated="false"><head>Table 7 : Perplexities of each method on the PTB dataset.</head><label>7</label><figDesc></figDesc><table>Model 
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_13" validated="false"><head>Table 8 :</head><label>8</label><figDesc>Perplexities of each method on the WikiText-2 dataset.</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_15" validated="true"><head>Table 9 : BLEU scores on test sets in the IWSLT 2016 dataset. We report averages of three runs.</head><label>9</label><figDesc></figDesc><table>Model 
+RG-1 RG-2 RG-L 
+EncDec 
+46.77 24.87 43.58 
+EncDec+DOC (i3 = 2) 
+46.91 24.91 43.73 
+EncDec+DOC (i3 = i2 = 2) 46.99 25.29 43.83 
+ABS (Rush et al., 2015) 
+37.41 15.87 34.70 
+SEASS (Zhou et al., 2017) 
+46.86 24.58 43.53 
+Kiyono et al. (2017) 
+46.34 24.85 43.49 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_16" validated="false"><head>Table 10 :</head><label>10</label><figDesc></figDesc><table>ROUGE F1 scores in headline generation 
+test data provided by Zhou et al. (2017). RG in table 
+denotes ROUGE. For our implementations (the upper 
+part), we report averages of three runs. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_17" validated="false"><head>Table 11 :</head><label>11</label><figDesc></figDesc><table>Bracketing F1 scores on the PTB test set (Sec-
+tion 23). This table includes reranking models trained 
+on the PTB without external data. 
+
+ting without external data. The upper part also 
+contains the score reported in Choe and Char-
+niak (2016) that reranked candidates by the simple 
+LSTM language model. This part indicates that 
+our implemented rerankers outperformed the sim-
+ple LSTM language model based reranker, which 
+achieved 92.6 F1 score (Choe </table></figure>
+
+			<note place="foot" n="1"> https://github.com/wojzaremba/lstm</note>
+
+			<note place="foot" n="2"> Actually, we apply a bias term in addition to the weight matrix but we omit it to simplify the following discussion.</note>
+
+			<note place="foot" n="3"> http://www.fit.vutbr.cz/ imikolov/rnnlm/ 4 https://einstein.ai/research/the-wikitext-long-termdependency-language-modeling-dataset 5 https://github.com/salesforce/awd-lstm-lm</note>
+
+			<note place="foot" n="6"> https://github.com/zihangdai/mos</note>
+
+			<note place="foot" n="7"> Actually, the maximum rank size of an ordinary RNN language model is DN + 1 when we use a bias term.</note>
+
+			<note place="foot" n="8"> We exclude models that use the statistics of the test data (Grave et al., 2017; Krause et al., 2017) from these tables because we regard neural language models as the basis of NLP applications and consider it unreasonable to know correct outputs during applications, e.g., machine translation. In other words, we focus on neural language models as the foundation of applications although we can combine the method using the statistics of test data with our AWD-LSTM-DOC.</note>
+
+			<note place="foot" n="9"> https://wit3.fbk.eu/</note>
+
+			<note place="foot" n="10"> https://github.com/rsennrich/subword-nmt 11 https://github.com/mlpnlp/mlpnlp-nmt/</note>
+
+			<note place="foot" n="12"> https://github.com/cdg720/emnlp2016</note>
+
+			<note place="foot" n="13"> The output of RNNG is not in descending order because it samples candidates based on their scores. Thus, we prepared more candidates (i.e., 700) to be able to obtain correct instances as candidates. 14 We used the deep bidirectional encoder described at http://opennmt.net/OpenNMT/training/models/ instead of a basic bidirectional encoder.</note>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">A neural probabilistic language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Réjean</forename><surname>Ducharme</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pascal</forename><surname>Vincent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Janvin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="1137" to="1155" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">A maximum-entropy-inspired parser</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Charniak</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">1st Meeting of the North American Chapter of the Association for Computational Linguistics (NAACL 2000)</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="132" to="139" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">An empirical study of smoothing techniques for language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Stanley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joshua</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Goodman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 34th Annual Meeting on Association for Computational Linguistics (ACL 1996)</title>
+		<meeting>the 34th Annual Meeting on Association for Computational Linguistics (ACL 1996)</meeting>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="310" to="318" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Parsing as language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kook</forename><surname>Do</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Choe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Charniak</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2016 Conference on Empirical Methods in Natural Language Processing (EMNLP 2016)</title>
+		<meeting>the 2016 Conference on Empirical Methods in Natural Language Processing (EMNLP 2016)</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2331" to="2336" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Recurrent neural network grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adhiguna</forename><surname>Kuncoro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2016 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (NAACL-HLT 2016)</title>
+		<meeting>the 2016 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (NAACL-HLT 2016)</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="199" to="209" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Finding Structure in Time</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Jeffrey L Elman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Cognitive science</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="179" to="211" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Improving neural parsing by disentangling model combination and reranking effects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Fried</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell</forename><surname>Stern</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics (ACL 2017)</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics (ACL 2017)</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="161" to="166" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">A Theoretically Grounded Application of Dropout in Recurrent Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yarin</forename><surname>Gal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zoubin</forename><surname>Ghahramani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">29</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Improving Neural Language Models with a Continuous Cache</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edouard</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Usunier</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 5th International Conference on Learning Representations</title>
+		<meeting>the 5th International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Long Short-Term Memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Tying Word Vectors and Word Classifiers: A Loss Framework for Language Modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Khashayar</forename><surname>Hakan Inan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Khosravi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 5th International Conference on Learning Representations</title>
+		<meeting>the 5th International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Constituency parsing with a self-attentive encoder</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nikita</forename><surname>Kitaev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (ACL 2018)</title>
+		<meeting>the 56th Annual Meeting of the Association for Computational Linguistics (ACL 2018)</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+			<biblScope unit="page" from="2676" to="2686" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Source-side prediction for neural headline generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shun</forename><surname>Kiyono</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sho</forename><surname>Takase</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Suzuki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Naoaki</forename><surname>Okazaki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kentaro</forename><surname>Inui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Masaaki</forename><surname>Nagata</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Improved backing-off for m-gram language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Reinhard</forename><surname>Kneser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hermann</forename><surname>Ney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE International Conference on Acoustics, Speech and Signal Processing</title>
+		<meeting>the IEEE International Conference on Acoustics, Speech and Signal Processing</meeting>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="181" to="184" />
+		</imprint>
+	</monogr>
+	<note>ICASSP 1995</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Dynamic evaluation of neural sequence models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ben</forename><surname>Krause</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emmanuel</forename><surname>Kahembwe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iain</forename><surname>Murray</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Renals</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">A cachebased natural language model for speech recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roland</forename><surname>Kuhn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Renato</forename><forename type="middle">De</forename><surname>Mori</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="570" to="583" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Effective approaches to attention-based neural machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thang</forename><surname>Luong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hieu</forename><surname>Pham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing (EMNLP 2015)</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing (EMNLP 2015)</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1412" to="1421" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Building a Large Annotated Corpus of English: The Penn Treebank</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell</forename><forename type="middle">P</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mary</forename><forename type="middle">Ann</forename><surname>Marcinkiewicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Beatrice</forename><surname>Santorini</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="313" to="330" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">On the state of the art of evaluation in neural language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gábor</forename><surname>Melis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 6th International Conference on Learning Representations</title>
+		<meeting>the 6th International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Regularizing and Optimizing LSTM Language Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Shirish Keskar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 6th International Conference on Learning Representations</title>
+		<meeting>the 6th International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Pointer Sentinel Mixture Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 5th International Conference on Learning Representations</title>
+		<meeting>the 5th International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Recurrent neural network based language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Karafiát</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukás</forename><surname>Burget</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Cernock´ycernock´y</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sanjeev</forename><surname>Khudanpur</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 11th Annual Conference of the International Speech Communication Association (INTER-SPEECH 2010)</title>
+		<meeting>the 11th Annual Conference of the International Speech Communication Association (INTER-SPEECH 2010)</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="1045" to="1048" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Distributed Representations of Words and Phrases and their Compositionality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems 26 (NIPS 2013)</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="3111" to="3119" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Learning Word Embeddings Efficiently with NoiseContrastive Estimation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andriy</forename><surname>Mnih</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems 26 (NIPS 2013)</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="2265" to="2273" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Annotated gigaword</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Courtney</forename><surname>Napoles</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Gormley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Benjamin</forename><surname>Van Durme</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Joint Workshop on Automatic Knowledge Base Construction and Web-scale Knowledge Extraction</title>
+		<meeting>the Joint Workshop on Automatic Knowledge Base Construction and Web-scale Knowledge Extraction</meeting>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="95" to="100" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Deep contextualized word representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Peters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Neumann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohit</forename><surname>Iyyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matt</forename><surname>Gardner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2018 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (NAACL 2018)</title>
+		<meeting>the 2018 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (NAACL 2018)</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+			<biblScope unit="page" from="2227" to="2237" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Acceleration of Stochastic Approximation by Averaging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Boris</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Polyak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Anatoli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Juditsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIAM Journal on Control and Optimization</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="838" to="855" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Using the Output Embedding to Improve Language Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ofir</forename><surname>Press</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lior</forename><surname>Wolf</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 15th Conference of the European Chapter of the Association for Computational Linguistics (EACL 2017)</title>
+		<meeting>the 15th Conference of the European Chapter of the Association for Computational Linguistics (EACL 2017)</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="157" to="163" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">A Neural Attention Model for Abstractive Sentence Summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><forename type="middle">M</forename><surname>Rush</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing (EMNLP 2015)</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing (EMNLP 2015)</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="379" to="389" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Improving neural machine translation models with monolingual data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rico</forename><surname>Sennrich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barry</forename><surname>Haddow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexandra</forename><surname>Birch</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics (ACL 2016)</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics (ACL 2016)</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="86" to="96" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Outrageously large neural networks: The sparsely-gated mixture-of-experts layer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Azalia</forename><surname>Mirhoseini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Krzysztof</forename><surname>Maziarz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andy</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc</forename><forename type="middle">V</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 5th International Conference on Learning Representations</title>
+		<meeting>the 5th International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Dropout: A simple way to prevent neural networks from overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Highway networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh Kumar</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Greff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Deep Learning Workshop in ICML 15</title>
+		<meeting>the Deep Learning Workshop in ICML 15</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Sequence to Sequence Learning with Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Quoc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Le</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems 27 (NIPS 2014)</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="3104" to="3112" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">An empirical study of building a strong baseline for constituency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Suzuki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sho</forename><surname>Takase</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hidetaka</forename><surname>Kamigaito</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Makoto</forename><surname>Morishita</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Masaaki</forename><surname>Nagata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (ACL 2018)</title>
+		<meeting>the 56th Annual Meeting of the Association for Computational Linguistics (ACL 2018)</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+			<biblScope unit="page" from="612" to="618" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Going deeper with convolutions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Szegedy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yangqing</forename><surname>Jia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pierre</forename><surname>Sermanet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Scott</forename><surname>Reed</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dragomir</forename><surname>Anguelov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dumitru</forename><surname>Erhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent</forename><surname>Vanhoucke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Rabinovich</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 28th IEEE Conference on Computer Vision and Pattern Recognition (CVPR 2015)</title>
+		<meeting>the 28th IEEE Conference on Computer Vision and Pattern Recognition (CVPR 2015)</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1" to="9" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Input-to-output gate to improve rnn language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Sho Takase</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Masaaki</forename><surname>Suzuki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nagata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Eighth International Joint Conference on Natural Language Processing</title>
+		<meeting>the Eighth International Joint Conference on Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="43" to="48" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Regularization of Neural Networks using DropConnect</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Wan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Zeiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sixin</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rob</forename><surname>Yann L Cun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Fergus</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 30th International Conference on Machine Learning (ICML 2013)</title>
+		<meeting>the 30th International Conference on Machine Learning (ICML 2013)</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1058" to="1066" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Semantically Conditioned LSTM-based Natural Language Generation for Spoken Dialogue Systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milica</forename><surname>Tsung-Hsien Wen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nikola</forename><surname>Gasic</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peihao</forename><surname>Mrkši´mrkši´c</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Su</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Vandyke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Young</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing (EMNLP 2015)</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing (EMNLP 2015)</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1711" to="1721" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Breaking the softmax bottleneck: A high-rank RNN language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhilin</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zihang</forename><surname>Dai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William</forename><forename type="middle">W</forename><surname>Cohen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 6th International Conference on Learning Representations</title>
+		<meeting>the 6th International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Recurrent neural network regularization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wojciech</forename><surname>Zaremba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2nd International Conference on Learning Representations</title>
+		<meeting>the 2nd International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+	<note>ICLR 2014</note>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Selective encoding for abstractive sentence summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qingyu</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nan</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Furu</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Zhou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics (ACL 2017)</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics (ACL 2017)</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="1095" to="1104" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Recurrent Highway Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julian</forename><surname>Georg Zilly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh</forename><forename type="middle">Kumar</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Koutník</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 34th International Conference on Machine Learning</title>
+		<meeting>the 34th International Conference on Machine Learning</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="4189" to="4198" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Fraternal dropout</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Konrad</forename><surname>Zolna</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Devansh</forename><surname>Arpit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dendi</forename><surname>Suhubdy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 6th International Conference on Learning Representations</title>
+		<meeting>the 6th International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">Neural Architecture Search with Reinforcement Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barret</forename><surname>Zoph</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Quoc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Le</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 5th International Conference on Learning Representations</title>
+		<meeting>the 5th International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

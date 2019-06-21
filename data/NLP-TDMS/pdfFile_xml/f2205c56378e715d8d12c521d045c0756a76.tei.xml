@@ -1,0 +1,1608 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:06+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">A Joint Model for Entity Analysis: Coreference, Typing, and Linking</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Durrett</surname></persName>
+							<email>gdurrett@cs.berkeley.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Computer Science Division</orgName>
+								<orgName type="institution">University of California</orgName>
+								<address>
+									<settlement>Berkeley</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+							<email>klein@cs.berkeley.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Computer Science Division</orgName>
+								<orgName type="institution">University of California</orgName>
+								<address>
+									<settlement>Berkeley</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">A Joint Model for Entity Analysis: Coreference, Typing, and Linking</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We present a joint model of three core tasks in the entity analysis stack: coreference resolution (within-document clustering), named entity recognition (coarse semantic typing), and entity linking (matching to Wikipedia entities). Our model is formally a structured conditional random field. Unary factors encode local features from strong baselines for each task. We then add binary and ternary factors to capture cross-task interactions, such as the constraint that coreferent mentions have the same semantic type. On the ACE 2005 and OntoNotes datasets, we achieve state-of-the-art results for all three tasks. Moreover, joint modeling improves performance on each task over strong independent baselines. 1</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>How do we characterize the collection of entities present in a document? Two broad threads exist in the literature. The first is coreference resolution ( <ref type="bibr">Soon et al., 2001;</ref><ref type="bibr" target="#b35">Ng, 2010;</ref><ref type="bibr" target="#b41">Pradhan et al., 2011</ref>), which identifies clusters of mentions in a document referring to the same entity. This process gives us access to useful information about the referents of pronouns and nominal expressions, but because clusters are local to each document, it is often hard to situate document entities in a broader context. A separate line of work has considered the problem of entity linking or "Wikification" <ref type="bibr" target="#b8">(Cucerzan, 2007;</ref><ref type="bibr" target="#b34">Milne and Witten, 2008;</ref><ref type="bibr" target="#b27">Ji and Grishman, 2011)</ref>, where mentions are linked to entries in a given knowledge <ref type="bibr">1</ref> System available at http://nlp.cs.berkeley.edu base. This is useful for grounding proper entities, but in the absence of coreference gives an incomplete picture of document content itself, in that nominal expressions and pronouns are left unresolved.</p><p>In this paper, we describe a joint model of coreference, entity linking, and semantic typing (named entity recognition) using a structured conditional random field. Variables in the model capture decisions about antecedence, semantic type, and entity links for each mention. Unary factors on these variables incorporate features that are commonly employed when solving each task in isolation. Binary and higher-order factors capture interactions between pairs of tasks. For entity linking and NER, factors capture a mapping between NER's semantic types and Wikipedia's semantics as described by infoboxes, categories, and article text. Coreference interacts with the other tasks in a more complex way, via factors that softly encourage consistency of semantic types and entity links across coreference arcs, similar to the method of . <ref type="figure" target="#fig_0">Figure 1</ref> shows an example of the effects such factors can capture. The non-locality of coreference factors make exact inference intractable, but we find that belief propagation is a suitable approximation technique and performs well.</p><p>Our joint modeling of these three tasks is motivated by their heavy interdependencies, which have been noted in previous work (discussed more in Section 7). Entity linking has been employed for coreference resolution <ref type="bibr" target="#b40">(Ponzetto and Strube, 2006;</ref><ref type="bibr" target="#b45">Rahman and Ng, 2011;</ref><ref type="bibr" target="#b47">Ratinov and Roth, 2012)</ref> and coreference for entity linking <ref type="bibr" target="#b7">(Cheng and Roth, 2013</ref>  shown that tighter integration of coreference and entity linking is promising ( <ref type="bibr" target="#b24">Hajishirzi et al., 2013;</ref>; we extend these approaches and model the entire process more holistically. Named entity recognition is improved by simple coreference ( <ref type="bibr" target="#b18">Finkel et al., 2005;</ref><ref type="bibr" target="#b46">Ratinov and Roth, 2009)</ref> and knowledge from Wikipedia ( <ref type="bibr" target="#b28">Kazama and Torisawa, 2007;</ref><ref type="bibr" target="#b46">Ratinov and Roth, 2009;</ref><ref type="bibr" target="#b49">Sil and Yates, 2013)</ref>. Joint models of coreference and NER have been proposed in <ref type="bibr" target="#b23">Haghighi and Klein (2010)</ref> and , but in neither case was supervised data used for both tasks. Technically, our model is most closely related to that of , who handle coreference, named entity recognition, and relation extraction. <ref type="bibr">2</ref> Our system is novel in three ways: the choice of tasks to model jointly, the fact that we maintain uncertainty about all decisions throughout inference (rather than using a greedy approach), and the feature sets we deploy for cross-task interactions.</p><p>In designing a joint model, we would like to preserve the modularity, efficiency, and structural simplicity of pipelined approaches. Our model's feature-based structure permits improvement of features specific to a particular task or to a pair of tasks. By pruning variable domains with a coarse model and using approximate inference via belief propagation, we maintain efficiency and our model is only a factor of two slower than the union of the individual <ref type="bibr">2</ref> Our model could potentially be extended to handle relation extraction or mention detection, which has also been addressed in past joint modeling efforts <ref type="bibr" target="#b9">(Daumé and Marcu, 2005;</ref><ref type="bibr" target="#b32">Li and Ji, 2014</ref>), but that is outside the scope of the current work. models. Finally, as a structured CRF, it is conceptually no more complex than its component models and its behavior can be understood using the same intuition.</p><p>We apply our model to two datasets, ACE 2005 and OntoNotes, with different mention standards and layers of annotation. In both settings, our joint model outperforms our independent baseline models. On ACE, we achieve state-of-the-art entity linking results, matching the performance of the system of <ref type="bibr" target="#b15">Fahrni and Strube (2014)</ref>. On OntoNotes, we match the performance of the best published coreference system <ref type="bibr" target="#b4">(Björkelund and Kuhn, 2014</ref>) and outperform two strong NER systems <ref type="bibr" target="#b46">(Ratinov and Roth, 2009;</ref><ref type="bibr" target="#b38">Passos et al., 2014</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Motivating Examples</head><p>We first present two examples to motivate our approach. <ref type="figure" target="#fig_0">Figure 1</ref> shows an example of a case where coreference is beneficial for named entity recognition and entity linking. The company is clearly coreferent to Dell by virtue of the lack of other possible antecedents; this in turn indicates that Dell refers to the corporation rather than to Michael Dell. This effect can be captured for entity linking by a feature tying the lexical item company to the fact that COMPANY is in the Wikipedia infobox for Dell, 3 thereby helping the linker make the correct decision. This would also be important for recovering the fact that the mention the company links to Dell; however, in the version of the task we consider, a mention like the company actually links to the Wikipedia article for Company. 4 <ref type="figure">Figure 2</ref> shows a different example, one where the coreference is now ambiguous but entity linking is transparent. In this case, an NER system based on surface statistics alone would likely predict that Freddie Mac is a PERSON. However, the Wikipedia article for Freddie Mac is unambiguous, which allows us to fix this error. The pronoun his can then be correctly resolved.</p><p>These examples justify why these tasks should be handled jointly: there is no obvious pipeline order for a system designer who cares about the perfor- mance of the model on all three tasks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ORGANIZATION PERSON</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Model</head><p>Our model is a structured conditional random field ( <ref type="bibr" target="#b30">Lafferty et al., 2001</ref>). The input (conditioning context) is the text of a document, automatic parses, and a set of pre-extracted mentions (spans of text).</p><p>Mentions are allowed to overlap or nest: our model makes no structural assumptions here, and in fact we will show results on datasets with two different mention annotation standards (see Section 6.1 and Section 6.3). <ref type="figure">Figure 3</ref> shows the random variables in our model. We are trying to predict three distinct types of annotation, so we naturally have one variable per annotation type per mention (of which there are n):</p><p>• Coreference variables a = (a 1 , . . . , a n ) which indicate antecedents: a i ∈ {1, . . . , i−1, NEW}, indicating that the mention refers to some previous mention or that it begins a new cluster.</p><p>• Named entity type variables t = (t 1 , . . . , t n ) which take values in a fixed inventory of semantic types. 5</p><p>• Entity link variables e = (e 1 , . . . , e n ) which take values in the set of all Wikipedia titles.</p><p>In addition we have variables q = (q 1 , . . . , q n ) which represent queries to Wikipedia. These are explained further in Section 3. Figure 3: Random variables and task-specific factors present in our model. The a i model coreference antecedents, the t i model semantic types, the e i model entity links, and the q i are latent Wikipedia queries. Factors shown for each task integrate baseline features used when that task is handled in isolation. Coreference factors are described in Section 3.1.1, NER factors are described in Section 3.1.2, and entity linking factors are described in Section 3.1.3.</p><p>to remark that they are unobserved during both training and testing. We place a log-linear probability distribution over these variables as follows:</p><formula xml:id="formula_0">p(a, t, e|x; θ) ∝ q exp θ f (a, t, e, q, x)</formula><p>where θ is a weight vector, f is a feature function, and x indicates the document text, automatic parses, and mention boundaries. We represent the features in this model with standard factor graph notation; features over a particular set of output variables (and x) are associated with factors connected to those variables. <ref type="figure">Figure 3</ref> shows the task-specific factors in the model, discussed next in Section 3.1. Higher-order factors coupling variables between tasks are discussed in Section 3.2. <ref type="figure">Figure 3</ref> shows a version of the model with only task-specific factors. Though this framework is structurally simple, it is nevertheless powerful enough for us to implement high-performing models for each task. State-of-the-art approaches to coreference  and entity linking <ref type="bibr" target="#b48">(Ratinov et al., 2011</ref>) already have this independent structure and <ref type="bibr" target="#b46">Ratinov and Roth (2009)</ref> note that it is a reasonable assumption to make for NER as well. <ref type="bibr">6</ref> In this section, we describe the features present in the task-specific factors of each type (which also serve as our three separate baseline systems).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Independent Model</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1.1">Coreference</head><p>Our modeling of the coreference output space (as antecedents chosen for each mention) follows the mention-ranking approach to coreference <ref type="bibr">(De- nis and Baldridge, 2008;</ref>. Our feature set is that of Durrett and Klein, targeting surface properties of mentions: for each mention, we examine the first word, head word, last word, context words, the mention's length, and whether the mention is nominal, proper or pronominal. Anaphoricity features examine each of these properties in turn; coreference features conjoin various properties between mention pairs and also use properties of the mention pair itself, such as the distance between the mentions and whether their heads match. Note that this baseline does not rely on having access to named entity chunks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1.2">Named Entity Recognition</head><p>Our NER model places a distribution over possible semantic types for each mention, which corresponds to a fixed span of the input text. We define the features of a span to be the concatenation of standard NER surface features associated with each token in that chunk. We use surface token features similar to those from previous work <ref type="bibr" target="#b57">(Zhang and Johnson, 2003;</ref><ref type="bibr" target="#b46">Ratinov and Roth, 2009;</ref><ref type="bibr" target="#b38">Passos et al., 2014)</ref>: for tokens at offsets of {−2, −1, 0, 1, 2} from the current token, we fire features based on 1) word identity, 2) POS tag, 3) word class (based on capitalization, presence of numbers, suffixes, etc.), 4) word shape (based on the pattern of uppercase and lowercase letters, digits, and punctuation), 5) Brown cluster prefixes of length 4, 6, 10, 20 using the clusters from <ref type="bibr" target="#b29">Koo et al. (2008)</ref>, and 6) common bigrams of word shape and word identity.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1.3">Entity Linking</head><p>Our entity linking system diverges more substantially from past work than the coreference or NER systems. Most entity linking systems operate in two distinct phases <ref type="bibr" target="#b8">(Cucerzan, 2007;</ref><ref type="bibr" target="#b34">Milne and Witten, 2008;</ref><ref type="bibr" target="#b11">Dredze et al., 2010;</ref><ref type="bibr" target="#b48">Ratinov et al., 2011</ref>). First, in the candidate generation phase, a system generates a ranked set of possible candidates for a given mention by querying Wikipedia. The standard approach for doing so is to collect all hyperlinks in Wikipedia and associate each hyperlinked span of text (e.g. Michael Jordan) with a distribution over titles of Wikipedia articles it is observed to link to (Michael Jordan, Michael I. Jordan, etc.). Second, in the disambiguation phase, a learned model selects the correct candidate from the set of possibilities.</p><p>As noted by <ref type="bibr" target="#b21">Hachey et al. (2013)</ref> and <ref type="bibr" target="#b20">Guo et al. (2013)</ref>, candidate generation is often overlooked and yet accounts for large gaps in performance between different systems. It is not always clear how to best turn the text of a mention into a query for our set of hyperlinks. For example, the phrase Chief Executive Michael Dell has never been hyperlinked on Wikipedia. If we query the substring Michael Dell, the highest-ranked title is correct; however, querying the substring Dell returns the article on the company.</p><p>Our model for entity linking therefore includes both predictions of final Wikipedia titles e i as well as latent query variables q i that model the choice of query. Given a mention, possible queries are all prefixes of the mention containing the head with optional truecasing or lemmatization applied. Unary factors on the q i model the appropriateness of a query based on surface text of the mention, investigating the following properties: whether the mention is proper or nominal, whether the query employed truecasing or lemmatization, the query's length, the POS tag sequence within the query and the tag immediately preceding it, and whether the query is the longest query to yield a nonempty set of candidates for the mention. This part of the model can learn, for example, that queries based on lemmatized proper names are bad, whereas queries based on lemmatized common nouns are good.</p><p>Our set of candidates links for a mention is the set of all titles produced by some query. The bi-</p><formula xml:id="formula_1">a 1 a 2 e 1 e 2 q 1 q 2 t 1 Dell N E R + C o r e f L i n k + C o r e f N E R + L i n k</formula><p>The company ... posted ... nary factors connecting q i and e i then decide which title a given query should yield. These include: the rank of the article title among all possible titles returned by that query (sorted by relative frequency count), whether the title is a close string match of the query, and whether the title matches the query up to a parenthetical (e.g. Paul Allen and Paul Allen (editor)).</p><p>We could also at this point add factors between pairs of variables (e i , e j ) to capture coherence between choices of linked entities. Integration with the rest of the model, learning, and inference would remain unchanged. However, while such features have been employed in past entity linking systems <ref type="bibr">(Rati- nov et al., 2011;</ref><ref type="bibr" target="#b25">Hoffart et al., 2011</ref>), Ratinov et al. found them to be of limited utility, so we omit them from the present work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Cross-task Interaction Factors</head><p>We now add factors that tie the predictions of multiple output variables in a feature-based way. <ref type="figure" target="#fig_1">Figure 4</ref> shows the general structure of these factors. Each couples variables from one pair of tasks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.1">Entity Linking and NER</head><p>We want to exploit the semantic information in Wikipedia for better semantic typing of mentions. We also want to use semantic types to disambiguate tricky Wikipedia links. We use three sources of semantics from Wikipedia ( <ref type="bibr" target="#b28">Kazama and Torisawa, 2007;</ref>):</p><p>• Categories (e.g. American financiers);</p><p>used by <ref type="bibr" target="#b40">Ponzetto and Strube (2006;</ref><ref type="bibr" target="#b28">Kazama and Torisawa (2007;</ref><ref type="bibr" target="#b47">Ratinov and Roth (2012)</ref> • Infobox type (e.g. Person, Company)</p><p>• Copula in the first sentence (is a British politician); used for coreference previously in <ref type="bibr" target="#b22">Haghighi and Klein (2009)</ref> We fire features that conjoin the information from the selected Wikipedia article with the selected NER type. Because these types of information from Wikipedia are of a moderate granularity, we should be able to learn a mapping between them and NER types and exploit Wikipedia as a soft gazetteer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.2">Coreference and NER</head><p>Coreference can improve NER by ensuring consistent semantic type predictions across coreferent mentions; likewise, NER can help coreference by encouraging the system to link up mentions of the same type. The factors we implement for these purposes closely resemble the factors employed for latent semantic clusters in . That structure is as follows:</p><formula xml:id="formula_2">log F i−j (a i , t i , t j ) = 0 if a i = j f (i, j, t i , t j ) otherwise</formula><p>That is, the features between the type variables for mentions i and j does not come into play unless i and j are coreferent. Note that there are quadratically many such factors in the graph (before pruning; see Section 5), one for each ordered pair of mentions (j, i) with j &lt; i. When scoring a particular configuration of variables, only a small subset of the factors is active, but during inference when we marginalize over all settings of variables, each of the factors comes into play for some configuration. This model structure allows us to maintain uncertainty about coreference decisions but still propagate information along coreference arcs in a soft way.</p><p>Given this factor definition, we define features that should fire over coreferent pairs of entity types. Our features target:</p><p>• The pair of semantic types for the current and antecedent mention</p><p>• The semantic type of the current mention and the head of the antecedent mention, and the type of the antecedent and head of the current</p><p>We found such monolexical features to improve over just type pairs and while not suffering from the sparsity problems of bilexical features.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.3">Coreference and Entity Linking</head><p>As we said in Section 2, coreferent mentions can actually have different entity links (e.g. Dell and Company), so encouraging equality alone is less effective for entity linking than it is for NER. Our factors have the same structure as those for coreference-NER, but features now target overall semantic relatedness of Wikipedia articles using the structure of Wikipedia by computing whether the articles have the same title, share any out links, or link to each other. More complex relatedness schemes such as those described in <ref type="bibr" target="#b48">Ratinov et al. (2011)</ref> can be implemented in this framework. Nevertheless, these basic features still promise to help identify related articles as well as name variations by exploiting the abundance of entity mentions on Wikipedia.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Learning</head><p>Our training data consists of d documents, where a given document consists of a tuple (x, C * , t * , e * ). Gold-standard labels for types (t * ) and entity links (e * ) are provided directly, while supervision for coreference is provided in the form of a clustering C * . Regardless, we can simply marginalize over the uncertainty about a * and form the conditional loglikelihood of the training labels as follows:</p><formula xml:id="formula_3">L(θ) = d i=1 log a * ∈A(C * i ) p(a * , t * i , e * i |x; θ)</formula><p>where A(C * ) is the set of antecedent structures consistent with the gold annotation: the first mention in a cluster must pick the NEW label and subsequent mentions must pick an antecedent from the set of those preceding them in the cluster. This marginalization over latent structure has been employed in prior work as well <ref type="bibr" target="#b16">(Fernandes et al., 2012;</ref>. We adapt this objective to exploit parameterized loss functions for each task by modifying the distribution as follows:</p><formula xml:id="formula_4">p (a, t, e|x; θ) ∝ p(a, t, e, x) exp [α c c (a, C * ) +α t t (t, t * ) + α e e (e, e * )]</formula><p>where c , t , and e are task-specific loss functions with weight parameters α. This technique, softmaxmargin, allows us to shape the distribution learned by the model and encourage the model to move probability mass away from outputs that are bad according to our loss functions ( <ref type="bibr" target="#b19">Gimpel and Smith, 2010)</ref>. As in , we take α c = 1 and use c as defined there, penalizing the model by α c,FA = 0.1 for linking up a mention that should have been nonanaphoric, by α c,FN = 3 for calling nonanaphoric a mention that should have an antecedent, and by α c,WL = 1 for picking the wrong antecedent for an anaphoric mention. t and e are simply Hamming distance, with α t = 3 and α e = 0 for all experiments. We found that the outcome of learning was not particularly sensitive to these parameters. <ref type="bibr">7</ref> We optimize our objective using AdaGrad (Duchi et al., 2011) with L 1 regularization and λ = 0.001. Our final objective is</p><formula xml:id="formula_5">L(θ) = d i=1 log a * ∈A(C * i ) p (a * , t * i , e * i |x; θ)+λθ 1</formula><p>This objective is nonconvex, but in practice we have found that it is very stable. One reason is that for any mention that has fewer than two antecedents in its cluster, all elements of A(C * ) only contain one possibility for that mention, and even for mentions with ambiguity, the parameters that the model ends up learning tend to place almost all of the probability mass consistently on one antecedent.   <ref type="table">Table 1</ref>: Results on the ACE 2005 dev and test sets for the INDEP. (task-specific factors only) and JOINT models. Coreference metrics are computed using their reference implementations ( <ref type="bibr" target="#b43">Pradhan et al., 2014</ref>). We report accuracy on NER because the set of mentions is fixed and all mentions have named entity types. Coreference and NER are compared to prior work in a more standard setting in Section 6.3. Finally, we also report accuracy of our entity linker (including links to NIL); entity linking is analyzed more thoroughly in <ref type="table" target="#tab_5">Table 2</ref>. Bolded values represent statistically significant improvements with p &lt; 0.05 according to a bootstrap resampling test.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Inference</head><p>For both learning and decoding, inference consists of computing marginals for individual variables or for sets of variables adjacent to a factor. Exact inference is intractabile due to our factor graph's loopiness; however, we can still perform efficient inference using belief propagation, which has been successfully employed for a similar model ) as well as for other NLP tasks <ref type="bibr" target="#b51">(Smith and Eisner, 2008;</ref><ref type="bibr" target="#b5">Burkett and Klein, 2012)</ref>. Marginals typically converge in 3-5 iterations of belief propagation; we use 5 iterations for all experiments.</p><p>However, belief propagation would still be quite computationally expensive if run on the full factor graph as described in Section 3. In particular, the factors in Section 3.2.2 and Section 3.2.3 are costly to sum over due to their ternary structure and the fact that there are quadratically many of them in the number of mentions. The solution to this is to prune the domains of the coreference variables using a coarse model consisting of the coreference factors trained in isolation. Given marginals p 0 (a i |x), we prune values a i such that log p 0 (a i |x) &lt; log p 0 (a * i |x) − k for a threshold parameter k, which we set to 5 for our experiments; this is sufficient to prune over 90% of possible coreference arcs while leaving at least one possible gold link for 98% of mentions. 8 With this optimization, our full joint model could be trained for 20 iterations on the ACE 2005 corpus in around an hour.</p><p>We use minimum Bayes risk (MBR) decoding, where we compute marginals for each variable under the full model and independently return the most likely setting of each variable. Note that for coreference, this implies that we produce the MBR antecedent structure rather than the MBR clustering; the latter is much more computationally difficult to find and would be largely the same, since the posterior distributions of the a i are quite peaked.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Experiments</head><p>We present results on two corpora. First, we use the ACE 2005 corpus <ref type="bibr" target="#b36">(NIST, 2005)</ref>: this corpus annotates mentions complete with coreference, semantic types (per mention), and entity links (also per mention) later added by <ref type="bibr" target="#b2">Bentivogli et al. (2010)</ref>. We evaluate on gold mentions in this setting for comparability with prior work on entity linking; we lift this restriction in Section 6.3. Second, we evaluate on the OntoNotes 5 corpus ( <ref type="bibr" target="#b26">Hovy et al., 2006</ref>) as used in the CoNLL 2012 coreference shared task ( <ref type="bibr" target="#b42">Pradhan et al., 2012)</ref>. This corpus does not contain gold-standard entity links, so we cannot evaluate this portion of our model, though the model still exploits the information from Wikipedia to make coreference and named entity decisions. We will compare to prior coreference and named entity work in the system mentions setting.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">ACE Evaluation</head><p>We tokenize and sentence-split the ACE dataset using the tools bundled with Reconcile ( <ref type="bibr" target="#b54">Stoyanov et al., 2010)</ref> and parse it using the Berkeley Parser ( <ref type="bibr" target="#b39">Petrov et al., 2006</ref>). We use the train/test split from <ref type="bibr" target="#b53">Stoyanov et al. (2009)</ref>, <ref type="bibr" target="#b23">Haghighi and Klein (2010)</ref>, and <ref type="bibr" target="#b1">Bansal and Klein (2012</ref>   <ref type="bibr" target="#b0">and Baldwin, 1998)</ref>, and CEAF e ( <ref type="bibr" target="#b33">Luo, 2005)</ref>, as well as their average, the CoNLL metric, all computed from the reference implementation of the CoNLL scorer ( <ref type="bibr" target="#b43">Pradhan et al., 2014</ref>). We see that the joint model improves all three tasks compared to the individual task models in the baseline.</p><p>More in-depth entity linking results are shown in <ref type="table" target="#tab_5">Table 2</ref>. We both evaluate on overall accuracy (how many mentions are correctly linked) as well as two more specific criteria: precision/recall/F 1 of non-NIL 9 predictions, and precision/recall/F 1 of NIL predictions. This latter measure may be important if a system designer is trying to identify new entities in a document. We compare to the results of the best model from <ref type="bibr" target="#b15">Fahrni and Strube (2014)</ref>, which is a sophisticated discriminative model incorporating a latent model of mention scope. <ref type="bibr">10</ref> Our performance is similar to that of <ref type="bibr" target="#b15">Fahrni and Strube (2014)</ref>, though the results are not exactly comparable for two reasons. First, our models are trained on different datasets: Fahrni and Strube (2014) train on Wikipedia data whereas we train on the ACE training set. Second, they make use of the annotated head spans in ACE whereas we only use detected heads based on automatic parses. Note that this information is particularly beneficial for locating the right query because "heads" may be multiword expressions such as West Bank as part of the phrase southern West Bank.</p><p>9 NIL is a placeholder for mentions which do not link to an article in Wikipedia. <ref type="bibr">10</ref> On the TAC datasets, this FAHRNI model substantially outperforms <ref type="bibr" target="#b48">Ratinov et al. (2011)</ref> and has comparable performance to <ref type="bibr" target="#b7">Cheng and Roth (2013)</ref>  <ref type="table">Table 3</ref>: Results of model ablations on the ACE development set. We hold out each type of factor in turn from the JOINT model and add each in turn over the IN-DEP. model. We evaluate the coreference performance using the CoNLL metric, NER accuracy, and entity linking accuracy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Model Ablations</head><p>To evaluate the importance of the different parts of the model, we perform a series of ablations on the model interaction factors. <ref type="table">Table 3</ref> shows the results of adding each interaction factor in turn to the baseline and removing each of the three interaction factors from the full joint model (see <ref type="figure" target="#fig_1">Figure 4)</ref>.</p><p>Link-NER interactions. These joint factors are the strongest out of any considered here and give large improvements to entity linking and NER. Their utility is unsurprising: effectively, they give NER access to a gazetteer that it did not have in the baseline model. Moreover, our relatively rich featurization of the semantic information on Wikipedia allows the model to make effective use of it.</p><p>Coref-NER interactions. These are moderately beneficial to both coreference and NER. Having reliable semantic types allows the coreference system to be bolder about linking up mention pairs that do not exhibit direct head matches. Part of this is due to our use of monolexical features, which are finegrained enough to avoid the problems with coarse semantic type matching  but still effectively learnable.</p><p>Coref-Link interactions. These are the least useful of any of the major factors, providing only a small benefit to coreference. This is likely a result of the ACE entity linking annotation standard: a mention like the company is not linked to the specific company it refers to, but instead the Wikipedia article Company. Determining the relatedness of Company to an article like Dell is surprisingly difficult: many related articles share almost no outlinks and may not explicitly link to one another. Further feature engineering could likely improve the utility of these factors.</p><p>The last line of <ref type="table">Table 3</ref> shows the results of an experiment where the entity links were not observed during training, i.e. they were left latent. Unsurprisingly, the system is not good at entity linking; however, the model is still able to do as well or even slightly better on coreference and named entity recognition. A possible explanation for this is that even the wrong Wikipedia link can in many cases provide correct semantic information: for example, not knowing which Donald Layton is being referred to is irrelevant for the question of determining that he is a PERSON and may also have little impact on coreference performance. This result indicates that the joint modeling approach is not necessarily dependent on having all tasks annotated. The model can make use of cross-task information even when that information comes via latent variables.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">OntoNotes Evaluation</head><p>The second part of our evaluation uses the datasets from the CoNLL 2012 Shared Task ( <ref type="bibr" target="#b42">Pradhan et al., 2012)</ref>, specifically the coreference and NER annotations. All experiments use the standard automatic parses from the shared task and mentions detected according to the method of .</p><p>Evaluating on OntoNotes carries with it a few complications. First, gold-standard entity linking annotations are not available; we can handle this by</p><formula xml:id="formula_6">a 1 a 2 e 1 e 2 q 1 q 2 t 1 t 2 Dell } O B-ORG I-ORG ... ... N E R + C o r e f L i n k + C o r e f N E R + L i n k</formula><p>The company ...</p><formula xml:id="formula_7">t 8 t 9</formula><p>posted ... leaving the e i variables in our model latent. Second, and more seriously, NER chunks are no longer the same as coreference mentions, so our assumption of fixed NER spans no longer holds.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3.1">Divergent Coreference and NER</head><p>Our model can be adapted to handle NER chunks that diverge from mentions for the other two tasks, as shown in <ref type="figure" target="#fig_3">Figure 5</ref>. We have kept the coreference and entity linking portions of our model the same, now defined over system predicted mentions. However, we have replaced mention-synchronous type variables with standard token-synchronous BIO-valued variables. The unary NER features developed in Section 3.1.2 are now applied in the standard way, namely they are conjoined with the BIO labels at each token position. Binary factors between adjacent NER nodes enforce appropriate structural constraints and fire indicator features on transitions. In order to maintain tractability in the face of a larger number of variables and factors in the NER portion of our model, we prune the NER variables' domains using the NER model trained in isolation, similar to the procedure that we described for pruning coreference arcs in Section 5. CEAF e Avg. Prec.</p><p>Rec.  Cross-task factors that previously would have fired features based on the NE type for a whole mention now instead consult the NE type of that mention's head. 11 In <ref type="figure" target="#fig_3">Figure 5</ref>, this can be seen with factors involving e 2 and a 2 touching t 9 (company), the head of the second mention. Since the chain structure enforces consistency between adjacent labels, features that strongly prefer a particular label on one node of a mention will implicitly affect other nodes in that mention and beyond.</p><formula xml:id="formula_8">F 1 Prec. Rec. F 1 Prec. Rec. F 1 F 1 BERKELEY 72</formula><p>Training and inference proceed as before, with a slight modification: instead of computing the MBR setting of every variable in isolation, we instead compute the MBR sequence of labeled NER chunks to avoid the problem of producing inconsistent tag sequences, e.g. O I-PER or B-PER I-ORG.  <ref type="table">Table 5</ref>: Results for NER tagging on the OntoNotes 5.0 / CoNLL 2011 test set. We compare our systems to the Illinois system (Ratinov and Roth, 2009) and the system of <ref type="bibr" target="#b38">Passos et al. (2014)</ref>. Our model outperforms both other systems in terms of F 1 , and once again joint modeling gives substantial improvements over our baseline system. portion of the CoNLL 2012 test set does not have gold-standard named entity annotations, so we omit it from our evaluation. This leaves us with exactly the CoNLL 2011 test set. We compare to two existing baselines from the literature: the Illinois NER system of <ref type="bibr" target="#b46">Ratinov and Roth (2009)</ref> and the results of <ref type="bibr" target="#b38">Passos et al. (2014)</ref>. <ref type="table">Table 5</ref> shows that we outperform both prior systems in terms of F 1 , though the ILLINOIS system features higher recall while our system features higher precision.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3.2">Results</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Related Work</head><p>There are two closely related threads of prior work: those that address the tasks we consider in a different way and those that propose joint models for other related sets of tasks. In the first category, <ref type="bibr" target="#b24">Hajishirzi et al. (2013)</ref> integrate entity linking into a sieve-based coreference system <ref type="bibr" target="#b44">(Raghunathan et al., 2010)</ref>, the aim being to propagate link decisions throughout coreference chains, block coreference links between different entities, and use semantic information to make additional coreference links.  build coreference clusters greedily left-to-right and maintain entity link information for each cluster, namely a list of possible targets in the knowledge base as well as a current best link target that is used to extract features (though that might not be the target that is chosen by the end of inference). <ref type="bibr" target="#b7">Cheng and Roth (2013)</ref> use coreference as a preprocessing step for entity linking and then solve an ILP to determine the optimal entity link assignments for each mention based on surface properties of that mention, other mentions in its cluster, and other mentions that it is related to. Compared to these systems, our approach maintains greater uncertainty about all random variables throughout inference and uses features to capture cross-task interactions as opposed to rules or hard constraints, which can be less effective for incorporating semantic knowledge <ref type="bibr" target="#b31">(Lee et al., 2011</ref>).</p><p>The joint model most closely related to ours is that of , modeling coreference, named entity recognition, and relation extraction. Their techniques differ from ours in a few notable ways: they choose a different objective function than we do and also opt to freeze the values of certain variables during the belief propagation process rather than pruning with a coarse pass. <ref type="bibr" target="#b49">Sil and Yates (2013)</ref> jointly model NER and entity linking in such a way that they maintain uncertainty over mention boundaries, allowing information from Wikipedia to inform segmentation choices. We could strengthen our model by integrating this capability; however, the primary cause of errors for mention detection on OntoNotes is parsing ambiguities rather than named entity ambiguities, so we would be unlikely to see improvements in the experiments presented here. Beyond maintaining uncertainty over mention boundaries, we might also consider maintaining uncertainty over the entire parse structure, as in <ref type="bibr" target="#b17">Finkel and Manning (2009)</ref>, who consider parsing and named entity recognition together with a PCFG.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Conclusion</head><p>We return to our initial motivation for joint modeling, namely that the three tasks we address have the potential to influence one another. <ref type="table">Table 3</ref> shows that failing to exploit any of the pairwise interactions between the tasks causes lower performance on at least one of them. Therefore, any pipelined system would necessarily underperform a joint model on whatever task came first in the pipeline, which is undesirable given the importance of these tasks. The trend towards broader and deeper NLP pipelines will only exacerbate this problem and make it more difficult to find a suitable pipeline ordering. In addition to showing that joint modeling is high-performing, we have also shown that it can be implemented with relatively low overhead, requiring no fundamentally new learning or inference techniques, and that it is extensible, due to its modular structure and natural partitioning of features. Taken together, these aspects make a compelling case that joint models can provide a way to integrate deeper levels of processing, particularly for semantic layers of annotation, and that this modeling power does not need to come at the expense of computational efficiency, structural simplicity, or modularity.</p><p>The Berkeley Entity Resolution System is available at http://nlp.cs.berkeley.edu.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Coreference can help resolve ambiguous cases of semantic types or entity links: propagating information across coreference arcs can inform us that, in this context, Dell is an organization and should therefore link to the article on Dell in Wikipedia.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Factors that tie predictions between variables across tasks. Joint NER and entity linking factors (Section 3.2.1) tie semantic information from Wikipedia articles to semantic type predictions. Joint coreference and NER factors (Section 3.2.2) couple type decisions between mentions, encouraging consistent type assignments within an entity. Joint coreference and entity linking factors (Section 3.2.3) encourage relatedness between articles linked from coreferent mentions.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Dev</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: Modified factor graph for OntoNotes-style annotations, where NER chunks can now diverge from mentions for the other two tasks. NER is now modeled with token-synchronous random variables taking values in a BIO tagset. Factors coupling NER and the other tasks now interact with the NER chain via the NER nodes associated with the heads of mentions.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head>en.wikipedia.org/wiki/Dell en.wikipedia.org/wiki/Michael_Dell</head><label></label><figDesc>) as part of pipelined systems. Past work has</figDesc><table>Revenues of $14.5 billion were posted by Dell1. The company1 ... 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Donald Layton1 took the helm of Freddie Mac2 after his1 ... NIL en.wikipedia.org/wiki/Freddie_Mac</head><label></label><figDesc></figDesc><table>PERSON 
+
+Figure 2: Entity links can help resolve ambiguous cases 
+of coreference and entity types. Standard NER and 
+coreference systems might fail to handle Freddie Mac 
+correctly, but incorporating semantic information from 
+Wikipedia makes this decision easier. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>} Dell dell NER</head><label></label><figDesc></figDesc><table>1.3; for now, it suffices } 
+
+Dell posted revenues ... The company ... 
+
+} 
+
+Dell 
+Michael_Dell 
+... 
+
+NEW CLUSTER 
+
+Dell 
+NEW CLUSTER 
+
+} 
+
+Company 
+Company (song) 
+... 
+
+} 
+
+} 
+
+PERSON 
+ORGANIZATION 
+
+... 
+
+} 
+
+PERSON 
+ORGANIZATION 
+
+... 
+
+} 
+
+the company 
+company 
+Company 
+
+Coref 
+
+Link 
+
+q 1 
+q 2 
+
+e 2 
+e 1 
+
+a 1 
+a 2 
+
+t 1 
+t 2 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head></head><label></label><figDesc>77.95 74.81 71.84 74.87 83.04 73.07 81.03 74.89 72.56 76.16 82.35 74.71 JOINT 79.41 75.56 73.34 76.10 85.94 75.69 81.41 74.70 72.93 76.35 85.60 76.78 ∆ +1.46 +0.75 +1.50 +1.23 +2.90 +2.62 +0.42 −0.19 +0.37 +0.19 +3.25 +2.07</figDesc><table>Test 
+
+MUC 
+
+B 3 CEAFe 
+Avg. NER 
+Link MUC 
+B 3 CEAFe 
+Avg. NER 
+Link 
+INDEP. </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head></head><label></label><figDesc>).</figDesc><table>Non-NILS 
+
+NILS 
+
+Prec. 
+Rec. 
+F 1 Prec. 
+Rec. 
+F 1 Accuracy 
+FAHRNI 81.15 78.10 79.60 41.25 
+61.10 49.25 
+76.87 
+INDEP. 80.26 76.30 78.23 33.39 
+54.47 41.40 
+74.71 
+JOINT 83.26 77.67 80.37 35.19 
+65.42 45.77 
+76.78 
+∆ over INDEP. +3.00 +1.37 +2.14 +1.80 +10.95 +3.37 
++2.07 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Detailed entity linking results on the ACE 2005 test set. We evaluate both our INDEP. (task-specific factors 
+only) and JOINT models and compare to the results of the FAHRNI model, a state-of-the-art entity linking system. We 
+compare overall accuracy as well as performance at predicting NILS (mentions not in the knowledge base) and non-
+NILS. The JOINT model roughly matches the performance of FAHRNI and gives strong gains over the INDEP. system. 
+
+Table 1 shows our results. Coreference results are 
+reported using MUC (Vilain et al., 1995), B 3 (Bagga 
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head></head><label></label><figDesc>, hence it is quite competitive.</figDesc><table>Coref 
+NER 
+Link 
+INDEP. 74.87 83.04 73.07 
+INDEP+LINKNER 
++1.85 +2.41 
+INDEP+COREFNER +0.56 +1.15 
+INDEP+COREFLINK +0.48 
+−0.16 
+JOINT−LINKNER +0.79 +1.28 −0.06 
+JOINT−COREFNER +0.56 +1.94 +2.07 
+JOINT−COREFLINK +0.85 +2.68 +2.57 
+JOINT +1.23 +2.90 +2.62 
+JOINT/LATENTLINK +1.26 +3.47 −18.8 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head></head><label></label><figDesc>.85 65.87 69.18 63.55 52.47 57.48 54.31 54.36 54.34 60.</figDesc><table>33 
+FERNANDES 
+− 
+− 70.51 
+− 
+− 57.58 
+− 
+− 53.86 60.65 
+BJORKELUND 74.30 67.46 70.72 62.71 54.96 58.58 59.40 52.27 55.61 61.63 
+INDEP. 72.25 69.30 70.75 60.92 55.73 58.21 55.33 54.14 54.73 61.23 
+JOINT 72.61 69.91 71.24 61.18 56.43 58.71 56.17 54.23 55.18 61.71 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>CoNLL metric scores for our systems on the CoNLL 2012 blind test set, compared to Durrett and Klein 
+(2013) (the Berkeley system), Fernandes et al. (2012) (the winner of the CoNLL shared task), and Björkelund and 
+Kuhn (2014) (the best reported results on the dataset to date). INDEP. and JOINT are the contributions of this work; 
+JOINT improves substantially over INDEP. (these improvements are statistically significant with p &lt; 0.05 according 
+to a bootstrap resampling test) and achieves state-of-the-art results. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_9" validated="false"><head>Table 4 shows</head><label>4</label><figDesc></figDesc><table>coreference results from our IN-
+DEP. and JOINT models compared to three strong 
+systems: Durrett and Klein (2013), Fernandes et al. 
+(2012) (the winner of the CoNLL shared task), and 
+Björkelund and Kuhn (2014) (the best reported re-
+sults on the dataset). Our JOINT method outper-
+forms all three as well as the INDEP. system. 12 
+Next, we report results on named entity recogni-
+tion. We use the same OntoNotes splits as for the 
+coreference data; however, the New Testament (NT) Prec. Rec. 
+F 1 
+ILLINOIS 82.00 84.95 83.45 
+PASSOS 
+− 
+− 82.24 
+INDEP. 83.79 81.53 82.64 
+JOINT 85.22 82.89 84.04 
+∆ over INDEP. +1.43 +1.36 +1.40 
+
+</table></figure>
+
+			<note place="foot" n="3"> Monospaced fonts indicate titles of Wikipedia articles. 4 This decision was largely driven by a need to match the ACE linking annotations provided by Bentivogli et al. (2010).</note>
+
+			<note place="foot" n="5"> For the next few sections, we assume a fixed-mention version of the NER task, which looks like multi-way classification of semantic types. In Section 6.3.1, we adapt the model to the standard non-fixed-mention setting for OntoNotes.</note>
+
+			<note place="foot" n="6"> Pairwise potentials in sequence-based NER are useful for producing coherent output (e.g. prohibiting configurations like O I-PER), but since we have so far defined the task as operating over fixed mentions, this structural constraint does not come into play for our system.</note>
+
+			<note place="foot" n="7"> These parameters allow us to trade off contributions to the objective from the different tasks, addressing Singh et al. (2013)&apos;s objection to single objectives for joint models.</note>
+
+			<note place="foot" n="8"> In addition to inferential benefits, pruning an arc allows us to prune entire joint coreference factors and avoid instantiating their associated features, which reduces the memory footprint and time needed to build a factor graph.</note>
+
+			<note place="foot" n="11"> The NER-coreference portion of the model now resembles the skip-chain CRF from Finkel et al. (2005), though with soft coreference. 12 The systems of Chang et al. (2013) and Webster and Curran (2014) perform similarly to the FERNANDES system; changes in the reference implementation of the metrics make exact comparison to printed numbers difficult.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>This work was partially supported by BBN under DARPA contract HR0011-12-C-0014, by an NSF fellowship for the first author, and by a Google Faculty Research Award to the second author. Thanks to Angela Fahrni for helpful discussions about entity linking and for providing system output, to the anonymous reviewers for their insightful comments, and to our action editor Jason Eisner.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Algorithms for Scoring Coreference Chains</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Amit</forename><surname>Bagga</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Breck</forename><surname>Baldwin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Language Resources and Evaluation Workshop on Linguistics Coreference</title>
+		<meeting>the Conference on Language Resources and Evaluation Workshop on Linguistics Coreference</meeting>
+		<imprint>
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Coreference Semantics from Web Features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohit</forename><surname>Bansal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics</title>
+		<meeting>the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luisa</forename><surname>Bentivogli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pamela</forename><surname>Forner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Claudio</forename><surname>Giuliano</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Marchetti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emanuele</forename><surname>Pianta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kateryna</forename><surname>Tymoshenko</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Extending English ACE</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Corpus Annotation with Ground-truth Links to Wikipedia</title>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Workshop on The People&apos;s Web Meets NLP: Collaboratively Constructed Semantic Resources</title>
+		<meeting>the Workshop on The People&apos;s Web Meets NLP: Collaboratively Constructed Semantic Resources</meeting>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Learning Structured Perceptrons for Coreference Resolution with Latent Antecedents and Non-local Features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Björkelund</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonas</forename><surname>Kuhn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics</title>
+		<meeting>the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Fast Inference in Phrase Extraction Models with Belief Propagation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Burkett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the North American Chapter of the Association for Computational Linguistics</title>
+		<meeting>the North American Chapter of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">A Constrained Latent Variable Model for Coreference Resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai-Wei</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rajhans</forename><surname>Samdani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Relational Inference for Wikification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiao</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Large-Scale Named Entity Disambiguation Based on Wikipedia Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Silviu Cucerzan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Joint Conference on Empirical Methods in Natural Language Processing and Computational Natural Language Learning</title>
+		<meeting>the Joint Conference on Empirical Methods in Natural Language Processing and Computational Natural Language Learning</meeting>
+		<imprint>
+			<publisher>EMNLP-CoNLL</publisher>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">A Large-scale Exploration of Effective Global Features for a Joint Entity Detection and Tracking Model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hal</forename><surname>Daumé</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">,</forename><surname>Iii</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Marcu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Specialized Models and Ranking for Coreference Resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pascal</forename><surname>Denis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Baldridge</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Entity Disambiguation for Knowledge Base Population</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Dredze</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Mcnamee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Delip</forename><surname>Rao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Gerber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Finin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference on Computational Linguistics</title>
+		<meeting>the International Conference on Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Adaptive Subgradient Methods for Online Learning and Stochastic Optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Duchi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Elad</forename><surname>Hazan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoram</forename><surname>Singer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="2121" to="2159" />
+			<date type="published" when="2011-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Easy Victories and Uphill Battles in Coreference Resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Durrett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2013-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Decentralized Entity-Level Modeling for Coreference Resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Durrett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Hall</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics</title>
+		<meeting>the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">A Latent Variable Model for Discourse-aware Concept and Entity Disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Angela</forename><surname>Fahrni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Strube</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the European Chapter of the Association for Computational Linguistics</title>
+		<meeting>the European Chapter of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Latent Structure Perceptron with Feature Induction for Unrestricted Coreference Resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cícero</forename><surname>Eraldo Rezende Fernandes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nogueira</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruy Luiz</forename><surname>Santos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Milidiú</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Joint Conference on Empirical Methods in Natural Language Proceedings and Conference on Computational Natural Language Learning -Shared Task</title>
+		<meeting>the Joint Conference on Empirical Methods in Natural Language Proceedings and Conference on Computational Natural Language Learning -Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Joint Parsing and Named Entity Recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jenny</forename><forename type="middle">Rose</forename><surname>Finkel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the North American Chapter for the Association for Computational Linguistics</title>
+		<meeting>the North American Chapter for the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Incorporating Non-local Information into Information Extraction Systems by Gibbs Sampling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jenny</forename><forename type="middle">Rose</forename><surname>Finkel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Trond</forename><surname>Grenager</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics</title>
+		<meeting>the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">SoftmaxMargin CRFs: Training Log-Linear Models with Cost Functions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Gimpel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Noah</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the North American Chapter for the Association for Computational Linguistics</title>
+		<meeting>the North American Chapter for the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Improving Candidate Generation for Entity Linking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuhang</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bing</forename><surname>Qin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuqin</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ting</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sheng Li</forename><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Natural Language Processing and Information Systems</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Evaluating Entity Linking with Wikipedia</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ben</forename><surname>Hachey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Will</forename><surname>Radford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joel</forename><surname>Nothman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Honnibal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><forename type="middle">R</forename><surname>Curran</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Artificial Intelligence</title>
+		<imprint>
+			<biblScope unit="volume">194</biblScope>
+			<biblScope unit="page" from="130" to="150" />
+			<date type="published" when="2013-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Simple Coreference Resolution with Rich Syntactic and Semantic Features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aria</forename><surname>Haghighi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Coreference Resolution in a Modular, Entity-Centered Model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aria</forename><surname>Haghighi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the North American Chapter of the Association for Computational Linguistics</title>
+		<meeting>the North American Chapter of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Joint Coreference Resolution and Named-Entity Linking with Multi-Pass Sieves</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hannaneh</forename><surname>Hajishirzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Leila</forename><surname>Zilles</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><forename type="middle">S</forename><surname>Weld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Robust Disambiguation of Named Entities in Text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Johannes</forename><surname>Hoffart</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohamed</forename><forename type="middle">Amir</forename><surname>Yosef</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilaria</forename><surname>Bordino</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hagen</forename><surname>Fürstenau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Manfred</forename><surname>Pinkal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marc</forename><surname>Spaniol</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bilyana</forename><surname>Taneva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Thater</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gerhard</forename><surname>Weikum</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">OntoNotes: The 90% Solution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martha</forename><surname>Palmer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lance</forename><surname>Ramshaw</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ralph</forename><surname>Weischedel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the North American Chapter of the Association for Computational Linguistics: Short Papers</title>
+		<meeting>the North American Chapter of the Association for Computational Linguistics: Short Papers</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Knowledge Base Population: Successful Approaches and Challenges</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Heng</forename><surname>Ji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ralph</forename><surname>Grishman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics</title>
+		<meeting>the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Exploiting Wikipedia as External Knowledge for Named Entity Recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kentaro</forename><surname>Jun&amp;apos;ichi Kazama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Torisawa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Joint Conference on Empirical Methods in Natural Language Processing and Computational Natural Language Learning</title>
+		<meeting>the Joint Conference on Empirical Methods in Natural Language Processing and Computational Natural Language Learning</meeting>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Simple Semi-supervised Dependency Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Terry</forename><surname>Koo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xavier</forename><surname>Carreras</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics</title>
+		<meeting>the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Conditional Random Fields: Probabilistic Models for Segmenting and Labeling Sequence Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><forename type="middle">D</forename><surname>Lafferty</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fernando</forename><forename type="middle">C N</forename><surname>Pereira</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference on Machine Learning</title>
+		<meeting>the International Conference on Machine Learning</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Stanford&apos;s Multi-Pass Sieve Coreference Resolution System at the CoNLL-2011 Shared Task</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Heeyoung</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yves</forename><surname>Peirsman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Angel</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nathanael</forename><surname>Chambers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mihai</forename><surname>Surdeanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Jurafsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Computational Natural Language Learning: Shared Task</title>
+		<meeting>the Conference on Computational Natural Language Learning: Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Incremental Joint Extraction of Entity Mentions and Relations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qi</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Heng</forename><surname>Ji</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics</title>
+		<meeting>the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">On Coreference Resolution Performance Metrics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaoqiang</forename><surname>Luo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Learning to Link with Wikipedia</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Milne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ian</forename><forename type="middle">H</forename><surname>Witten</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Information and Knowledge Management</title>
+		<meeting>the Conference on Information and Knowledge Management</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Supervised Noun Phrase Coreference Research: The First Fifteen Years</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent</forename><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics</title>
+		<meeting>the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">The ACE 2005 Evaluation Plan</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nist</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIST</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joel</forename><surname>Nothman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicky</forename><surname>Ringland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Will</forename><surname>Radford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tara</forename><surname>Murphy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><forename type="middle">R</forename><surname>Curran</surname></persName>
+		</author>
+		<title level="m">Learning Multilingual Named Entity Recognition from Wikipedia. Artificial Intelligence</title>
+		<imprint>
+			<date type="published" when="2013-01" />
+			<biblScope unit="volume">194</biblScope>
+			<biblScope unit="page" from="151" to="175" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Lexicon Infused Phrase Embeddings for Named Entity Resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexandre</forename><surname>Passos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vineet</forename><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Computational Natural Language Learning</title>
+		<meeting>the Conference on Computational Natural Language Learning</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Learning Accurate, Compact, and Interpretable Tree Annotation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Leon</forename><surname>Barrett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Romain</forename><surname>Thibaux</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Computational Linguistics and the Association for Computational Linguistics</title>
+		<meeting>the Conference on Computational Linguistics and the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Exploiting Semantic Role Labeling, WordNet and Wikipedia for Coreference Resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paolo</forename><surname>Simone</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Ponzetto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Strube</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the North American Chapter of the Association of Computational Linguistics</title>
+		<meeting>the North American Chapter of the Association of Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">CoNLL-2011 Shared Task: Modeling Unrestricted Coreference in OntoNotes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lance</forename><surname>Sameer Pradhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell</forename><surname>Ramshaw</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martha</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ralph</forename><surname>Palmer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Weischedel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Xue</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Computational Natural Language Learning: Shared Task</title>
+		<meeting>the Conference on Computational Natural Language Learning: Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">CoNLL-2012 Shared Task: Modeling Multilingual Unrestricted Coreference in OntoNotes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Sameer Pradhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Moschitti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Olga</forename><surname>Xue</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuchen</forename><surname>Uryupina</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Joint Conference on EMNLP and CoNLL -Shared Task</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Scoring Coreference Partitions of Predicted Mentions: A Reference Implementation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaoqiang</forename><surname>Sameer Pradhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marta</forename><surname>Luo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Recasens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent</forename><surname>Hovy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Strube</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics</title>
+		<meeting>the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">A MultiPass Sieve for Coreference Resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Heeyoung</forename><surname>Karthik Raghunathan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nathanael</forename><surname>Sudarshan Rangarajan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mihai</forename><surname>Chambers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Surdeanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Jurafsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">Coreference Resolution with World Knowledge</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Altaf</forename><surname>Rahman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent</forename><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the Association for Computational Linguistics: Human Language Technologies</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">Design Challenges and Misconceptions in Named Entity Recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lev</forename><surname>Ratinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Computational Natural Language Learning</title>
+		<meeting>the Conference on Computational Natural Language Learning</meeting>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">Learning-based Multi-sieve Co-reference Resolution with Knowledge</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lev</forename><surname>Ratinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Joint Conference on Empirical Methods in Natural Language Processing and Computational Natural Language Learning</title>
+		<meeting>the Joint Conference on Empirical Methods in Natural Language Processing and Computational Natural Language Learning</meeting>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<analytic>
+		<title level="a" type="main">Local and Global Algorithms for Disambiguation to Wikipedia</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lev</forename><surname>Ratinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics</title>
+		<meeting>the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+	<note>Doug Downey, and Mike Anderson</note>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<analytic>
+		<title level="a" type="main">Re-ranking for Joint Named-Entity Recognition and Linking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Avirup</forename><surname>Sil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><surname>Yates</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference on Information and Knowledge Management</title>
+		<meeting>the International Conference on Information and Knowledge Management</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Joint Inference of Entities, Relations, and Coreference</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sameer</forename><surname>Singh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Riedel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Brian</forename><surname>Martin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiaping</forename><surname>Zheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2013 Workshop on Automated Knowledge Base Construction</title>
+		<meeting>the 2013 Workshop on Automated Knowledge Base Construction</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<analytic>
+		<title level="a" type="main">Dependency Parsing by Belief Propagation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>David</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Smith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Eisner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b52">
+	<analytic>
+		<title level="a" type="main">A Machine Learning Approach to Coreference Resolution of Noun Phrases</title>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<editor>Wee Meng Soon, Hwee Tou Ng, and Daniel Chung Yong Lim</editor>
+		<imprint>
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="521" to="544" />
+			<date type="published" when="2001-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b53">
+	<analytic>
+		<title level="a" type="main">Conundrums in Noun Phrase Coreference Resolution: Making Sense of the Stateof-the-Art</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Veselin</forename><surname>Stoyanov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nathan</forename><surname>Gilbert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Claire</forename><surname>Cardie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ellen</forename><surname>Riloff</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics</title>
+		<meeting>the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b54">
+	<analytic>
+		<title level="a" type="main">Coreference Resolution with Reconcile</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Veselin</forename><surname>Stoyanov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Claire</forename><surname>Cardie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nathan</forename><surname>Gilbert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ellen</forename><surname>Riloff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Buttler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Hysom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Association for Computational Linguistics: Short Papers</title>
+		<meeting>the Association for Computational Linguistics: Short Papers</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b55">
+	<analytic>
+		<title level="a" type="main">Dennis Connolly, and Lynette Hirschman. 1995. A ModelTheoretic Coreference Scoring Scheme</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marc</forename><surname>Vilain</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Burger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Aberdeen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Message Understanding</title>
+		<meeting>the Conference on Message Understanding</meeting>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b56">
+	<analytic>
+		<title level="a" type="main">Limited Memory Incremental Coreference Resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kellie</forename><surname>Webster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><forename type="middle">R</forename><surname>Curran</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Computational Linguistics</title>
+		<meeting>the Conference on Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b57">
+	<analytic>
+		<title level="a" type="main">A Robust Risk Minimization Based Named Entity Recognition System</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tong</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Natural Language Learning</title>
+		<meeting>the Conference on Natural Language Learning</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b58">
+	<analytic>
+		<title level="a" type="main">Dynamic Knowledge-Base Alignment for Coreference Resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiaping</forename><surname>Zheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Vilnis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sameer</forename><surname>Singh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jinho</forename><forename type="middle">D</forename><surname>Choi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Computational Natural Language Learning</title>
+		<meeting>the Conference on Computational Natural Language Learning</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

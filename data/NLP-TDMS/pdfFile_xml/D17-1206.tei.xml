@@ -1,0 +1,1399 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:55+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">A Joint Many-Task Model: Growing a Neural Network for Multiple NLP Tasks</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher>Association for Computational Linguistics</publisher>
+				<availability status="unknown"><p>Copyright Association for Computational Linguistics</p>
+				</availability>
+				<date>September 7-11, 2017. 2017</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuma</forename><surname>Hashimoto</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">Salesforce Research</orgName>
+								<orgName type="institution">The University of Tokyo</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+							<email>cxiong@salesforce.com</email>
+							<affiliation key="aff0">
+								<orgName type="department">Salesforce Research</orgName>
+								<orgName type="institution">The University of Tokyo</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshimasa</forename><surname>Tsuruoka</surname></persName>
+							<email>tsuruoka@logos.t.u-tokyo.ac.jp</email>
+							<affiliation key="aff0">
+								<orgName type="department">Salesforce Research</orgName>
+								<orgName type="institution">The University of Tokyo</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+							<email>rsocher@salesforce.com</email>
+							<affiliation key="aff0">
+								<orgName type="department">Salesforce Research</orgName>
+								<orgName type="institution">The University of Tokyo</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">A Joint Many-Task Model: Growing a Neural Network for Multiple NLP Tasks</title>
+					</analytic>
+					<monogr>
+						<title level="m">Natural Language Processing</title>
+						<meeting> <address><addrLine>Copenhagen, Denmark</addrLine></address>
+						</meeting>
+						<imprint>
+							<publisher>Association for Computational Linguistics</publisher>
+							<biblScope unit="page" from="1923" to="1933"/>
+							<date type="published">September 7-11, 2017. 2017</date>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Transfer and multi-task learning have traditionally focused on either a single source-target pair or very few, similar tasks. Ideally, the linguistic levels of morphology , syntax and semantics would benefit each other by being trained in a single model. We introduce a joint many-task model together with a strategy for successively growing its depth to solve increasingly complex tasks. Higher layers include shortcut connections to lower-level task predictions to reflect linguistic hierarchies. We use a simple regularization term to allow for optimizing all model weights to improve one task&apos;s loss without exhibiting catastrophic interference of the other tasks. Our single end-to-end model obtains state-of-the-art or competitive results on five different tasks from tagging, parsing , relatedness, and entailment tasks.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>The potential for leveraging multiple levels of representation has been demonstrated in various ways in the field of Natural Language Processing (NLP). For example, Part-Of-Speech (POS) tags are used for syntactic parsers. The parsers are used to improve higher-level tasks, such as natural language inference <ref type="bibr" target="#b5">(Chen et al., 2016</ref>) and machine translation ( <ref type="bibr" target="#b11">Eriguchi et al., 2016</ref>). These systems are often pipelines and not trained end-to-end.</p><p>Deep NLP models have yet shown benefits from predicting many increasingly complex tasks each at a successively deeper layer. Existing models often ignore linguistic hierarchies by predicting <ref type="figure">Figure 1</ref>: Overview of the joint many-task model predicting different linguistic outputs at successively deeper layers. different tasks either entirely separately or at the same depth <ref type="bibr" target="#b7">(Collobert et al., 2011</ref>).</p><p>We introduce a Joint Many-Task (JMT) model, outlined in <ref type="figure">Figure 1</ref>, which predicts increasingly complex NLP tasks at successively deeper layers. Unlike traditional pipeline systems, our single JMT model can be trained end-to-end for POS tagging, chunking, dependency parsing, semantic relatedness, and textual entailment, by considering linguistic hierarchies. We propose an adaptive training and regularization strategy to grow this model in its depth. With the help of this strategy we avoid catastrophic interference between the tasks. Our model is motivated by <ref type="bibr" target="#b32">Søgaard and Goldberg (2016)</ref> who showed that predicting two different tasks is more accurate when performed in different layers than in the same layer <ref type="bibr" target="#b7">(Collobert et al., 2011</ref>). Experimental results show that our single model achieves competitive results for all of the five different tasks, demonstrating that us-ing linguistic hierarchies is more important than handling different tasks in the same layer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">The Joint Many-Task Model</head><p>This section describes the inference procedure of our model, beginning at the lowest level and working our way to higher layers and more complex tasks; our model handles the five different tasks in the order of POS tagging, chunking, dependency parsing, semantic relatedness, and textual entailment, by considering linguistic hierarchies. The POS tags are used for chunking, and the chunking tags are used for dependency parsing <ref type="bibr" target="#b2">(Attardi and DellOrletta, 2008)</ref>. <ref type="bibr" target="#b36">Tai et al. (2015)</ref> have shown that dependencies improve the relatedness task. The relatedness and entailment tasks are closely related to each other. If the semantic relatedness between two sentences is very low, they are unlikely to entail each other. Based on this observation, we make use of the information from the relatedness task for improving the entailment task.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Word Representations</head><p>For each word w t in the input sentence s of length L, we use two types of embeddings. Word embeddings: We use Skip-gram ( <ref type="bibr" target="#b27">Mikolov et al., 2013</ref>) to train word embeddings. Character embeddings: Character n-gram embeddings are trained by the same Skip-gram objective. We construct the character n-gram vocabulary in the training data and assign an embedding for each entry. The final character embedding is the average of the unique character n-gram embeddings of w t . For example, the character ngrams (n = 1, 2, 3) of the word "Cat" are {C, a, t, #B#C, Ca, at, t#E#, #B#Ca, Cat, at#E#}, where "#B#" and "#E#" represent the beginning and the end of each word, respectively. Using the character embeddings efficiently provides morphological features. Each word is subsequently represented as x t , the concatenation of its corresponding word and character embeddings shared across the tasks. <ref type="bibr">1</ref> </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Word-Level Task: POS Tagging</head><p>The first layer of the model is a bi-directional LSTM ( <ref type="bibr" target="#b14">Graves and Schmidhuber, 2005</ref>; Hochreiter and Schmidhuber, 1997) whose hidden states 1 <ref type="bibr" target="#b4">Bojanowski et al. (2017)</ref> previously proposed to train the character n-gram embeddings by the Skip-gram objective. are used to predict POS tags. We use the following Long Short-Term Memory (LSTM) units for the forward direction:</p><formula xml:id="formula_0">i t = σ (W i g t + b i ) , f t = σ (W f g t + b f ) , u t = tanh (W u g t + b u ) , c t = i t u t + f t c t−1 ,<label>(1)</label></formula><formula xml:id="formula_1">o t = σ (W o g t + b o ) , h t = o t tanh (c t ) ,</formula><p>where we define the input g t as g t = [ − → h t−1 ; x t ], i.e. the concatenation of the previous hidden state and the word representation of w t . The backward pass is expanded in the same way, but a different set of weights are used.</p><p>For predicting the POS tag of w t , we use the concatenation of the forward and backward states in a one-layer bi-LSTM layer corresponding to the t-th word:</p><formula xml:id="formula_2">h t = [ − → h t ; ← − h t ]. Then each h t (1 ≤ t ≤ L)</formula><p>is fed into a standard softmax classifier with a single ReLU layer which outputs the probability vector y (1) for each of the POS tags.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Word-Level Task: Chunking</head><p>Chunking is also a word-level classification task which assigns a chunking tag (B-NP, I-VP, etc.) for each word. The tag specifies the region of major phrases (e.g., noun phrases) in the sentence.</p><p>Chunking is performed in the second bi-LSTM layer on top of the POS layer. When stacking the bi-LSTM layers, we use Eq. (1) with input g</p><formula xml:id="formula_3">(2) t = [h (2) t−1 ; h (1) t ; x t ; y (pos) t ], where h (1) t</formula><p>is the hidden state of the first (POS) layer. We define the weighted label embedding y (pos) t as follows:</p><formula xml:id="formula_4">y (pos) t = C j=1 p(y (1) t = j|h (1) t )(j),<label>(2)</label></formula><p>where C is the number of the POS tags, p(y</p><formula xml:id="formula_5">(1) t = j|h (1)</formula><p>t ) is the probability value that the j-th POS tag is assigned to w t , and (j) is the corresponding label embedding. The probability values are predicted by the POS layer, and thus no gold POS tags are needed. This output embedding is similar to the K-best POS tag feature which has been shown to be effective in syntactic tasks ( <ref type="bibr" target="#b1">Andor et al., 2016;</ref>). For predicting the chunking tags, we employ the same strategy as POS tagging by using the concatenated bidirectional hidden states h</p><formula xml:id="formula_6">(2) t = [ − → h (2) t ; ← − h<label>(2)</label></formula><p>t ] in the chunking layer. We also use a single ReLU hidden layer before the softmax classifier.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.4">Syntactic Task: Dependency Parsing</head><p>Dependency parsing identifies syntactic relations (such as an adjective modifying a noun) between word pairs in a sentence. We use the third bi-LSTM layer to classify relations between all pairs of words. The input vector for the LSTM includes hidden states, word representations, and the label embeddings for the two previous tasks: g</p><formula xml:id="formula_7">(3) t = [h (3) t−1 ; h (2) t ; x t ; (y (pos) t + y (chk) t )]</formula><p>, where we computed the chunking vector in a similar fashion as the POS vector in Eq. (2).</p><p>We predict the parent node (head) for each word. Then a dependency label is predicted for each child-parent pair. This approach is related to <ref type="bibr" target="#b8">Dozat and Manning (2017)</ref> and <ref type="bibr" target="#b41">Zhang et al. (2017)</ref>, where the main difference is that our model works on a multi-task framework. To predict the parent node of w t , we define a matching function between w t and the candidates of the parent node as m (t, j) = h</p><formula xml:id="formula_8">(3) t · (W d h (3) j )</formula><p>, where W d is a parameter matrix. For the root, we define h (3) L+1 = r as a parameterized vector. To compute the probability that w j (or the root node) is the parent of w t , the scores are normalized:</p><formula xml:id="formula_9">p(j|h (3) t ) = exp (m (t, j)) L+1 k=1,k =t exp (m (t, k))</formula><p>. <ref type="formula">(3)</ref> The dependency labels are predicted using [h</p><formula xml:id="formula_10">(3) t ; h (3) j ]</formula><p>as input to a softmax classifier with a single ReLU layer. We greedily select the parent node and the dependency label for each word. When the parsing result is not a well-formed tree, we apply the first-order Eisner's algorithm <ref type="bibr" target="#b10">(Eisner, 1996)</ref> to obtain a well-formed tree from it.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.5">Semantic Task: Semantic relatedness</head><p>The next two tasks model the semantic relationships between two input sentences. The first task measures the semantic relatedness between two sentences. The output is a real-valued relatedness score for the input sentence pair. The second task is textual entailment, which requires one to determine whether a premise sentence entails a hypothesis sentence. There are typically three classes: entailment, contradiction, and neutral. We use the fourth and fifth bi-LSTM layer for the relatedness and entailment task, respectively. Now it is required to obtain the sentence-level representation rather than the word-level representation h <ref type="bibr">(4)</ref> element-wise maximum values across all of the word-level representations in the fourth layer:</p><formula xml:id="formula_11">h (4) s = max h (4) 1 , h (4) 2 , . . . , h (4) L .<label>(4)</label></formula><p>This max-pooling technique has proven effective in text classification tasks <ref type="bibr" target="#b21">(Lai et al., 2015)</ref>. To model the semantic relatedness between s and s , we follow <ref type="bibr" target="#b36">Tai et al. (2015)</ref>. The feature vector for representing the semantic relatedness is computed as follows:</p><formula xml:id="formula_12">d 1 (s, s ) = h (4) s − h (4) s ; h (4) s h (4) s ,<label>(5)</label></formula><p>where h </p><formula xml:id="formula_13">s h (4)</formula><p>s is the element-wise multiplication. Then d 1 (s, s ) is fed into a softmax classifier with a single Maxout hidden layer ( <ref type="bibr" target="#b13">Goodfellow et al., 2013</ref>) to output a relatedness score (from 1 to 5 in our case).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.6">Semantic Task: Textual entailment</head><p>For entailment classification, we also use the maxpooling technique as in the semantic relatedness task. To classify the premise-hypothesis pair (s, s ) into one of the three classes, we compute the feature vector d 2 (s, s ) as in Eq. (5) except that we do not use the absolute values of the element-wise subtraction, because we need to identify which is the premise (or hypothesis). Then d 2 (s, s ) is fed into a softmax classifier.</p><p>To use the output from the relatedness layer directly, we use the label embeddings for the relatedness task. More concretely, we compute the class label embeddings for the semantic relatedness task similar to Eq. (2). The final feature vectors that are concatenated and fed into the entailment classifier are the weighted relatedness label embedding and the feature vector d 2 (s, s ). We use three Maxout hidden layers before the classifier.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Training the JMT Model</head><p>The model is trained jointly over all datasets. During each epoch, the optimization iterates over each full training dataset in the same order as the corresponding tasks described in the modeling section.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Pre-Training Word Representations</head><p>We pre-train word embeddings using the Skipgram model with negative sampling <ref type="bibr" target="#b27">(Mikolov et al., 2013</ref>). We also pre-train the character ngram embeddings using Skip-gram. <ref type="bibr">2</ref> The only difference is that each input word embedding is replaced with its corresponding average character ngram embedding described in Section 2.1. These embeddings are fine-tuned during the model training. We denote the embedding parameters as θ e .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Training the POS Layer</head><p>Let θ POS = (W POS , b POS , θ e ) denote the set of model parameters associated with the POS layer, where W POS is the set of the weight matrices in the first bi-LSTM and the classifier, and b POS is the set of the bias vectors. The objective function to optimize θ POS is defined as follows:</p><formula xml:id="formula_14">J 1 (θ POS ) = − s t log p(y (1) t = α|h (1) t ) + λW POS 2 + δθ e − θ e 2 ,<label>(6)</label></formula><p>where p(y</p><formula xml:id="formula_15">(1) t = α wt |h (1)</formula><p>t ) is the probability value that the correct label α is assigned to w t in the sentence s, λW POS 2 is the L2-norm regularization term, and λ is a hyperparameter.</p><p>We call the second regularization term δθ e − θ e 2 a successive regularization term. The successive regularization is based on the idea that we do not want the model to forget the information learned for the other tasks. In the case of POS tagging, the regularization is applied to θ e , and θ e is the embedding parameter after training the final task in the top-most layer at the previous training epoch. δ is a hyperparameter.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Training the Chunking Layer</head><p>The objective function is defined as follows:</p><formula xml:id="formula_16">J 2 (θ chk ) = − s t log p(y (2) t = α|h (2) t ) + λW chk 2 + δθ POS − θ POS 2 ,<label>(7)</label></formula><p>which is similar to that of POS tagging, and θ chk is (W chk , b chk , E POS , θ e ), where W chk and b chk are the weight and bias parameters including those in θ POS , and E POS is the set of the POS label embeddings. θ POS is the one after training the POS layer at the current training epoch.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Training the Dependency Layer</head><p>The objective function is defined as follows:</p><formula xml:id="formula_17">J 3 (θ dep ) = − s t log p(α|h (3) t )p(β|h (3) t , h (3) α ) + λ(W dep 2 + W d 2 ) + δθ chk − θ chk 2 ,<label>(8)</label></formula><p>where p(α|h</p><formula xml:id="formula_18">(3) t )</formula><p>is the probability value assigned to the correct parent node α for w t , and p(β|h</p><formula xml:id="formula_19">(3) t , h (3)</formula><p>α ) is the probability value assigned to the correct dependency label β for the child-parent pair (w t , α). θ dep is defined as</p><formula xml:id="formula_20">(W dep , b dep , W d , r, E POS , E chk , θ e ),</formula><p>where W dep and b dep are the weight and bias parameters including those in θ chk , and E chk is the set of the chunking label embeddings.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Training the Relatedness Layer</head><p>Following <ref type="bibr" target="#b36">Tai et al. (2015)</ref>, the objective function is defined as follows: </p><formula xml:id="formula_21">J 4 (θ rel ) = (s,s ) KLˆp KLˆ KLˆp(s, s ) p(h (4) s , h<label>(4)</label></formula><formula xml:id="formula_22">s ) + λW rel 2 + δθ dep − θ dep 2 ,<label>(9)</label></formula><p>s ) is the KL-divergence between the two distributions. θ rel is defined as (W rel , b rel , E POS , E chk , θ e ).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.6">Training the Entailment Layer</head><p>The objective function is defined as follows:</p><formula xml:id="formula_24">J 5 (θ ent ) = − (s,s ) log p(y (5) (s,s ) = α|h (5) s , h<label>(5)</label></formula><formula xml:id="formula_25">s ) + λW ent 2 + δθ rel − θ rel 2 ,<label>(10)</label></formula><p>where p(y</p><formula xml:id="formula_26">(5) (s,s ) = α|h (5) s , h<label>(5)</label></formula><p>s ) is the probability value that the correct label α is assigned to the premise-hypothesis pair (s, s ). θ ent is defined as (W ent , b ent , E POS , E chk , E rel , θ e ), where E rel is the set of the relatedness label embeddings.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Related Work</head><p>Many deep learning approaches have proven to be effective in a variety of NLP tasks and are becoming more and more complex. They are typically designed to handle single tasks, or some of them are designed as general-purpose models ( <ref type="bibr" target="#b18">Kumar et al., 2016;</ref>) but applied to different tasks independently.</p><p>For handling multiple NLP tasks, multi-task learning models with deep neural networks have been proposed <ref type="bibr" target="#b7">(Collobert et al., 2011;</ref><ref type="bibr" target="#b24">Luong et al., 2016)</ref>, and more recently <ref type="bibr" target="#b32">Søgaard and Goldberg (2016)</ref> have suggested that using different layers for different tasks is more effective than using the same layer in jointly learning closely-related tasks, such as POS tagging and chunking. However, the number of tasks was limited or they have very similar task settings like word-level tagging, and it was not clear how lower-level tasks could be also improved by combining higher-level tasks.</p><p>More related to our work, Godwin et al. <ref type="formula" target="#formula_0">(2016)</ref> also followed <ref type="bibr" target="#b32">Søgaard and Goldberg (2016)</ref> to jointly learn POS tagging, chunking, and language modeling, and <ref type="bibr" target="#b42">Zhang and Weiss (2016)</ref> have shown that it is effective to jointly learn POS tagging and dependency parsing by sharing internal representations. In the field of relation extraction, <ref type="bibr" target="#b29">Miwa and Bansal (2016)</ref> proposed a joint learning model for entity detection and relation extraction. All of them suggest the importance of multi-task learning, and we investigate the potential of handling different types of NLP tasks rather than closely-related ones in a single hierarchical deep model.</p><p>In the field of computer vision, some transfer and multi-task learning approaches have also been proposed ( <ref type="bibr" target="#b22">Li and Hoiem, 2016;</ref><ref type="bibr" target="#b28">Misra et al., 2016)</ref>. For example, <ref type="bibr" target="#b28">Misra et al. (2016)</ref> proposed a multi-task learning model to handle different tasks. However, they assume that each data sample has annotations for the different tasks, and do not explicitly consider task hierarchies.</p><p>Recently, <ref type="bibr" target="#b30">Rusu et al. (2016)</ref> have proposed a progressive neural network model to handle multiple reinforcement learning tasks, such as Atari games. Like our JMT model, their model is also successively trained according to different tasks using different layers called columns in their paper. In their model, once the first task is completed, the model parameters for the first task are fixed, and then the second task is handled with new model parameters. Therefore, accuracy of the previously trained tasks is never improved. In NLP tasks, multi-task learning has the potential to improve not only higher-level tasks, but also lowerlevel tasks. Rather than fixing the pre-trained model parameters, our successive regularization allows our model to continuously train the lowerlevel tasks without significant accuracy drops.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Experimental Settings</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Datasets</head><p>POS tagging: To train the POS tagging layer, we used the Wall Street Journal (WSJ) portion of Penn Treebank, and followed the standard split for the training (Section 0-18), development (Section 19-21), and test (Section 22-24) sets. The evaluation metric is the word-level accuracy. Chunking: For chunking, we also used the WSJ corpus, and followed the standard split for the training (Section 15-18) and test (Section 20) sets as in the CoNLL 2000 shared task. We used Section 19 as the development set and employed the IOBES tagging scheme. The evaluation metric is the F1 score defined in the shared task. Dependency parsing: We also used the WSJ corpus for dependency parsing, and followed the standard split for the training (Section 2-21), development (Section 22), and test (Section 23) sets. We obtained Stanford style dependencies using the version 3.3.0 of the Stanford converter. The evaluation metrics are the Unlabeled Attachment Score (UAS) and the Labeled Attachment Score (LAS), and punctuations are excluded for the evaluation. Semantic relatedness: For the semantic relatedness task, we used the SICK dataset (Marelli et al., <ref type="bibr">2014</ref>), and followed the standard split for the training, development, and test sets. The evaluation metric is the Mean Squared Error (MSE) between the gold and predicted scores. Textual entailment: For textual entailment, we also used the SICK dataset and exactly the same data split as the semantic relatedness dataset. The evaluation metric is the accuracy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Training Details</head><p>We set the dimensionality of the embeddings and the hidden states in the bi-LSTMs to 100. At each training epoch, we trained our model in the order of POS tagging, chunking, dependency parsing, semantic relatedness, and textual entailment. We used mini-batch stochastic gradient decent and empirically found it effective to use a gradient clipping method with growing clipping values for the different tasks; concretely, we employed the simple function: min(3.0, depth), where depth is the number of bi-LSTM layers involved in each task, and 3.0 is the maximum value. We applied our successive regularization to our model, along with L2-norm regularization and dropout <ref type="bibr">(Srivas- tava et al., 2014</ref>). More details are summarized in the supplemental material. <ref type="table">Table 1</ref> shows our results on the test sets of the five tasks. <ref type="bibr">3</ref> The column "Single" shows the results of handling each task separately using singlelayer bi-LSTMs, and the column "JMT all " shows the results of our JMT model. The single task settings only use the annotations of their own tasks. For example, when handling dependency parsing as a single task, the POS and chunking tags are not used. We can see that all results of the five tasks are improved in our JMT model, which shows that our JMT model can handle the five different tasks in a single model. Our JMT model allows us to access arbitrary information learned from the different tasks. If we want to use the model just as a POS tagger, we can use only first bi-LSTM layer. <ref type="table">Table 1</ref> also shows the results of five subsets of the different tasks. For example, in the case of "JMT ABC ", only the first three layers of the bi-LSTMs are used to handle the three tasks. In the case of "JMT DE ", only the top two layers are used as a two-layer bi-LSTM by omitting all information from the first three layers. The results of the closely-related tasks ("AB", "ABC", and "DE") show that our JMT model improves both of the high-level and low-level tasks. The results of "JMT CD " and "JMT CE " show that the parsing task can be improved by the semantic tasks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Results and Discussion</head><p>It should be noted that in our analysis on the greedy parsing results of the "JMT ABC " setting, we have found that more than 95% are wellformed dependency trees on the development set. In the 1,700 sentences of the development data, 11 results have multiple root notes, 11 results have no root nodes, and 61 results have cycles. These 83 parsing results are converted into well-formed trees by Eisner's algorithm, and the accuracy does not significantly change (UAS: 94.52%→94.53%, LAS: 92.61%→92.62%). <ref type="table" target="#tab_2">Table 2</ref> shows the results of POS tagging, and our JMT model achieves the score close to the state-of-the-art results. The best result to date has been achieved by , which uses character-based LSTMs. Incorporating the character-based encoders into our JMT model would be an interesting direction, but we have shown that the simple pre-trained character n-gram embeddings lead to the promising result.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Comparison with Published Results</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>POS tagging</head><p>Chunking <ref type="table" target="#tab_3">Table 3</ref> shows the results of chunking, and our JMT model achieves the state-of-theart result. <ref type="bibr" target="#b32">Søgaard and Goldberg (2016)</ref> proposed to jointly learn POS tagging and chunking in different layers, but they only showed improvement for chunking. By contrast, our results show that the low-level tasks are also improved. <ref type="table" target="#tab_4">Table 4</ref> shows the results of dependency parsing by using only the WSJ corpus in terms of the dependency annotations. <ref type="bibr">4</ref> It is notable that our simple greedy dependency parser outperforms the model in <ref type="bibr" target="#b1">Andor et al. (2016)</ref> which is based on beam search with global information. The result suggests that the bi-LSTMs efficiently capture global information necessary for dependency parsing. Moreover, our single task result already achieves high accuracy without the POS and chunking information. The best result to date has been achieved by the model propsoed in <ref type="bibr" target="#b8">Dozat and Manning (2017)</ref>, which uses higher dimensional representations than ours and proposes a more sophisticated attention mechanism called biaffine attention. It should be promising to incorporate their attention mechanism into our parsing component.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Dependency parsing</head><p>Semantic relatedness <ref type="table" target="#tab_5">Table 5</ref> shows the results of the semantic relatedness task, and our JMT model achieves the state-of-the-art result. The result of "JMT DE " is already better than the previous state-of-the-art results. Both of  and <ref type="bibr" target="#b36">Tai et al. (2015)</ref> explicitly used syntactic trees, and  relied on attention mechanisms. However, our method uses the simple maxpooling strategy, which suggests that it is worth Single JMT all JMTAB JMTABC JMTDE JMTCD JMTCE A ↑ POS 97.45 97.55 97.52 97.54 n/a n/a n/a B ↑ Chunking 95.02 n/a 95.77 n/a n/a n/a n/a n/a n/a 0.238 0.251 n/a E ↑ Entailment 81.8 86.2 n/a n/a 86.8 n/a 82.4 <ref type="table">Table 1</ref>: Test set results for the five tasks. In the relatedness task, the lower scores are better.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Method</head><p>Acc. ↑ JMT all 97.55  97.78 <ref type="bibr" target="#b18">Kumar et al. (2016)</ref> 97.56 <ref type="bibr" target="#b25">Ma and Hovy (2016)</ref> 97.55 Søgaard <ref type="formula" target="#formula_0">(2011)</ref>        investigating such simple methods before developing complex methods for simple tasks. Currently, our JMT model does not explicitly use the learned dependency structures, and thus the explicit use of the output from the dependency layer should be an interesting direction of future work.</p><p>Textual entailment <ref type="table" target="#tab_6">Table 6</ref> shows the results of textual entailment, and our JMT model achieves the state-of-the-art result. The previous state-ofthe-art result in <ref type="bibr" target="#b40">Yin et al. (2016)</ref> relied on attention mechanisms and dataset-specific data preprocessing and features. Again, our simple maxpooling strategy achieves the state-of-the-art result boosted by the joint training. These results show the importance of jointly handling related tasks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Analysis on the Model Architectures</head><p>We investigate the effectiveness of our model in detail. All of the results shown in this section are the development set results.  Shortcut connections Our JMT model feeds the word representations into all of the bi-LSTM layers, which is called the shortcut connection. <ref type="table" target="#tab_7">Ta- ble 7</ref> shows the results of "JMT all " with and without the shortcut connections. The results without the shortcut connections are shown in the column of "w/o SC". These results clearly show that the importance of the shortcut connections, and in particular, the semantic tasks in the higher layers strongly rely on the shortcut connections. That is, simply stacking the LSTM layers is not sufficient to handle a variety of NLP tasks in a single model. In the supplementary material, it is qualitatively shown how the shortcut connections work in our model. <ref type="table" target="#tab_7">Table 7</ref> also shows the results without using the output labels of the POS, chunking, and relatedness layers, in the column of "w/o LE". These results show that the explicit use of the output information from the classifiers of the lower layers is important in our JMT   model. The results in the column of "w/o SC&amp;LE" are the ones without both of the shortcut connections and the label embeddings.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Output label embeddings</head><p>Different layers for different tasks <ref type="table" target="#tab_9">Table 8</ref> shows the results of our "JMT ABC " setting and that of not using the shortcut connections and the label embeddings ("w/o SC&amp;LE") as in <ref type="table" target="#tab_7">Table 7</ref>.</p><p>In addition, in the column of "All-3", we show the results of using the highest (i.e., the third) layer for all of the three tasks without any shortcut connections and label embeddings, and thus the two settings "w/o SC&amp;LE" and "All-3" require exactly the same number of the model parameters. The "All-3" setting is similar to the multi-task model of <ref type="bibr" target="#b7">Collobert et al. (2011)</ref> in that task-specific output layers are used but most of the model parameters are shared. The results show that using the same layers for the three different tasks hampers the effectiveness of our JMT model, and the design of the model is much more important than the number of the model parameters.</p><p>Successive regularization In <ref type="table" target="#tab_11">Table 9</ref>, the column of "w/o SR" shows the results of omitting the successive regularization terms described in Section 3. We can see that the accuracy of chunking is improved by the successive regularization, while other results are not affected so much. The chunking dataset used here is relatively small compared with other low-level tasks, POS tagging and dependency parsing. Thus, these results suggest that the successive regularization is effective when dataset sizes are imbalanced.</p><p>Vertical connections We investigated our JMT results without using the vertical connections in   the five-layer bi-LSTMs. More concretely, when constructing the input vectors g t , we do not use the bi-LSTM hidden states of the previous layers. <ref type="table" target="#tab_11">Table 9</ref> also shows the JMT all results with and without the vertical connections. As shown in the column of "w/o VC", we observed the competitive results. Therefore, in the target tasks used in our model, sharing the word representations and the output label embeddings is more effective than just stacking the bi-LSTM layers.</p><p>Order of training Our JMT model iterates the training process in the order described in Section 3. Our hypothesis is that it is important to start from the lower-level tasks and gradually move to the higher-level tasks. <ref type="table" target="#tab_12">Table 10</ref> shows the results of training our model by randomly shuffling the order of the tasks for each epoch in the column of "Random". We see that the scores of the semantic tasks drop by the random strategy. In our preliminary experiments, we have found that constructing the mini-batch samples from different tasks also hampers the effectiveness of our model, which also supports our hypothesis.</p><p>Depth The single task settings shown in <ref type="table">Table 1</ref> are obtained by using single layer bi-LSTMs, but in our JMT model, the higher-level tasks use successively deeper layers. To investigate the gap between the different number of the layers for each task, we also show the results of using multi-layer bi-LSTMs for the single task settings, in the column of "Single+" in <ref type="table" target="#tab_14">Table 11</ref>. More concretely, we use the same number of the layers with our JMT model; for example, three layers are used for dependency parsing, and five layers are used for textual entailment. As shown in these results, deeper layers do not always lead to better results, and the joint learning is more important than mak-ing the models complex only for single tasks.</p><p>Character n-gram embeddings Finally, <ref type="table" target="#tab_2">Ta- ble 12</ref> shows the results for the three single tasks with and without the pre-trained character n-gram embeddings. The column of "W&amp;C" corresponds to using both of the word and character n-gram embeddings, and that of "Only W" corresponds to using only the word embeddings. These results clearly show that jointly using the pre-trained word and character n-gram embeddings is helpful in improving the results. The pre-training of the character n-gram embeddings is also effective; for example, without the pre-training, the POS accuracy drops from 97.52% to 97.38% and the chunking accuracy drops from 95.65% to 95.14%.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Discussion</head><p>Training strategies In our JMT model, it is not obvious when to stop the training while trying to maximize the scores of all the five tasks. We focused on maximizing the accuracy of dependency parsing on the development data in our experiments. However, the sizes of the training data are different across the different tasks; for example, the semantic tasks include only 4,500 sentence pairs, and the dependency parsing dataset includes 39,832 sentences with word-level annotations. Thus, in general, dependency parsing requires more training epochs than the semantic tasks, but currently, our model trains all of the tasks for the same training epochs. The same strategy for decreasing the learning rate is also shared across all the different tasks, although our growing gradient clipping method described in Section 5.2 helps improve the results. Indeed, we observed that better scores of the semantic tasks can be achieved before the accuracy of dependency parsing reaches the best score. Developing a method for achieving the best scores for all of the tasks at the same time is important future work.</p><p>More tasks Our JMT model has the potential of handling more tasks than the five tasks used in our experiments; examples include entity detection and relation extraction as in <ref type="bibr" target="#b29">Miwa and Bansal (2016)</ref> as well as language modeling <ref type="bibr">(God- win et al., 2016)</ref>. It is also a promising direction to train each task for multiple domains by focusing on domain adaptation <ref type="bibr" target="#b32">(Søgaard and Goldberg, 2016)</ref>. In particular, incorporating language modeling tasks provides an opportunity to use large text data. Such large text data was used in our experiments to pre-train the word and character ngram embeddings. However, it would be preferable to efficiently use it for improving the entire model.</p><p>Task-oriented learning of low-level tasks Each task in our JMT model is supervised by its corresponding dataset. However, it would be possible to learn low-level tasks by optimizing highlevel tasks, because the model parameters of the low-level tasks can be directly modified by learning the high-level tasks. One example has already been presented in <ref type="bibr" target="#b15">Hashimoto and Tsuruoka (2017)</ref>, where our JMT model is extended to learning task-oriented latent graph structures of sentences by training our dependency parsing component according to a neural machine translation objective.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Conclusion</head><p>We presented a joint many-task model to handle multiple NLP tasks with growing depth in a single end-to-end model. Our model is successively trained by considering linguistic hierarchies, directly feeding word representations into all layers, explicitly using low-level predictions, and applying successive regularization. In experiments on five NLP tasks, our single model achieves the state-of-the-art or competitive results on chunking, dependency parsing, semantic relatedness, and textual entailment.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head></head><label></label><figDesc>is the absolute values of the element-wise subtraction, and h (4)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="true"><head>Table 2 : POS tagging results.</head><label>2</label><figDesc></figDesc><table>Method 
+F1 ↑ 
+JMTAB 
+95.77 
+Single 
+95.02 
+Søgaard and Goldberg (2016) 
+95.56 
+Suzuki and Isozaki (2008) 
+95.15 
+Collobert et al. (2011) 
+94.32 
+Kudo and Matsumoto (2001) 
+93.91 
+Tsuruoka et al. (2011) 
+93.81 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="true"><head>Table 3 : Chunking results.</head><label>3</label><figDesc></figDesc><table>Method 
+UAS ↑ 
+LAS ↑ 
+JMT all 
+94.67 
+92.90 
+Single 
+93.35 
+91.42 
+Dozat and Manning (2017) 
+95.74 
+94.08 
+Andor et al. (2016) 
+94.61 
+92.79 
+Alberti et al. (2015) 
+94.23 
+92.36 
+Zhang et al. (2017) 
+94.10 
+91.90 
+Weiss et al. (2015) 
+93.99 
+92.05 
+Dyer et al. (2015) 
+93.10 
+90.90 
+Bohnet (2010) 
+92.88 
+90.71 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 4 : Dependency results.</head><label>4</label><figDesc></figDesc><table>Method 
+MSE ↓ 
+JMT all 
+0.233 
+JMTDE 
+0.238 
+Zhou et al. (2016) 
+0.243 
+Tai et al. (2015) 
+0.253 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="true"><head>Table 5 : Semantic relatedness results.</head><label>5</label><figDesc></figDesc><table>Method 
+Acc. ↑ 
+JMT all 
+86.2 
+JMTDE 
+86.8 
+Yin et al. (2016) 
+86.2 
+Lai and Hockenmaier (2014) 
+84.6 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="true"><head>Table 6 : Textual entailment results.</head><label>6</label><figDesc></figDesc><table>JMT all 
+w/o SC 
+w/o LE 
+w/o SC&amp;LE 
+POS 
+97.88 
+97.79 
+97.85 
+97.87 
+Chunking 
+97.59 
+97.08 
+97.40 
+97.33 
+Dependency UAS 
+94.51 
+94.52 
+94.09 
+94.04 
+Dependency LAS 
+92.60 
+92.62 
+92.14 
+92.03 
+Relatedness 
+0.236 
+0.698 
+0.261 
+0.765 
+Entailment 
+84.6 
+75.0 
+81.6 
+71.2 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head>Table 7 :</head><label>7</label><figDesc></figDesc><table>Effectiveness of the Shortcut Connections 
+(SC) and the Label Embeddings (LE). 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_9" validated="false"><head>Table 8 :</head><label>8</label><figDesc></figDesc><table>Effectiveness of using different layers for 
+different tasks. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_11" validated="false"><head>Table 9 :</head><label>9</label><figDesc></figDesc><table>Effectiveness of the Successive Regular-
+ization (SR) and the Vertical Connections (VC). 
+
+JMT all 
+Random 
+POS 
+97.88 
+97.83 
+Chunking 
+97.59 
+97.71 
+Dependency UAS 
+94.51 
+94.66 
+Dependency LAS 
+92.60 
+92.80 
+Relatedness 
+0.236 
+0.298 
+Entailment 
+84.6 
+83.2 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_12" validated="false"><head>Table 10 :</head><label>10</label><figDesc>Effects of the order of training.</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_14" validated="true"><head>Table 11 : Effects of depth for the single tasks.</head><label>11</label><figDesc></figDesc><table>Single 
+W&amp;C 
+Only W 
+POS 
+97.52 
+96.26 
+Chunking 
+95.65 
+94.92 
+Dependency UAS 
+93.38 
+92.90 
+Dependency LAS 
+91.37 
+90.44 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_15" validated="false"><head>Table 12 :</head><label>12</label><figDesc>Effects of the character embeddings.</figDesc><table></table></figure>
+
+			<note place="foot">t used in the first three tasks. We compute the sentence-level representation h (4) s as the</note>
+
+			<note place="foot" n="2"> The training code and the pre-trained embeddings are available at https://github.com/hassyGo/ charNgram2vec.</note>
+
+			<note place="foot" n="3"> In chunking evaluation, we only show the results of &quot;Single&quot; and &quot;JMTAB&quot; because the sentences for chunking evaluation overlap the training data for dependency parsing.</note>
+
+			<note place="foot" n="4"> Choe and Charniak (2016) employed a tri-training method to expand the training data with 400,000 trees in addition to the WSJ data, and they reported 95.9 UAS and 94.1 LAS by converting their constituency trees into dependency trees. Kuncoro et al. (2017) also reported high accuracy (95.8 UAS and 94.6 LAS) by using a converter.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We thank the anonymous reviewers and the Salesforce Research team members for their fruitful comments and discussions.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Improved Transition-Based Parsing and Tagging with Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Coppola</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1354" to="1359" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Globally Normalized Transition-Based Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Andor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aliaksei</forename><surname>Severyn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Presta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kuzman</forename><surname>Ganchev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="2442" to="2452" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Chunking and Dependency Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Giuseppe</forename><surname>Attardi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Felice</forename><surname>Dellorletta</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of LREC 2008 Workshop on Partial Parsing</title>
+		<meeting>LREC 2008 Workshop on Partial Parsing</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Top Accuracy and Fast Dependency Parsing is not a Contradiction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bernd</forename><surname>Bohnet</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 23rd International Conference on Computational Linguistics</title>
+		<meeting>the 23rd International Conference on Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="89" to="97" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Enriching Word Vectors with Subword Information</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Piotr</forename><surname>Bojanowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edouard</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Transactions of the Association for Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="page" from="135" to="146" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qian</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodan</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhenhua</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Si</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hui</forename><surname>Jiang</surname></persName>
+		</author>
+		<idno>cs.CL 1609.06038</idno>
+		<title level="m">Enhancing and Combining Sequential and Tree LSTM for Natural Language Inference. arXiv</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Parsing as Language Modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kook</forename><surname>Do</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Choe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Charniak</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2016 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2016 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2331" to="2336" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Natural Language Processing (Almost) from Scratch</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronan</forename><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Leon</forename><surname>Bottou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Karlen Nad Koray</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pavel</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kuksa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="2493" to="2537" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Deep Biaffine Attention for Neural Dependency Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Dozat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 5th International Conference on Learning Representations</title>
+		<meeting>the 5th International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">TransitionBased Dependency Parsing with Stack Long ShortTerm Memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Austin</forename><surname>Matthews</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing</title>
+		<meeting>the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing</meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="334" to="343" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Efficient Normal-Form Parsing for Combinatory Categorial Grammar</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Eisner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 34th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 34th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="79" to="86" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Tree-to-Sequence Attentional Neural Machine Translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Akiko</forename><surname>Eriguchi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuma</forename><surname>Hashimoto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshimasa</forename><surname>Tsuruoka</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="823" to="833" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename><surname>Godwin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pontus</forename><surname>Stenetorp</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Riedel</surname></persName>
+		</author>
+		<idno>cs.CL 1612.09113</idno>
+		<title level="m">Deep Semi-Supervised Learning with Linguistically Motivated Sequence Labeling Task Hierarchies. arXiv</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Maxout Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ian</forename><forename type="middle">J</forename><surname>Goodfellow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Warde-Farley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mehdi</forename><surname>Mirza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of The 30th International Conference on Machine Learning</title>
+		<meeting>The 30th International Conference on Machine Learning</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1319" to="1327" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Framewise Phoneme Classification with Bidirectional LSTM and Other Neural Network Architectures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jurgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Networks</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="602" to="610" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Neural Machine Translation with Source-Side Latent Graph Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuma</forename><surname>Hashimoto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshimasa</forename><surname>Tsuruoka</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2017 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+	<note>To appear</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jurgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Chunking with Support Vector Machines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Taku</forename><surname>Kudo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuji</forename><surname>Matsumoto</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Second Meeting of the North American Chapter</title>
+		<meeting>the Second Meeting of the North American Chapter</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Ask Me Anything: Dynamic Memory Networks for Natural Language Processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ankit</forename><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ozan</forename><surname>Irsoy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><surname>Ondruska</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohit</forename><surname>Iyyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ishaan</forename><surname>Gulrajani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Romain</forename><surname>Paulus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of The 33rd International Conference on Machine Learning</title>
+		<meeting>The 33rd International Conference on Machine Learning</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1378" to="1387" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">What Do Recurrent Neural Network Grammars Learn About Syntax?</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adhiguna</forename><surname>Kuncoro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lingpeng</forename><surname>Kong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Graham</forename><surname>Neubig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 15th Conference of the European Chapter of the Association for Computational Linguistics</title>
+		<meeting>the 15th Conference of the European Chapter of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="1249" to="1258" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Illinois-LH: A Denotational and Distributional Approach to Semantics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alice</forename><surname>Lai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julia</forename><surname>Hockenmaier</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 8th International Workshop on Semantic Evaluation</title>
+		<meeting>the 8th International Workshop on Semantic Evaluation</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="329" to="334" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Recurrent Convolutional Neural Networks for Text Classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Siwei</forename><surname>Lai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Liheng</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kang</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Zhao</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Twenty-Ninth AAAI Conference on Artificial Intelligence</title>
+		<meeting>the Twenty-Ninth AAAI Conference on Artificial Intelligence</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="2267" to="2273" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Learning without Forgetting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhizhong</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Derek</forename><surname>Hoiem</surname></persName>
+		</author>
+		<idno>abs/1606.09282</idno>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Finding Function in Form: Compositional Character Models for Open Vocabulary Word Representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alan</forename><forename type="middle">W</forename><surname>Black</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Isabel</forename><surname>Trancoso</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ramon</forename><surname>Fermandez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Silvio</forename><surname>Amir</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luis</forename><surname>Marujo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tiago</forename><surname>Luis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1520" to="1530" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Multi-task Sequence to Sequence Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minh-Thang</forename><surname>Luong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc</forename><forename type="middle">V</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 4th International Conference on Learning Representations</title>
+		<meeting>the 4th International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">End-to-end Sequence Labeling via Bi-directional LSTM-CNNs-CRF</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuezhe</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1064" to="1074" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">SemEval-2014 Task 1: Evaluation of Compositional Distributional Semantic Models on Full Sentences through Semantic Relatedness and Textual Entailment</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marco</forename><surname>Marelli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luisa</forename><surname>Bentivogli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marco</forename><surname>Baroni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raffaella</forename><surname>Bernardi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefano</forename><surname>Menini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roberto</forename><surname>Zamparelli</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 8th International Workshop on Semantic Evaluation (SemEval 2014)</title>
+		<meeting>the 8th International Workshop on Semantic Evaluation (SemEval 2014)</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1" to="8" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Distributed Representations of Words and Phrases and their Compositionality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="page" from="3111" to="3119" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">Cross-stitch Networks for Multi-task Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ishan</forename><surname>Misra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abhinav</forename><surname>Shrivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abhinav</forename><surname>Gupta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martial</forename><surname>Hebert</surname></persName>
+		</author>
+		<idno>abs/1604.03539</idno>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">End-to-End Relation Extraction using LSTMs on Sequences and Tree Structures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Makoto</forename><surname>Miwa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohit</forename><surname>Bansal</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1105" to="1116" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrei</forename><forename type="middle">A</forename><surname>Rusu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Neil</forename><forename type="middle">C</forename><surname>Rabinowitz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guillaume</forename><surname>Desjardins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hubert</forename><surname>Soyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Kirkpatrick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Razvan</forename><surname>Pascanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raia</forename><surname>Hadsell</surname></persName>
+		</author>
+		<idno>abs/1606.04671</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Progressive Neural Networks. CoRR</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Semi-supervised condensed nearest neighbor for part-of-speech tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 49th Annual Meeting of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 49th Annual Meeting of the Association for Computational Linguistics: Human Language Technologies</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="48" to="52" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Deep multi-task learning with low level tasks supervised at lower layers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Short Papers</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="231" to="235" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Dropout: A Simple Way to Prevent Neural Networks from Overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Sequence to Sequence Learning with Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc V</forename><surname>Le</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="page" from="3104" to="3112" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Semi-Supervised Sequential Labeling and Segmentation Using GigaWord Scale Unlabeled Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Suzuki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hideki</forename><surname>Isozaki</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 46th Annual Meeting of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 46th Annual Meeting of the Association for Computational Linguistics: Human Language Technologies</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="665" to="673" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Improved Semantic Representations From Tree-Structured Long Short-Term Memory Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai Sheng</forename><surname>Tai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing</title>
+		<meeting>the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing</meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1556" to="1566" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Feature-Rich Partof-Speech Tagging with a Cyclic Dependency Network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kristina</forename><surname>Toutanova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Christopher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoram</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Singer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2003 Human Language Technology Conference of the North American Chapter of the Association for Computational Linguistics</title>
+		<meeting>the 2003 Human Language Technology Conference of the North American Chapter of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="173" to="180" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Learning with Lookahead: Can History-Based Models Rival Globally Optimized Models?</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshimasa</forename><surname>Tsuruoka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yusuke</forename><surname>Miyao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun&amp;apos;ichi</forename><surname>Kazama</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Fifteenth Conference on Computational Natural Language Learning</title>
+		<meeting>the Fifteenth Conference on Computational Natural Language Learning</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="238" to="246" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Structured Training for Neural Network Transition-Based Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing</title>
+		<meeting>the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing</meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="323" to="333" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">ABCNN: Attention-Based Convolutional Neural Network for Modeling Sentence Pairs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hinrich</forename><surname>Wenpeng Yin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bing</forename><surname>Schtze</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Xiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zhou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Transactions of the Association for Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="259" to="272" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Dependency Parsing as Head Selection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xingxing</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianpeng</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mirella</forename><surname>Lapata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 15th Conference of the European Chapter of the Association for Computational Linguistics</title>
+		<meeting>the 15th Conference of the European Chapter of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="665" to="676" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Stackpropagation: Improved Representation Learning for Syntax</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuan</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1557" to="1566" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Modelling Sentence Pairs with Tree-structured Attentive Encoder</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yao</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cong</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yan</forename><surname>Pan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 26th International Conference on Computational Linguistics</title>
+		<meeting>the 26th International Conference on Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2912" to="2922" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

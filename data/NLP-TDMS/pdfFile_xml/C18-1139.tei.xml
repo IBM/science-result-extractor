@@ -1,0 +1,866 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:04+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Contextual String Embeddings for Sequence Labeling</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+				<date>August 20-26, 2018</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alan</forename><surname>Akbik</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="laboratory">Zalando Research Mühlenstraße 25</orgName>
+								<address>
+									<postCode>10243</postCode>
+									<settlement>Berlin</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Duncan</forename><surname>Blythe</surname></persName>
+							<affiliation key="aff1">
+								<orgName type="laboratory">Zalando Research Mühlenstraße 25</orgName>
+								<address>
+									<postCode>10243</postCode>
+									<settlement>Berlin</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roland</forename><surname>Vollgraf</surname></persName>
+							<affiliation key="aff2">
+								<orgName type="laboratory">Zalando Research Mühlenstraße 25</orgName>
+								<address>
+									<postCode>10243</postCode>
+									<settlement>Berlin</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Contextual String Embeddings for Sequence Labeling</title>
+					</analytic>
+					<monogr>
+						<title level="m">Proceedings of the 27th International Conference on Computational Linguistics</title>
+						<meeting>the 27th International Conference on Computational Linguistics <address><addrLine>Santa Fe, New Mexico, USA</addrLine></address>
+						</meeting>
+						<imprint>
+							<biblScope unit="page" from="1638" to="1649"/>
+							<date type="published">August 20-26, 2018</date>
+						</imprint>
+					</monogr>
+					<note>1638</note>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Recent advances in language modeling using recurrent neural networks have made it viable to model language as distributions over characters. By learning to predict the next character on the basis of previous characters, such models have been shown to automatically internalize linguistic concepts such as words, sentences, subclauses and even sentiment. In this paper, we propose to leverage the internal states of a trained character language model to produce a novel type of word embedding which we refer to as contextual string embeddings. Our proposed embeddings have the distinct properties that they (a) are trained without any explicit notion of words and thus fundamentally model words as sequences of characters, and (b) are contextualized by their surrounding text, meaning that the same word will have different embeddings depending on its contextual use. We conduct a comparative evaluation against previous embeddings and find that our embeddings are highly useful for downstream tasks: across four classic sequence labeling tasks we consistently outperform the previous state-of-the-art. In particular, we significantly outperform previous work on English and German named entity recognition (NER), allowing us to report new state-of-the-art F1-scores on the CONLL03 shared task. We release all code and pre-trained language models in a simple-to-use framework to the research community, to enable reproduction of these experiments and application of our proposed embeddings to other tasks: https://github.com/zalandoresearch/flair</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>A large family of NLP tasks such as named entity recognition (NER) and part-of-speech (PoS) tagging may be formulated as sequence labeling problems; text is treated as a sequence of words to be labeled with linguistic tags. Current state-of-the-art approaches for sequence labeling typically use the LSTM variant of bidirectional recurrent neural networks (BiLSTMs), and a subsequent conditional random field (CRF) decoding layer ( <ref type="bibr" target="#b8">Huang et al., 2015;</ref><ref type="bibr" target="#b15">Ma and Hovy, 2016)</ref>.</p><p>A crucial component in such approaches are word embeddings, typically trained over very large collections of unlabeled data to assist learning and generalization. Current state-of-the-art methods concatenate up to three distinct embedding types:</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>G e o r g e W a s h i n g t o n w a s b o r n Character Language Model</head><p>Sequence Labeling Model B-PER r George r Washington r was r born E-PER O O <ref type="figure">Figure 1</ref>: High level overview of proposed approach. A sentence is input as a character sequence into a pre-trained bidirectional character language model. From this LM, we retrieve for each word a contextual embedding that we pass into a vanilla BiLSTM-CRF sequence labeler, achieving robust state-of-the-art results on downstream tasks (NER in <ref type="figure">Figure)</ref>.</p><p>Contextual string embeddings. In this paper, we propose a novel type of contextualized characterlevel word embedding which we hypothesize to combine the best attributes of the above-mentioned embeddings; namely, the ability to (1) pre-train on large unlabeled corpora, (2) capture word meaning in context and therefore produce different embeddings for polysemous words depending on their usage, and (3) model words and context fundamentally as sequences of characters, to both better handle rare and misspelled words as well as model subword structures such as prefixes and endings. We present a method to generate such a contextualized embedding for any string of characters in a sentential context, and thus refer to the proposed representations as contextual string embeddings. Neural character-level language modeling. We base our proposed embeddings on recent advances in neural language modeling (LM) that have allowed language to be modeled as distributions over sequences of characters instead of words <ref type="bibr" target="#b28">(Sutskever et al., 2011;</ref><ref type="bibr" target="#b5">Graves, 2013;</ref><ref type="bibr" target="#b11">Kim et al., 2015)</ref>. Recent work has shown that by learning to predict the next character on the basis of previous characters, such models learn internal representations that capture syntactic and semantic properties: even though trained without an explicit notion of word and sentence boundaries, they have been shown to generate grammatically correct text, including words, subclauses, quotes and sentences <ref type="bibr" target="#b29">(Sutskever et al., 2014;</ref><ref type="bibr" target="#b5">Graves, 2013;</ref><ref type="bibr" target="#b10">Karpathy et al., 2015</ref>). More recently, <ref type="bibr" target="#b23">Radford et al. (2017)</ref> showed that individual neurons in a large LSTM-LM can be attributed to specific semantic functions, such as predicting sentiment, without explicitly trained on a sentiment label set.</p><p>We show that an appropriate selection of hidden states from such a language model can be utilized to generate word-level embeddings that are highly effective in downstream sequence labeling tasks. State-of-the-art sequence labeling. Based on this, we propose the sequence tagging architecture illustrated in <ref type="figure">Figure 1</ref>: each sentence is passed as a sequence of characters to a bidirectional character-level neural language model, from which we retrieve for each word the internal character states to create a contextual string embedding. This embedding is then utilized in the BiLSTM-CRF sequence tagging module to address a downstream NLP task (NER in the <ref type="figure">Figure)</ref>.</p><p>We experimentally verify our approach in the classic sequence labeling tasks of named entity recognition for English and German, phrase chunking and part-of-speech tagging, and find that our approach reliably achieves state-of-the-art results. In particular, for both German and English NER, our approach significantly improves the state-of-the-art. But even for highly saturated tasks such as PoS tagging and chunking we find slight improvements over the already strong state-of-the-art (see <ref type="table">Table 1</ref>).</p><p>We also find that our proposed embeddings on some tasks subsume previous embedding types, enabling simplified sequence labeling architectures. In addition to this, the character-level LM is compact and relatively efficient to train in comparison to word-level models. This allows us to easily train models for new languages or domains. Contributions. To summarize, this paper proposes contextual string embeddings, a novel type of word embeddings based on character-level language modeling, and their use in a state-of-the-art sequence labeling architecture. Specifically, we</p><p>• illustrate how we extract such representations from a character-level neural language model, and  <ref type="table">Table 1</ref>: Summary of evaluation results for best configuration of proposed architecture, and current best published results.</p><p>The proposed approach significantly outperforms previous work on the CONLL03 NER task for German and English and slightly outperforms previous works on CONLL2000 chunking and Penn treebank PoS tagging.</p><p>integrate them into a simplified sequence labeling architecture;</p><p>• present experiments in which we quantiatively evaluate the usefulness and inherent semantics of the proposed embeddings against previous embeddings and their stacked combinations in downstream tasks;</p><p>• report a new state-of-the-art on the CONLL03 NER task for English (93.09 F1, ↑0.87 pp vs. previous best) and German (88.33 F1, ↑9.56 pp vs. previous best), and state-of-the-art scores for chunking and PoS;</p><p>• release all code and pre-trained language models in a simple-to-use framework to the research community, to enable reproduction of these experiments and application of our proposed embeddings to other tasks.</p><p>This paper is structured as follows: we present our approach for extracting contextual string embeddings from character-level language models in Section 2. We evaluate our approach against prior work in Section 3. We then discuss the results and present an outlook into future work in Section 4.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Contextual String Embeddings</head><p>Our proposed approach passes sentences as sequences of characters into a character-level language model to form word-level embeddings. Refer to <ref type="figure">Figure 2</ref> for an example illustration.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Recurrent Network States</head><p>Like recent work, we use the LSTM variant <ref type="bibr" target="#b7">(Hochreiter and Schmidhuber, 1997;</ref><ref type="bibr" target="#b5">Graves, 2013;</ref><ref type="bibr">Zaremba et al., 2014</ref>) of recurrent neural networks <ref type="bibr" target="#b28">(Sutskever et al., 2011</ref>) as language modeling architecture. These have been shown to far outperform earlier n-gram based models ( <ref type="bibr" target="#b9">Jozefowicz et al., 2016</ref>) due to the ability of LSTMs to flexibly encode long-term dependencies with their hidden state. We use characters as atomic units of language modeling <ref type="bibr" target="#b5">(Graves, 2013)</ref>, allowing text to be treated as a sequence of characters passed to an LSTM which at each point in the sequence is trained to predict the next character <ref type="bibr">1</ref> . This means that the model possesses a hidden state for each character in the sequence.</p><p>Formally, the goal of a character-level language model is to estimate a good distribution P (x 0:T ) over sequences of charaters (x 0 , x 1 , . . . , x T ) =: x 0:T reflecting natural language production <ref type="bibr" target="#b25">(Rosenfeld, 2000)</ref>. By training a language model, we learn P (x t |x 0 , . . . , x t−1 ), an estimate of the predictive distribution over the next character given past characters. The joint distribution over entire sentences can then be decomposed as a product of the predictive distribution over characters conditioned on the preceeding characters:</p><formula xml:id="formula_0">P (x 0:T ) = T t=0 P (x t |x 0:t−1 )<label>(1)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>r Washington</head><p>Figure 2: Extraction of a contextual string embedding for a word ("Washington") in a sentential context. From the forward language model (shown in red), we extract the output hidden state after the last character in the word. This hidden state thus contains information propagated from the beginning of the sentence up to this point. From the backward language model (shown in blue), we extract the output hidden state before the first character in the word. It thus contains information propagated from the end of the sentence to this point. Both output hidden states are concatenated to form the final embedding.</p><p>In the LSTM architecture, the conditional probability P (x t |x 0:t−1 ) is approximately a function of the network output h t .</p><formula xml:id="formula_1">P (x t |x 0:t−1 ) ≈ T t=0 P (x t |h t ; θ)<label>(2)</label></formula><p>h t represents the entire past of the character sequence. In an LSTM in particular, it is computed recursively, with the help of an additional recurrent quantity c t , the memory cell,</p><formula xml:id="formula_2">h t (x 0:t−1 ) = f h (x t−1 , h t−1 , c t−1 ; θ) c t (x 0:t−1 ) = f c (x t−1 , h t−1 , c t−1 ; θ) ,</formula><p>where θ denotes all the parameters of the model. h −1 and c −1 can be initialized with zero or can be treated as part of the model parameters θ. In our model, a fully conected softmax layer (without bias) is placed ontop of h t , so the likelihood of every character is given by</p><formula xml:id="formula_3">P (x t |h t ; V) = softmax (Vh t + b) (3) = exp (Vh t + b) exp (Vh t + b) 1 (4)</formula><p>where V and b, weights and biases, are part of the model parameters θ <ref type="bibr" target="#b5">(Graves, 2013;</ref><ref type="bibr" target="#b9">Jozefowicz et al., 2016</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Extracting Word Representations</head><p>We utilize the hidden states of a forward-backward recurrent neural network to create contextualized word embeddings. This means, alongside with the forward model (2), we also have a backward model, which works in the same way but in the reversed direction:</p><formula xml:id="formula_4">P b (x t |x t+1:T ) ≈ T t=0 P b x t |h b t , θ<label>(5)</label></formula><formula xml:id="formula_5">h b t = f b h x t+1 , h b t+1 , c b t+1 ; θ (6) c b t = f b c x t+1 , h b t+1 , c b t+1 ; θ<label>(7)</label></formula><p>Note that, in the following, we will use the superscript · f to define h f t := h t , c f t := c t for the forward model described in the previous section.</p><p>From this forward-backward LM, we concatenate the following hidden character states for each word: from the fLM, we extract the output hidden state after the last character in the word. Since the fLM is trained to predict likely continuations of the sentence after this character, the hidden state encodes semantic-syntactic information of the sentence up to this point, including the word itself. Similarly, we extract the output hidden state before the word's first character from the bLM to capture semanticsyntactic information from the end of the sentence to this character. Both output hidden states are concatenated to form the final embedding and capture the semantic-syntactic information of the word itself as well as its surrounding context.</p><p>Formally, let the individual word-strings begin at character inputs with indices t 0 , t 1 , . . . , t n , then we define contextual string embeddings of these words as:</p><formula xml:id="formula_6">w CharLM i := h f t i+1 −1 h b t i −1<label>(8)</label></formula><p>We illustrate our approach in <ref type="figure">Figure 2</ref> for a word in an example sentence, with the fLM in red and the bLM shown in blue. Our approach thus produces embeddings from hidden states that are computed not only on the characters of a word, but also the characters of the surrounding context, since it influences the LM's ability to predict likely continuations of a sentence. As we later illustrate in Section 3.4, our proposed approach thus produces different embeddings for the same lexical word string in different contexts, and is able to accurately capture the semantics of contextual use together with word semantics itself.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Sequence Labeling Architecture</head><p>In the default configuration of our approach, the final word embeddings are passed into a BiLSTM-CRF sequence labeling module as proposed by <ref type="bibr" target="#b8">Huang et al. (2015)</ref> to address downstream sequence labeling tasks. Then let us call the inputs to the BiLSTM g l : w 0 , . . . , w n . Then we have that:</p><formula xml:id="formula_7">r i : = r f i r b i<label>(9)</label></formula><p>Where r f i and r f i are the forward and backward output states of the BiLSTM g l . The final sequence probability is then given by a CRF over the possible sequence labels y:</p><formula xml:id="formula_8">P (y 0:n |r 0:n ) ∝ n i=1 ψ i (y i−1 , y i , r i )<label>(10)</label></formula><p>Where:</p><formula xml:id="formula_9">ψ i (y , y, r) = exp(W y ,y r + b y ,y )<label>(11)</label></formula><p>Alternatively, we also experiment with directly applying a simple feedforward linear architecture (essentially multinomial logistic regression <ref type="bibr" target="#b17">(Menard, 2018)</ref>). This configuration simply linearly projects the hidden states of the neural character LM to make predictions:</p><formula xml:id="formula_10">r i = W r w i + b r<label>(12)</label></formula><p>Then the prediction of the label is given by:</p><formula xml:id="formula_11">P (y i = j|r i ) = softmax(r i )[j]<label>(13)</label></formula><p>Stacking Embeddings. Current sequence labeling models often combine different types of embeddings by concatenating each embedding vector to form the final word vectors. We similarly experiment with different stackings of embeddings; for instance in many configurations it may be benficial to add classic word embeddings to add potentially greater latent word-level semantics to our proposed embeddings. In this case, the final words representation is given by</p><formula xml:id="formula_12">w i = w CharLM i w GloV e i<label>(14)</label></formula><p>Here w GloV e i is a precomputed GLOVE embedding ( <ref type="bibr" target="#b19">Pennington et al., 2014</ref>). We present different configurations of stacked embeddings in the next section for the purpose of evaluation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Experiments</head><p>We conduct an experimental evaluation to assess in how far our proposed contextual string embeddings are useful for sequence labeling, and how they compare to existing embedding types. In addition, we aim to gain insights into the inherent semantics of the proposed embeddings. Tasks. To this end, we evaluate our embeddings in four classic sequence labeling tasks in their default evaluation setups, namely named entity recognition in the CONLL03 setup <ref type="bibr" target="#b31">(Tjong Kim Sang and De Meulder, 2003)</ref>, chunking in the CONLL2000 setup <ref type="bibr" target="#b30">(Tjong Kim Sang and Buchholz, 2000</ref>) and PoS tagging in the default Penn treebank setup described by <ref type="bibr" target="#b2">Collins (2002)</ref>. We evaluate NER to determine in how far our embeddings are helpful for shallow semantic tasks, while we use chunking and PoS to determine in how far they are helpful for shallow syntactic tasks. We also include the German NER task from the CONLL03 setup to evaluate our embeddings in a language with richer morphology.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Experimental Setup</head><p>We utilize the BiLSTM-CRF sequence labeling architecture proposed by Huang et. al (2015) in all configurations of our comparative evaluation. In this architecture, we evaluate our proposed contextual string embeddings in stacked combinations with the three types of previous embeddings discussed in Section 1; namely (1) pre-trained static ("classic") word embeddings ( <ref type="bibr" target="#b19">Pennington et al., 2014</ref>), (2) tasktrained (i.e. not pre-trained) static character features ( <ref type="bibr" target="#b15">Ma and Hovy, 2016;</ref><ref type="bibr" target="#b13">Lample et al., 2016)</ref>, and <ref type="formula" target="#formula_13">(3)</ref> pre-trained contextual word embeddings ( <ref type="bibr" target="#b21">Peters et al., 2018)</ref>. Baselines. We also evaluate setups that involve only previous word embeddings. These are effectively reimplementations of state-of-the-art approaches within our sequence labeling architecture. We conduct these experiments to isolate the impact of our proposed embeddings vis-a-vis earlier approaches. The setups are as follows: Proposed approach. We evaluate our proposed contextual string embeddings in the following configurations:</p><p>PROPOSED : The simplest setup of our proposed approach that relies solely on our proposed contextual string embeddings, passed to a standard BiLSTM-CRF architecture. This configuration thus matches the illustration in <ref type="figure">Figure 1</ref>.</p><p>PROPOSED +WORD : An extension of PROPOSED in which we concatenate pre-trained static word embeddings with our contextual string embeddings as per Equation <ref type="formula" target="#formula_0">(14)</ref>, to determine whether they complement or subsume our proposed embeddings.</p><p>PROPOSED +CHAR :A similar extension in which we concatenate task-trained character features in a hierarchical BiLSTM-CRF architecture to our contextual string embeddings, to determine whether they complement or subsume our proposed embeddings.</p><p>PROPOSED +WORD+CHAR : We also evaluate a setting in which we add both pre-trained word and tasktrained character embeddings.  <ref type="table">Table 2</ref>: Summary of evaluation results or all proposed setups and baselines. We also list the best published scores for each task for reference. We significantly outperform all previous works on NER, and slightly outperform the previous state-of-the-art in PoS tagging and chunking.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Model Training and Parameters</head><p>Character-level language models. We train our LMs using SGD to perform truncated backpropagation through time (BPTT) with a window length of 250, a non-annealed learning rate of 20.0, a batch size of 100, clipping gradients at 0.25 and dropout probabilities of 0.25. We prepare the data by unking-the rarest 0.0001 percent of characters. We set the number of hidden states of the (one-layered) LSTM to 2048. We halt training by tracking the performance on the validation set, stopping when negligible gains were observed, or after 1 week, whichever came first. We train our English models on the 1-billion word corpus ( <ref type="bibr" target="#b0">Chelba et al., 2013)</ref> and our German models on a corpus of half a billion words aggregated from various open source corpora in the OPUS project 2 . After training, we find the models trained for the full week achieve character level perplexity on the supplied test-set of 2.42 for English and 2.38 for German. Resources did not allow us to train for longer or on larger language model variants. We hypothesize that more resources and time would permit learning an even better model. Sequence tagging model. We train the sequence tagging model using vanilla SGD with no momentum, clipping gradients at 5, for 150 epochs. We employ a simple learning rate annealing method in which we halve the learning rate if training loss does not fall for 5 consecutive epochs. Following recommendations of <ref type="bibr" target="#b24">Reimers et al. (2017)</ref>'s in-depth analysis of hyperparameters in sequence labeling, we utilize variational dropout, set the number of hidden states per-layer of the LSTM to 256, set the number of LSTM layers to 1, and perform model selection over the learning rate ∈ {0.01, 0.05, 0.1} and mini-batch size ∈ {8, 16, 32}, choosing the model with the best F-measure (for NER and chunking) or accuracy (for PoS) in the best epoch as judged by performance on the validation set. Following <ref type="bibr" target="#b20">Peters et al. (2017)</ref>, we then repeat the experiment for the model chosen 5 times with different random seeds, and train using both train and development set, reporting both average performance and standard deviation over these runs on the test set as final performance. Classic word embeddings. Following <ref type="bibr" target="#b24">Reimers et al. (2017)</ref>, we use GLOVE embeddings for English NER and KOMNIOS embeddings ( <ref type="bibr" target="#b12">Komninos and Manandhar, 2016)</ref> for PoS tagging and chunking. For German, we use the German FASTTEXT embeddings ( <ref type="bibr" target="#b4">Grave et al., 2018)</ref>. In configurations that train character features, we apply a BiLSTM with 25 hidden states to each word separately and extract the final hidden output states (see <ref type="bibr" target="#b13">Lample et al. (2016)</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>NER-English NER-German</head><p>Chunking POS Embedding + Architecture F1-score F1-score F1-score Accuracy PROPOSED+WORD +BiLSTM-CRF 93.07 ± 0.10 88.20 ± 0.21 96.70 ± 0.04 97.82 ± 0.02 +Map-CRF 90.17 ± 0.06 85.17 ± 0.04 96.05 ± 0.04 97.62 ± 0.01 +Map 79.86 ± 0.12 76.97 ± 0.16 90.55 ± 0.05 97. <ref type="bibr">35</ref>   </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Results</head><p>Our experimental results are summarized in <ref type="table">Table 2</ref> for each of the four tasks. We find that our approach either slightly or strongly surpasses all previously published results. This shows that our proposed contextual string embeddings are indeed highly useful for sequence labeling. In more detail, we make the following observations: New state-of-the-art for NER. We find that our approach performs particularly well on the task of named entity recognition. For English, we surpass the previous state-of-the-art approach by a significant margin (93.09 F1, ↑0.87 pp vs. <ref type="bibr" target="#b21">Peters et al. (2018)</ref>). For German in particular, we significantly raise the state-of-the-art (88.33 F1, ↑9.56 pp vs. <ref type="bibr" target="#b13">Lample et al. (2016)</ref>). We hypothesize that pre-trained contextual character-level features are particularly helpful for this task, since entities are an open vocabulary of names that are often indicated by character features (such as capitalization or endings), as well as their contextual use. In addition, the CONLL03 shared task data set contains many sentences (such as article titles) that are in all-caps; since most traditional embeddings perform lower casing to manage vocabulary size, we assume that our character model can better capture the features of such sentences. Good performance on syntactic tasks. We also find that our approach slightly outperforms the latest state-of-the-art approaches for chunking and PoS tagging. We do not however see the same improvements as for NER, which we mainly attribute to the fact that syntactic tasks are already solved by current approaches to very high accuracy, making it difficult to record further strong improvements (see <ref type="bibr">Man- ning et al. (2014)</ref> for a discussion of this issue).</p><p>Traditional word embeddings helpful. Additionally, we observe that the added use of classic word embeddings in setup PROPOSED +WORD often produces the best results. Especially for NER, the use of classic word embeddings increases average F1 score by 1.1 pp to 93.07, compared with 91.97 for PRO-POSED. We hypothesize that classic word embeddings capture word-level semantics that complement the strong character-level features of our proposed embeddings. We therefore recommend the setup PROPOSED +WORD as default setup for sequence labeling tasks. Task-specific character features unnecessary. Another observation is that setups with task-specific character features (PROPOSED +CHAR and PROPOSED +WORD+CHAR ) do not perform better than those without. This indicates that they are largely subsumed by our proposed embeddings, and are thus no longer required. A positive side-effect of this is that this simplifies training of the sequence labeler (see Section 3.5).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Inherent Semantics</head><p>Quantiative investigation <ref type="table" target="#tab_3">(Table 3)</ref>. To gain additional insight into the content of the contextual string embeddings relative to the task, we replace the standard BiLSTM-CRF in the sequence labeling architecture with a direct feedforward map as per Equation <ref type="formula" target="#formula_0">(12)</ref>, with and without a CRF decoder. This simplified approach makes predictions directly on the basis of the proposed embeddings without additional learning of the BiLSTM recurrence. The results for this simplified architecture are displayed in <ref type="table" target="#tab_3">Table 3</ref> for the  setups PROPOSED and PROPOSED +WORD , as well as for a setup that involves only traditional word embeddings (GLOVE for English NER, KOMNIOS for English PoS and chunking, FASTTEXT for German NER). We find that the effect of removing the BiLSTM layer on downstream task accuracy is far lower for the proposed embeddings than for classic embeddings. For the setups PROPOSED and PROPOSED +WORD , we record only an average drop of 3% in F-score/accuracy between the BiLSTM-CRF and Map-CRF architectures. This stands in contrast to classic embeddings in which we find an average drop of 20% from BiLSTM-CRF to Map-CRF. This indicates that the inherent semantics of the proposed embeddings are meaningful enough as to require much less powerful learning architectures on top to perform downstream sequence labeling tasks. In particular, for PoS tagging, the simple feedforward map is competitive to BiLSTM and much more effective to train. Qualitative inspection <ref type="table" target="#tab_5">(Table 4)</ref>. To illustrate the contextualized nature of our proposed embeddings, we present example embeddings of the polysemous word "Washington" in different contexts. We compute contextual string embeddings for all words in the English CONLL03 corpus and compute nearest neighbors in the embedding space using the cosine distance. We then look up nearest neighbors for different mentions of the word "Washington".</p><formula xml:id="formula_13">word context selected nearest neighbors Washington (a) Washington to curb support for [..] (1) Washington would also take [..] action [..] (2) Russia to clamp down on barter deals [..] (3) Brazil to use hovercrafts for [..] Washington (b) [..] Anthony Washington (U.S.) [..] (1) [..] Carla Sacramento ( Portugal ) [..] (2) [..] Charles Austin ( U.S. ) [..]<label>(</label></formula><p>As <ref type="table" target="#tab_5">Table 4</ref> shows, the embeddings successfully pry apart person, place, legislative entity and team (a-d). For instance, "Washington" used as last name in context (b) is closest to other last names, many of which are also place names ("Carla Sacramento"); "Washington" used as a sport team name in context (d) is closest to other place names used in sports team contexts. We include a negative example (e) in <ref type="table" target="#tab_5">Table 4</ref> in which the context is not sufficient to determine the type of mention. We hypothesize that modeling semantics in context is a key feature that allows our proposed embeddings to better address downstream sequence labeling task.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Discussion</head><p>Our proposed approach is one of the first to leverage hidden states from a language model to improve sequence labeling performance. Two prior works have suggested related approaches: The first is <ref type="bibr" target="#b14">Liu et al. (2017)</ref> that jointly train a character-level language model together with the sequence labeling BiLSTM. In effect, this means that the language model is trained only on labeled task data and therefore has orders of magnitude fewer data available than our proposed approach (which we can pre-train on basically unlimited amounts of unlabled data). We hypothesize that this is the main reason for why our approach outperforms <ref type="bibr" target="#b14">Liu et al. (2017)</ref> across all tasks.</p><p>A second approach is the method by <ref type="bibr" target="#b20">Peters et. al (2017)</ref> which proposed to extract hidden states from pre-trained word-level language models as features for downstream NLP tasks. They report new state-of-the-art results for NER ( <ref type="bibr" target="#b21">Peters et al., 2018</ref>) and chunking ( <ref type="bibr" target="#b20">Peters et al., 2017)</ref>, but require the training of massive word-level language models: their best configuration uses a language model that was trained for 5 weeks on 32 GPUs ( <ref type="bibr" target="#b9">Jozefowicz et al., 2016)</ref>, and still requires lower casing of all words to deal with the large vocabulary size. Their approach is the strongest baseline against which we compared.</p><p>We similarly propose to utilize trained LMs to generate embeddings, but consider LM at the character level. This has a number of advantages: First, character-level LM is independent of tokenization and a fixed vocabulary. Second, they produce stronger character-level features, which is particularly useful for downstream tasks such as NER. Finally, such models have a much smaller vocabulary size (distinct characters vs. distinct words) and are thus significantly easier to train and deploy in applications: the LM parameter-count scales according to n layers n 2 hidden (not true for word-level LM since these contain many inputs) and may be trained in 1 week on 1 GPU (e.g. significantly less than the 5 weeks on 32 GPUs used by <ref type="bibr" target="#b20">Peters et al. (2017)</ref>). This allowed us to train models for other languages such as German with moderate resources, and thus allows our method to more effectively scale to new languages or domains.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Conclusion</head><p>We have proposed novel contextual string embeddings and a method for producing them using neural character LM. We find that they capture syntactic-semantic word features and disambiguate words in context, resulting in state-of-the-art performance in classic NLP sequence labeling tasks. To facilitate reproduction of our experiments, and enable application of our proposed embeddings to other tasks, we release all code and pre-trained language models in a simple-to-use framework to the research community <ref type="bibr">3</ref> . Future work will focus on applying these embeddings to additional sentence level tasks such as image-retrieval and neural translation.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>HUANG</head><label></label><figDesc>: A standard BiLSTM-CRF setup with pre-trained word embeddings, and thus a reimplemen- tation of Huang et al. (2015). LAMPLE : A hierarchical BiLSTM-CRF setup with pre-trained word embeddings, in which task-trained character features are additionally computed by a character-level BiLSTM for each word. It is thus a reimplementation of Lample et al. (2016). PETERS : A BiLSTM-CRF setup that utilizes the release of Peters et al. (2018) in the ALLENNLP library to produce contextualized word embeddings, and thus is effectively a reimplementation of Peters et al. (2018) in our framework. Note that only English embeddings are provided, so we use this baseline only on the English tasks.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Additional ablation experiment in which we evaluate our approach without BiLSTM and CRF. Here, we instead use 
+
+a simple linear map over the embeddings to determine their direct information content. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Examples of the word "Washington" in different contexts in the CONLL03 data set, and nearest neighbors using 
+
+cosine distance over our proposed embeddings. Since our approach produces different embeddings based on context, we 
+retrieve different nearest neighbors for each mention of the same word. 
+
+</table></figure>
+
+			<note place="foot" n="2">. Character-level features (Ma and Hovy, 2016; Lample et al., 2016), which are not pre-trained, but trained on task data to capture task-specific subword features. 3. Contextualized word embeddings (Peters et al., 2017; Peters et al., 2018) that capture word semantics in context to address the polysemous and context-dependent nature of words.</note>
+
+			<note place="foot" n="1"> Note that character-level LM is different from character-aware LM (Kim et al., 2015) which still operates on the wordlevel, but also takes into account character-level features through an additional CNN encoding step.</note>
+
+			<note place="foot" n="2"> We aggregate over the PARACRAWL, EUROPARL, OPENSUBTITLES2018, and WIKIPEDIA releases in OPUS for versatile text and to allow reproduction of our results.</note>
+
+			<note place="foot" n="3"> https://github.com/zalandoresearch/flair</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgements</head><p>We would like to thank the anonymous reviewers for their helpful comments. This project has received funding from the European Union's Horizon 2020 research and innovation programme under grant agreement no 732328 ("FashionBrain").</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">One billion word benchmark for measuring progress in statistical language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ciprian</forename><surname>Chelba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qi</forename><surname>Ge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thorsten</forename><surname>Brants</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phillipp</forename><surname>Koehn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tony</forename><surname>Robinson</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1312.3005</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Dynamic feature induction: The last gist to the state-of-the-art</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jinho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Choi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2016 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 2016 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="271" to="281" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Discriminative training methods for hidden markov models: Theory and experiments with perceptron algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL-02 conference on Empirical methods in natural language processing</title>
+		<meeting>the ACL-02 conference on Empirical methods in natural language processing</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2002" />
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="page" from="1" to="8" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Gillick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cliff</forename><surname>Brunk</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1512.00103</idno>
+		<title level="m">Oriol Vinyals, and Amarnag Subramanya. 2015. Multilingual language processing from bytes</title>
+		<imprint/>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Learning word vectors for 157 languages</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edouard</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Piotr</forename><surname>Bojanowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Prakhar</forename><surname>Gupta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference on Language Resources and Evaluation (LREC</title>
+		<meeting>the International Conference on Language Resources and Evaluation (LREC</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1308.0850</idno>
+		<title level="m">Generating sequences with recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuma</forename><surname>Hashimoto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshimasa</forename><surname>Tsuruoka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01587</idno>
+		<title level="m">A joint many-task model: Growing a neural network for multiple nlp tasks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Bidirectional lstm-crf models for sequence tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiheng</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Yu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1508.01991</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Exploring the limits of language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Wu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1602.02410</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrej</forename><surname>Karpathy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Justin</forename><surname>Johnson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Fei-Fei</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1506.02078</idno>
+		<title level="m">Visualizing and understanding recurrent networks</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoon</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yacine</forename><surname>Jernite</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Sontag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander M</forename><surname>Rush</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1508.06615</idno>
+		<title level="m">Character-aware neural language models</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Dependency based embeddings for sentence classification tasks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexandros</forename><surname>Komninos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Suresh</forename><surname>Manandhar</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2016 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 2016 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1490" to="1500" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guillaume</forename><surname>Lample</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sandeep</forename><surname>Subramanian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuya</forename><surname>Kawakami</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.01360</idno>
+		<title level="m">Neural architectures for named entity recognition</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Liyuan</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jingbo</forename><surname>Shang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Frank</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiang</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Huan</forename><surname>Gui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Peng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiawei</forename><surname>Han</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1709.04109</idno>
+		<title level="m">Empower sequence labeling with task-aware neural language model</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">End-to-end sequence labeling via bi</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuezhe</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.01354</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">-directional LSTMs-CNNs-CRF. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">The Stanford CoreNLP natural language processing toolkit</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mihai</forename><surname>Surdeanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Bauer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jenny</forename><surname>Finkel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Bethard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Mcclosky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Association for Computational Linguistics (ACL) System Demonstrations</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="55" to="60" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Applied logistic regression analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Scott</forename><surname>Menard</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2018" />
+			<publisher>SAGE publications</publisher>
+			<biblScope unit="volume">106</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Distributed representations of words and phrases and their compositionality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="3111" to="3119" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 conference on empirical methods in natural language processing (EMNLP)</title>
+		<meeting>the 2014 conference on empirical methods in natural language processing (EMNLP)</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1532" to="1543" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Semi-supervised sequence tagging with bidirectional language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Peters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Waleed</forename><surname>Ammar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chandra</forename><surname>Bhagavatula</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Russell</forename><surname>Power</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Vancouver, Canada</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2017-07" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1756" to="1765" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Peters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Neumann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher Clark Kenton Lee Luke Zettlemoyer Mohit</forename><surname>Iyyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matt</forename><surname>Gardner</surname></persName>
+		</author>
+		<title level="m">Deep contextualized word representations. 6th International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Combining labeled and unlabeled data with word-class distribution learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yanjun</forename><surname>Qi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronan</forename><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pavel</forename><surname>Kuksa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 18th ACM conference on Information and knowledge management</title>
+		<meeting>the 18th ACM conference on Information and knowledge management</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="1737" to="1740" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Learning to generate reviews and discovering sentiment</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alec</forename><surname>Radford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.01444</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Reporting Score Distributions Makes a Difference: Performance Study of LSTM-networks for Sequence Tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nils</forename><surname>Reimers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iryna</forename><surname>Gurevych</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing (EMNLP)</title>
+		<meeting>the 2017 Conference on Empirical Methods in Natural Language Processing (EMNLP)<address><addrLine>Copenhagen, Denmark</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page">9</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Two decades of statistical language modeling: Where do we go from here?</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronald</forename><surname>Rosenfeld</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings of the IEEE</title>
+		<imprint>
+			<biblScope unit="volume">88</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1270" to="1278" />
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dominic</forename><surname>Seyler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tatiana</forename><surname>Dembelova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luciano</forename><forename type="middle">Del</forename><surname>Corro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Johannes</forename><surname>Hoffart</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gerhard</forename><surname>Weikum</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1709.03544</idno>
+		<title level="m">Knowner: Incremental multilingual knowledge in named entity recognition</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Deep multi-task learning with low level tasks supervised at lower layers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Short Papers</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="231" to="235" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Generating text with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Martens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 28th International Conference on Machine Learning (ICML-11)</title>
+		<meeting>the 28th International Conference on Machine Learning (ICML-11)</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="1017" to="1024" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Sequence to sequence learning with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc</forename><surname>Le</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="3104" to="3112" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Introduction to the CoNLL-2000 shared task: Chunking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erik F Tjong Kim</forename><surname>Sang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sabine</forename><surname>Buchholz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2nd workshop on Learning language in logic and the 4th conference on Computational natural language learning</title>
+		<meeting>the 2nd workshop on Learning language in logic and the 4th conference on Computational natural language learning</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2000" />
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="page" from="127" to="132" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Introduction to the CoNLL-2003 shared task: Languageindependent named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erik F Tjong Kim</forename><surname>Sang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fien De</forename><surname>Meulder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the seventh conference on Natural language learning at HLT-NAACL 2003</title>
+		<meeting>the seventh conference on Natural language learning at HLT-NAACL 2003</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="142" to="147" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wojciech</forename><surname>Zaremba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.2329</idno>
+		<title level="m">Ilya Sutskever, and Oriol Vinyals. 2014. Recurrent neural network regularization</title>
+		<imprint/>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

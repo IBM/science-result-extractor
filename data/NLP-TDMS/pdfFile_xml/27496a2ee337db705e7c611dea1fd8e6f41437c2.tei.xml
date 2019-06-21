@@ -1,0 +1,823 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:08+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Design Challenges and Misconceptions in Named Entity Recognition * † ‡</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher>Association for Computational Linguistics</publisher>
+				<availability status="unknown"><p>Copyright Association for Computational Linguistics</p>
+				</availability>
+				<date type="published" when="2009-06">June 2009. 2009</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lev</forename><surname>Ratinov</surname></persName>
+							<email>ratinov2@uiuc.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Computer Science Department</orgName>
+								<orgName type="institution">University of Illinois Urbana</orgName>
+								<address>
+									<postCode>61801</postCode>
+									<region>IL</region>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Roth</surname></persName>
+							<email>danr@uiuc.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Computer Science Department</orgName>
+								<orgName type="institution">University of Illinois Urbana</orgName>
+								<address>
+									<postCode>61801</postCode>
+									<region>IL</region>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Design Challenges and Misconceptions in Named Entity Recognition * † ‡</title>
+					</analytic>
+					<monogr>
+						<title level="m">Proceedings of the Thirteenth Conference on Computational Natural Language Learning (CoNLL)</title>
+						<meeting>the Thirteenth Conference on Computational Natural Language Learning (CoNLL) <address><addrLine>Boulder, Colorado</addrLine></address>
+						</meeting>
+						<imprint>
+							<publisher>Association for Computational Linguistics</publisher>
+							<biblScope unit="page" from="147" to="155"/>
+							<date type="published" when="2009-06">June 2009. 2009</date>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We analyze some of the fundamental design challenges and misconceptions that underlie the development of an efficient and robust NER system. In particular, we address issues such as the representation of text chunks, the inference approach needed to combine local NER decisions, the sources of prior knowledge and how to use them within an NER system. In the process of comparing several solutions to these challenges we reach some surprising conclusions, as well as develop an NER system that achieves 90.8 F 1 score on the CoNLL-2003 NER shared task, the best reported result for this dataset.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Natural Language Processing applications are characterized by making complex interdependent decisions that require large amounts of prior knowledge. In this paper we investigate one such applicationNamed Entity Recognition (NER). <ref type="figure" target="#fig_1">Figure 1</ref> illustrates the necessity of using prior knowledge and non-local decisions in NER. In the absence of mixed case information it is difficult to understand that * The system and the Webpages dataset are available at: http://l2r.cs.uiuc.edu/∼cogcomp/software.php † This work was supported by NSF grant NSF SoD-HCER-0613885, by MIAS, a DHS-IDS Center for Multimodal Information Access and Synthesis at UIUC and by an NDIIPP project from the National Library of Congress.</p><p>‡ We thank Nicholas Rizzolo for the baseline LBJ NER system, Xavier Carreras for suggesting the word class models, and multiple reviewers for insightful comments.  "BLINKER" is a person. Likewise, it is not obvious that the last mention of "Wednesday" is an organization (in fact, the first mention of "Wednesday" can also be understood as a "comeback" which happens on Wednesday). An NER system could take advantage of the fact that "blinker" is also mentioned later in the text as the easily identifiable "Reggie Blinker". It is also useful to know that Udinese is a soccer club (an entry about this club appears in Wikipedia), and the expression "both Wednesday and Udinese" implies that "Wednesday" and "Udinese" should be assigned the same label.</p><p>The above discussion focuses on the need for external knowledge resources (for example, that Udinese can be a soccer club) and the need for nonlocal features to leverage the multiple occurrences of named entities in the text. While these two needs have motivated some of the research in NER in the last decade, several other fundamental decisions must be made. These include: what model to use for sequential inference, how to represent text chunks and what inference (decoding) algorithm to use.</p><p>Despite the recent progress in NER, the effort has been dispersed in several directions and there are no published attempts to compare or combine the recent advances, leading to some design misconceptions and less than optimal performance. In this paper we analyze some of the fundamental design challenges and misconceptions that underlie the development of an efficient and robust NER system. We find that BILOU representation of text chunks significantly outperforms the widely adopted BIO. Surprisingly, naive greedy inference performs comparably to beamsearch or Viterbi, while being considerably more computationally efficient. We analyze several approaches for modeling non-local dependencies proposed in the literature and find that none of them clearly outperforms the others across several datasets. However, as we show, these contributions are, to a large extent, independent and, as we show, the approaches can be used together to yield better results. Our experiments corroborate recently published results indicating that word class models learned on unlabeled text can significantly improve the performance of the system and can be an alternative to the traditional semi-supervised learning paradigm. Combining recent advances, we develop a publicly available NER system that achieves 90.8 F 1 score on the CoNLL-2003 NER shared task, the best reported result for this dataset. Our system is robust -it consistently outperforms all publicly available NER systems (e.g., the Stanford NER system) on all three datasets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Datasets and Evaluation Methodology</head><p>NER system should be robust across multiple domains, as it is expected to be applied on a diverse set of documents: historical texts, news articles, patent applications, webpages etc. Therefore, we have considered three datasets: CoNLL03 shared task data, MUC7 data and a set of Webpages we have annotated manually. In the experiments throughout the paper, we test the ability of the tagger to adapt to new test domains. Throughout this work, we train on the CoNLL03 data and test on the other datasets without retraining. The differences in annotation schemes across datasets created evaluation challenges. We discuss the datasets and the evaluation methods below.</p><p>The CoNLL03 shared task data is a subset of Reuters 1996 news corpus annotated with 4 entity types: PER,ORG, LOC, MISC. It is important to notice that both the training and the development datasets are news feeds from August 1996, while the test set contains news feeds from December 1996. The named entities mentioned in the test dataset are considerably different from those that appear in the training or the development set. As a result, the test dataset is considerably harder than the development set. Evaluation: Following the convention, we report phrase-level F 1 score.</p><p>The MUC7 dataset is a subset of the North American News Text Corpora annotated with a wide variety of entities including people, locations, organizations, temporal events, monetary units, and so on. Since there was no direct mapping from temporal events, monetary units, and other entities from MUC7 and the MISC label in the CoNLL03 dataset, we measure performance only on PER,ORG and LOC. Evaluation: There are several sources of inconsistency in annotation between MUC7 and CoNLL03. For example, since the MUC7 dataset does not contain the MISC label, in the sentence "balloon, called the Virgin Global Challenger" , the expression Virgin Global Challenger should be labeled as MISC according to CoNLL03 guidelines. However, the gold annotation in MUC7 is "balloon, called the [ORG Virgin] Global Challenger". These and other annotation inconsistencies have prompted us to relax the requirements of finding the exact phrase boundaries and measure performance using token-level F 1 .</p><p>Webpages -we have assembled and manually annotated a collection of 20 webpages, including personal, academic and computer-science conference homepages. The dataset contains 783 entities <ref type="bibr">(96- loc, 223-org, 276-per, 188-misc)</ref>. Evaluation: The named entities in the webpages were highly ambiguous and very different from the named entities seen in the training data. For example, the data included sentences such as : "Hear, O Israel, the Lord our God, the Lord is one." We could not agree on whether "O Israel" should be labeled as ORG, LOC, or PER. Similarly, we could not agree on whether "God" and "Lord" is an ORG or PER. These issues led us to report token-level entity-identification F 1 score for this dataset. That is, if a named entity token was identified as such, we counted it as a correct prediction ignoring the named entity type.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Design Challenges in NER</head><p>In this section we introduce the baseline NER system, and raise the fundamental questions underlying robust and efficient design. These questions define the outline of this paper. NER is typically viewed as a sequential prediction problem, the typical models include HMM <ref type="bibr" target="#b21">(Rabiner, 1989)</ref>, CRF ( <ref type="bibr" target="#b15">Lafferty et al., 2001</ref>), and sequential application of Perceptron or Winnow <ref type="bibr" target="#b5">(Collins, 2002)</ref>. That is, let x = (x 1 , . . . , x N ) be an input sequence and y = (y 1 , . . . , y N ) be the output sequence. The sequential prediction problem is to estimate the probabilities</p><formula xml:id="formula_0">P (y i |x i−k . . . x i+l , y i−m . . . y i−1 ),</formula><p>where k, l and m are small numbers to allow tractable inference and avoid overfitting. This conditional probability distribution is estimated in NER using the following baseline set of features (Zhang and Johnson, 2003): (1) previous two predictions y i−1 and y i−2 (2) current word x i (3) x i word type (all-capitalized, is-capitalized, all-digits, alphanumeric, etc.) (4) prefixes and suffixes of x i (5) tokens in the window c = (x i−2 , x i−1 , x i , x i+1 , x i+2 ) (6) capitalization pattern in the window c (7) conjunction of c and y i−1 .</p><p>Most NER systems use additional features, such as POS tags, shallow parsing information and gazetteers. We discuss additional features in the following sections. We note that we normalize dates and numbers, that is 12/3/2008 becomes *Date*, 1980 becomes *DDDD* and 212-325-4751 becomes *DDD*-*DDD*-*DDDD*. This allows a degree of abstraction to years, phone numbers, etc.</p><p>Our baseline NER system uses a regularized averaged perceptron <ref type="bibr" target="#b10">(Freund and Schapire, 1999</ref>). Systems based on perceptron have been shown to be competitive in NER and text chunking <ref type="bibr" target="#b12">(Kazama and Torisawa, 2007b;</ref><ref type="bibr" target="#b20">Punyakanok and Roth, 2001;</ref><ref type="bibr">Car- reras et al., 2003</ref>) We specify the model and the features with the LBJ ( <ref type="bibr" target="#b23">Rizzolo and Roth, 2007</ref>) modeling language. We now state the four fundamental design decisions in NER system which define the structure of this paper. Key design decisions in an NER system.</p><p>1) How to represent text chunks in NER system?</p><p>2) What inference algorithm to use?</p><p>3) How to model non-local dependencies?</p><p>4) How to use external knowledge resources in NER?</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Inference &amp; Chunk Representation</head><p>In this section we compare the performance of several inference (decoding) algorithms: greedy leftto-right decoding, Viterbi and beamsearch. It may appear that beamsearch or Viterbi will perform much better than naive greedy left-to-right decoding, which can be seen as beamsearch of size one. The Viterbi algorithm has the limitation that it does not allow incorporating some of the non-local features which will be discussed later, therefore, we cannot use it in our end system. However, it has the appealing quality of finding the most likely assignment to a second-order model, and since the baseline features only have second order dependencies, we have tested it on the baseline configuration. <ref type="table">Table 1</ref> compares between the greedy decoding, beamsearch with varying beam size, and Viterbi, both for the system with baseline features and for the end system (to be presented later). Surprisingly, the greedy policy performs well, this phenmenon was also observed in the POS tagging task ( <ref type="bibr" target="#b29">Toutanova et al., 2003;</ref><ref type="bibr" target="#b24">Roth and Zelenko, 1998</ref>). The implications are subtle. First, due to the second-order of the model, the greedy decoding is over 100 times faster than Viterbi. The reason is that with the BILOU encoding of four NE types, each token can take 21 states (O, B-PER, I-PER , U-PER, etc.). To tag a token, the greedy policy requires 21 comparisons, while the Viterbi requires 21 3 , and this analysis carries over to the number of classifier invocations. Furthermore, both beamsearch and Viterbi require transforming the predictions of the classi-  fiers to probabilities as discussed in <ref type="bibr" target="#b19">(Niculescu- Mizil and Caruana, 2005</ref>), incurring additional time overhead. Second, this result reinforces the intuition that global inference over the second-order HMM features does not capture the non-local properties of the task. The reason is that the NEs tend to be short chunks separated by multiple "outside" tokens. This separation "breaks" the Viterbi decision process to independent maximization of assignment over short chunks, where the greedy policy performs well. On the other hand, dependencies between isolated named entity chunks have longer-range dependencies and are not captured by second-order transition features, therefore requiring separate mechanisms, which we discuss in Section 5.</p><p>Another important question that has been studied extensively in the context of shallow parsing and was somewhat overlooked in the NER literature is the representation of text segments <ref type="bibr" target="#b30">(Veenstra, 1999)</ref>. Related works include voting between several representation schemes <ref type="bibr" target="#b25">(Shen and Sarkar, 2005</ref>), lexicalizing the schemes ( <ref type="bibr" target="#b18">Molina and Pla, 2002</ref>) and automatically searching for best encoding <ref type="bibr" target="#b6">(Edward, 2007)</ref>. However, we are not aware of similar work in the NER settings. Due to space limitations, we do not discuss all the representation schemes and combining predictions by voting. We focus instead on two most popular schemes-BIO and BILOU. The BIO scheme suggests to learn classifiers that identify the Beginning, the Inside and the Outside of the text segments. The BILOU scheme suggests to learn classifiers that identify the Beginning, the Inside and the Last tokens of multi-token chunks as well as Unit-length chunks. The BILOU scheme allows to learn a more expressive model with only a small increase in the number of parameters to be learned. <ref type="table" target="#tab_2">Table 2</ref> compares the end system's performance with BIO and BILOU. Examining the results, we reach two conclusions: (1) choice of encoding scheme has a big impact on the system performance and (2) the less used BILOU formalism significantly outperforms the widely adopted BIO tagging scheme. We use the BILOU scheme throughout the paper.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Non-Local Features</head><p>The key intuition behind non-local features in NER has been that identical tokens should have identical label assignments. The sample text discussed in the introduction shows one such example, where all occurrences of "blinker" are assigned the PER label. However, in general, this is not always the case; for example we might see in the same document the word sequences "Australia" and "The bank of Australia". The first instance should be labeled as LOC, and the second as ORG. We consider three approaches proposed in the literature in the following sections. Before continuing the discussion, we note that we found that adjacent documents in the CoNLL03 and the MUC7 datasets often discuss the same entities. Therefore, we ignore document boundaries and analyze global dependencies in 200 and 1000 token windows. These constants were selected by hand after trying a small number of values. We believe that this approach will also make our system more robust in cases when the document boundaries are not given.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Context aggregation</head><p>( <ref type="bibr" target="#b3">Chieu and Ng, 2003)</ref> used features that aggregate, for each document, the context tokens appear in. Sample features are: the longest capitilized sequence of words in the document which contains the current token and the token appears before a company marker such as ltd. elsewhere in text. In this work, we call this type of features context aggregation features. Manually designed context aggregation features clearly have low coverage, therefore we used the following approach. Recall that for each token instance x i , we use as features the tokens in the window of size two around it: c i = (x i−2 , x i−1 , x i , x i+1 , x i+2 ). When the same token type t appears in several locations in the text, say x i 1 , x i 2 , . . . , x i N , for each instance x i j , in addition to the context features c i j , we also aggregate the context across all instances within 200 tokens:  </p><formula xml:id="formula_1">C = ∪ j=N j=1 c i j . CoNLL03</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Two-stage prediction aggregation</head><p>Context aggregation as done above can lead to excessive number of features. ( <ref type="bibr" target="#b14">Krishnan and Manning, 2006</ref>) used the intuition that some instances of a token appear in easily-identifiable contexts. Therefore they apply a baseline NER system, and use the resulting predictions as features in a second level of inference. We call the technique two-stage prediction aggregation. We implemented the token-majority and the entity-majority features discussed in <ref type="bibr">(Krish- nan and Manning, 2006</ref>); however, instead of document and corpus majority tags, we used relative frequency of the tags in a 1000 token window.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Extended prediction history</head><p>Both context aggregation and two-stage prediction aggregation treat all tokens in the text similarly. However, we observed that the named entities in the beginning of the documents tended to be more easily identifiable and matched gazetteers more often. This is due to the fact that when a named entity is introduced for the first time in text, a canonical name is used, while in the following discussion abbreviated mentions, pronouns, and other references are used. To break the symmetry, when using beamsearch or greedy left-to-right decoding, we use the fact that when we are making a prediction for token instance x i , we have already made predictions y 1 , . . . , y i−1 for token instances x 1 , . . . , x i−1 . When making the prediction for token instance x i , we record the label assignment distribution for all token instances for the same token type in the previous 1000 words. That is, if the token instance is "Australia", and in the previous 1000 tokens, the token type "Australia" was twice assigned the label L-ORG and three times the label U-LOC, then the prediction history feature will be: (L − ORG : 2 5 ; U − LOC : 3 5 ). <ref type="table" target="#tab_4">Table 3</ref> summarizes the results. Surprisingly, no single technique outperformed the others on all datasets. The extended prediction history method was the best on CoNLL03 data and MUC7 test set. Context aggregation was the best method for MUC7 development set and two-stage prediction was the best for Webpages. Non-local features proved less effective for MUC7 test set and the Webpages. Since the named entities in Webpages have less context, this result is expected for the Webpages. However, we are unsure why MUC7 test set benefits from nonlocal features much less than MUC7 development set. Our key conclusion is that no single approach is better than the rest and that the approaches are complimentary-their combination is the most stable and best performing.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Utility of non-local features</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">External Knowledge</head><p>As we have illustrated in the introduction, NER is a knowledge-intensive task. In this section, we discuss two important knowledge resources-gazetteers and unlabeled text.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Unlabeled Text</head><p>Recent successful semi-supervised systems (Ando and <ref type="bibr" target="#b0">Zhang, 2005;</ref><ref type="bibr" target="#b26">Suzuki and Isozaki, 2008)</ref> have illustrated that unlabeled text can be used to improve the performance of NER systems.</p><p>In this work, we analyze a simple technique of using word clusters generated from unlabeled text, which has been shown to improve performance of dependency parsing ( <ref type="bibr" target="#b13">Koo et al., 2008)</ref>, Chinese word segmentation ( <ref type="bibr" target="#b16">Liang, 2005</ref>) and NER ( <ref type="bibr" target="#b17">Miller et al., 2004</ref>). The technique is based on word class models, pioneered by <ref type="bibr" target="#b1">(Brown et al., 1992)</ref>, which hierarchically   The approach is related, but not identical, to distributional similarity (for details, see <ref type="bibr" target="#b1">(Brown et al., 1992)</ref> and <ref type="bibr" target="#b16">(Liang, 2005)</ref>). For example, since the words Friday and Tuesday appear in similar contexts, the Brown algorithm will assign them to the same cluster. Successful abstraction of both as a day of the week, addresses the data sparsity problem common in NLP tasks. In this work, we use the implementation and the clusters obtained in ( <ref type="bibr" target="#b16">Liang, 2005</ref>) from running the algorithm on the Reuters 1996 dataset, a superset of the CoNLL03 NER dataset. Within the binary tree produced by the algorithm, each word can be uniquely identified by its path from the root, and this path can be compactly represented with a bit string. Paths of different depths along the path from the root to the word provide different levels of word abstraction. For example, paths at depth 4 closely correspond to POS tags. Since word class models use large amounts of unlabeled data, they are essentially a semi-supervised technique, which we use to considerably improve the performance of our system.</p><p>In this work, we used path prefixes of length 4,6,10, and 20. When Brown clusters are used as features in the following sections, it implies that all features in the system which contain a word form will be duplicated and a new set of features containing the paths of varying length will be introduced. For example, if the system contains the feature concatenation of the current token and the system prediction on the previous word, four new features will be introduced which are concatenations of the previous prediction and the 4,6,10,20 length path-representations of the current word.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Gazetteers</head><p>An important question at the inception of the NER task was whether machine learning techniques are necessary at all, and whether simple dictionary lookup would be sufficient for good performance. Indeed, the baseline for the CoNLL03 shared task was essentially a dictionary lookup of the entities which appeared in the training data, and it achieves 71.91 F 1 score on the test set ( <ref type="bibr" target="#b27">Tjong and De Meulder, 2003)</ref>. It turns out that while problems of coverage and ambiguity prevent straightforward lookup, injection of gazetteer matches as features in machine-learning based approaches is critical for good performance <ref type="bibr" target="#b4">(Cohen, 2004;</ref><ref type="bibr" target="#b11">Kazama and Torisawa, 2007a;</ref><ref type="bibr" target="#b28">Toral and Munoz, 2006;</ref><ref type="bibr">Flo- rian et al., 2003)</ref>. Given these findings, several approaches have been proposed to automatically extract comprehensive gazetteers from the web and from large collections of unlabeled text <ref type="bibr" target="#b7">(Etzioni et al., 2005;</ref><ref type="bibr" target="#b22">Riloff and Jones, 1999</ref>) with limited impact on NER. Recently, ( <ref type="bibr" target="#b28">Toral and Munoz, 2006;</ref><ref type="bibr" target="#b11">Kazama and Torisawa, 2007a</ref>) have successfully constructed high quality and high coverage gazetteers from Wikipedia.</p><p>In this work, we use a collection of 14 highprecision, low-recall lists extracted from the web that cover common names, countries, monetary units, temporal expressions, etc. While these gazetteers have excellent accuracy, they do not provide sufficient coverage. To further improve the coverage, we have extracted 16 gazetteers from Wikipedia, which collectively contain over 1.5M entities. Overall, we have 30 gazetteers (available for download with the system), and matches against  each one are weighted as a separate feature in the system (this allows us to trust each gazetteer to a different degree). We also note that we have developed a technique for injecting non-exact string matching to gazetteers, which has marginally improved the performance, but is not covered in the paper due to space limitations. In the rest of this section, we discuss the construction of gazetteers from Wikipedia.</p><p>Wikipedia is an open, collaborative encyclopedia with several attractive properties. <ref type="formula">(1)</ref>  Both ( <ref type="bibr" target="#b28">Toral and Munoz, 2006</ref>) and <ref type="bibr" target="#b11">(Kazama and Torisawa, 2007a</ref>) used the free-text description of the Wikipedia entity to reason about the entity type. We use a simpler method to extract high coverage and high quality gazetteers from Wikipedia. By inspection of the CoNLL03 shared task annotation guidelines and of the training set, we manually aggregated several categories into a higher-level concept (not necessarily NER type). When a Wikipedia entry was tagged by one of the categories in the table, it was added to the corresponding gazetteer.  based on CoNLL03 annotation guidelines, these features proved extremely good on all datasets. Word class models discussed in Section 6.1 are computed offline, are available online 1 , and provide an alternative to traditional semi-supervised learning. It is important to note that the word class models and the gazetteers and independednt and accumulative. Furthermore, despite the number and the gigantic size of the extracted gazetteers, the gazeteers alone are not sufficient for adequate performance. When we modified the CoNLL03 baseline to include gazetteer matches, the performance went up from 71.91 to 82.3 on the CoNLL03 test set, below our baseline system's result of 83.65. When we have injected the gazetteers into our system, the performance went up to 87.22. Word class model and nonlocal features further improve the performance to 90.57 (see <ref type="table" target="#tab_8">Ta- ble 5</ref>), by more than 3 F 1 points.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Utility of External Knowledge</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Final System Performance Analysis</head><p>As a final experiment, we have trained our system both on the training and on the development set, which gave us our best F 1 score of 90.8 on the CoNLL03 data, yet it failed to improve the performance on other datasets. <ref type="table" target="#tab_8">Table 5</ref> summarizes the performance of the system. Next, we have compared the performance of our system to that of the Stanford NER tagger, across the datasets discussed above. We have chosen to compare against the Stanford tagger because to the best of our knowledge, it is the best publicly available system which is trained on the same data. We have downloaded the Stanford NER tagger and used the strongest provided model trained on the CoNLL03 data with distributional similarity features. The results we obtained on the CoNLL03 test set were consistent with what was reported in ( <ref type="bibr" target="#b8">Finkel et al., 2005</ref>). Our goal was to compare the performance of the taggers across several datasets. For the most realistic comparison, we have presented each system with a raw text, and relied on the system's sentence splitter and tokenizer. When evaluating the systems, we matched against the gold tokenization ignoring punctuation marks. <ref type="table" target="#tab_10">Table 6</ref> summarizes the results. Note that due to differences in sentence splitting, tokenization and evaluation, these results are not identical to those reported in <ref type="table" target="#tab_8">Table 5</ref>. Also note that in this experiment we have used token-level accuracy on the CoNLL dataset as well. Finally, to complete the comparison to other systems, in <ref type="table" target="#tab_12">Table 7</ref> we summarize the best results reported for the CoNLL03 dataset in literature.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Conclusions</head><p>We have presented a simple model for NER that uses expressive features to achieve new state of the art performance on the Named Entity recognition task. We explored four fundamental design decisions: text chunks representation, inference algorithm, using non-local features and external knowledge. We showed that BILOU encoding scheme significantly outperforms BIO and that, surprisingly, a conditional model that does not take into account interactions at the output level performs comparably to beamsearch or Viterbi, while being considerably more efficient computationally. We analyzed several approaches for modeling non-local dependencies and found that none of them clearly outperforms the others across several datasets. Our experiments corroborate recently published results indicating that word class models learned on unlabeled text can be an alternative to the traditional semi-supervised learning paradigm. NER proves to be a knowledgeintensive task, and it was reassuring to observe that  </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head></head><label></label><figDesc>SOCCER -[PER BLINKER] BAN LIFTED . [LOC LONDON] 1996-12-06 [MISC Dutch] forward [PER Reggie Blinker] had his indefinite suspension lifted by [ORG FIFA] on Friday and was set to make his [ORG Sheffield Wednesday] comeback against [ORG Liverpool] on Saturday . [PER Blinker] missed his club's last two games after [ORG FIFA] slapped a worldwide ban on him for appearing to sign contracts for both [ORG Wednesday] and [ORG Udinese] while he was playing for [ORG Feyenoord].</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Example illustrating challenges in NER.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: An extract from word cluster hierarchy.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head></head><label></label><figDesc>It is kept up- dated manually by it collaborators, hence new enti- ties are constantly added to it. (2) Wikipedia con- tains redirection pages, mapping several variations of spelling of the same name to one canonical en- try. For example, Suker is redirected to an entry about Davoř Suker, the Croatian footballer (3) The entries in Wikipedia are manually tagged with cate- gories. For example, the entry about the Microsoft in Wikipedia has the following categories: Companies listed on NASDAQ; Cloud computing vendors; etc.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 2 : End system performance with BILOU and BIO schemes. BILOU outperforms the more widely used BIO.</head><label>2</label><figDesc></figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>The utility of non-local features. The system was trained on CoNLL03 data and tested on CoNNL03, MUC7 and 
+
+Webpages. No single technique outperformed the rest on all domains. The combination of all techniques is the most robust. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Utility of external knowledge. The system was trained on CoNLL03 data and tested on CoNNL03, MUC7 and Webpages. 
+
+clusters words, producing a binary tree as in Fig-
+ure 2. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>End system performance by component. Results confirm that NER is a knowledge-intensive task. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_9" validated="false"><head>Table 4 summarizes</head><label>4</label><figDesc>the results of the techniques for injecting external knowledge. It is important to note that, although the world class model was learned on the superset of CoNLL03 data, and al- though the Wikipedia gazetteers were constructed</figDesc><table>Dataset 
+Stanford-NER LBJ-NER 
+MUC7 Test 
+80.62 
+85.71 
+MUC7 Dev 
+84.67 
+87.99 
+Webpages 
+72.50 
+74.89 
+Reuters2003 test 
+87.04 
+90.74 
+Reuters2003 dev 
+92.36 
+93.94 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_10" validated="false"><head>Table 6 : Comparison: token-based F1 score of LBJ-NER and</head><label>6</label><figDesc></figDesc><table>Stanford NER tagger across several domains 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_12" validated="false"><head>Table 7 :</head><label>7</label><figDesc></figDesc><table>Results for CoNLL03 data reported in the literature. 
+
+publicly available systems marked by +. 
+
+knowledge-driven techniques adapt well across sev-
+eral domains. We observed consistent performance 
+gains across several domains, most interestingly in 
+Webpages, where the named entities had less context 
+and were different in nature from the named entities 
+in the training set. Our system significantly outper-
+forms the current state of the art and is available to 
+download under a research license. 
+
+Apendix-wikipedia gazetters &amp; categories 
+
+1)People: people, births, deaths. Extracts 494,699 Wikipedia 
+
+titles and 382,336 redirect links. 2)Organizations: cooper-
+
+atives, federations, teams, clubs, departments, organizations, 
+
+organisations, banks, legislatures, record labels, constructors, 
+
+manufacturers, ministries, ministers, military units, military 
+
+formations, universities, radio stations, newspapers, broad-
+
+casters, political parties, television networks, companies, busi-
+
+nesses, agencies. Extracts 124,403 titles and 130,588 redi-
+
+rects. 3)Locations: airports, districts, regions, countries, ar-
+
+eas, lakes, seas, oceans, towns, villages, parks, bays, bases, 
+
+cities, landmarks, rivers, valleys, deserts, locations, places, 
+
+neighborhoods. Extracts 211,872 titles and 194,049 redirects. 
+
+4)Named Objects: aircraft, spacecraft, tanks, rifles, weapons, 
+
+ships, firearms, automobiles, computers, boats. Extracts 28,739 
+
+titles and 31,389 redirects. 5)Art Work: novels, books, paint-
+
+ings, operas, plays. Extracts 39,800 titles and 34037 redirects. 
+
+6)Films: films, telenovelas, shows, musicals. Extracts 50,454 
+
+titles and 49,252 redirects. 7)Songs: songs, singles, albums. 
+
+Extracts 109,645 titles and 67,473 redirects. 8)Events: playoffs, 
+
+championships, races, competitions, battles. Extracts 20,176 ti-
+
+tles and 15,182 redirects. </table></figure>
+
+			<note place="foot" n="1"> http://people.csail.mit.edu/maestro/papers/bllip-clusters.gz</note>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">A high-performance semi-supervised learning method for text chunking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">K</forename><surname>Ando</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Class-based n-gram models of natural language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">F</forename><surname>Brown</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">V</forename><surname>Desouza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">L</forename><surname>Mercer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><forename type="middle">J D</forename><surname>Pietra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">C</forename><surname>Lai</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="467" to="479" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Learning a perceptron-based named entity chunker via online recognition feedback</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Carreras</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Padró</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CoNLL</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Named entity recognition with a maximum entropy approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Chieu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">T</forename><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of CoNLL</title>
+		<meeting>CoNLL</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Exploiting dictionaries in named entity extraction: Combining semi-markov extraction processes and data integration methods</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">W</forename><surname>Cohen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">KDD</title>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Discriminative training methods for hidden markov models: Theory and experiments with perceptron algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Finding good sequential model structures using output transformations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Edward</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP)</title>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Unsupervised named-entity extraction from the web: An experimental study</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Etzioni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">J</forename><surname>Cafarella</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Downey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Popescu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Shaked</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Soderland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Weld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Yates</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Artificial Intelligence</title>
+		<imprint>
+			<biblScope unit="volume">165</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="91" to="134" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Incorporating non-local information into information extraction systems by gibbs sampling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">R</forename><surname>Finkel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Grenager</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Named entity recognition through classifier combination</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Florian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Ittycheriah</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Jing</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CoNLL</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Large margin classification using the perceptron algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Freund</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Schapire</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Machine Learning</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="volume">37</biblScope>
+			<biblScope unit="page" from="277" to="296" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Exploiting wikipedia as external knowledge for named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kazama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Torisawa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">A new perceptron algorithm for sequence labeling with non-local features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kazama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Torisawa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP-CoNLL</title>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Simple semisupervised dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Koo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Carreras</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">An effective twostage model for exploiting non-local dependencies in named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Krishnan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Conditional random fields: Probabilistic models for segmenting and labeling sequence data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Lafferty</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mccallum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Pereira</surname></persName>
+		</author>
+		<editor>ICML. Morgan Kaufmann</editor>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Semi-supervised learning for natural language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Liang</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+		<respStmt>
+			<orgName>Massachusetts Institute of Technology</orgName>
+		</respStmt>
+	</monogr>
+<note type="report_type">Masters thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Name tagging with word clusters and discriminative training</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Miller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Guinness</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Zamanian</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">HLT-NAACL</title>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Shallow parsing using specialized hmms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Molina</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Pla</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="595" to="613" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Predicting good probabilities with supervised learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Niculescu-Mizil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Caruana</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICML</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">The use of classifiers in sequential inference</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Punyakanok</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">A tutorial on hidden markov models and selected applications in speech recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">R</forename><surname>Rabiner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE</title>
+		<imprint>
+			<date type="published" when="1989" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Learning dictionaries for information extraction by multi-level bootstrapping</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Riloff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Jones</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Modeling discriminative global inference</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Rizzolo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICSC</title>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Part of speech tagging using a network of linear separators</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Roth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Zelenko</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COLING-ACL</title>
+		<imprint>
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Voting between multiple data representations for text chunking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Sarkar</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Artificial Intelligence</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="389" to="400" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Semi-supervised sequential labeling and segmentation using giga-word scale unlabeled data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Suzuki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Isozaki</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Introduction to the conll-2003 shared task: Language-independent named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Tjong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>De Meulder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CoNLL</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">A proposal to automatically build and maintain gazetteers for named entity recognition by using wikipedia</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Toral</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Munoz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EACL</title>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Feature-rich part-of-speech tagging with a cyclic dependency network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Toutanova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Klein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Singer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Representing text chunks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Veenstra</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EACL</title>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">A robust risk minimization based named entity recognition system</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Johnson</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+	<note>In CoNLL</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

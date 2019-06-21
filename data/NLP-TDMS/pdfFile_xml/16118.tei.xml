@@ -1,0 +1,904 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:43+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Learning to Extract Coherent Summary via Deep Reinforcement Learning</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuxiang</forename><surname>Wu</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution" key="instit1">Hong Kong University of Science and Technology Hong Kong</orgName>
+								<orgName type="institution" key="instit2">University of Massachusetts Medical School MA</orgName>
+								<address>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Baotian</forename><surname>Hu</surname></persName>
+							<email>baotian.hu@umassmed.edu</email>
+							<affiliation key="aff0">
+								<orgName type="institution" key="instit1">Hong Kong University of Science and Technology Hong Kong</orgName>
+								<orgName type="institution" key="instit2">University of Massachusetts Medical School MA</orgName>
+								<address>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Learning to Extract Coherent Summary via Deep Reinforcement Learning</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Coherence plays a critical role in producing a high-quality summary from a document. In recent years, neural extractive summarization is becoming increasingly attractive. However, most of them ignore the coherence of summaries when extracting sentences. As an effort towards extracting coherent summaries, we propose a neural coherence model to capture the cross-sentence semantic and syntactic coherence patterns. The proposed neural coherence model obviates the need for feature engineering and can be trained in an end-to-end fashion using unlabeled data. Empirical results show that the proposed neural coherence model can efficiently capture the cross-sentence coherence patterns. Using the combined output of the neural coherence model and ROUGE package as the reward, we design a reinforcement learning method to train a proposed neural extractive summarizer which is named Reinforced Neural Extractive Summarization (RNES) model. The RNES model learns to optimize coherence and informative importance of the summary simultaneously. The experimental results show that the proposed RNES outperforms existing baselines and achieves state-of-the-art performance in term of ROUGE on CNN/Daily Mail dataset. The qualitative evaluation indicates that summaries produced by RNES are more coherent and readable.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Introduction</head><p>Although deep neural networks (DNN) have dominated almost every field of natural language processing, such as sentiment classification <ref type="bibr" target="#b29">(Tang, Qin, and Liu 2015)</ref>, machine translation (Bahdanau, Cho, and Bengio 2014) and question answering ( <ref type="bibr" target="#b32">Zhou et al. 2015</ref>), generating high-quality summaries from long documents is still a very challenging task. Most of the recent works on abstractive summarization focus on headline generation from one paragraph <ref type="bibr" target="#b25">(Rush, Chopra, and Weston 2015)</ref> or several sentences (Hu, Chen, and Zhu 2015) by using sequence-to-sequence architectures borrowed from neural machine translation. However, they bypass the fundamental problems in summarization, namely the representation of long documents and the generation of multiple coherent sentences. These models fail to produce readable, informative and coherent sentences when dealing * The two authors contribute equally to this work. Copyright c 񮽙 2018, Association for the Advancement of Artificial Intelligence (www.aaai.org). All rights reserved.</p><p>with long documents. There is still a long way to go before abstractive summarization becomes practicable.</p><p>In contrast, extracting sentences from documents to form summaries, also named extractive summarization, is a more practical approach, because it can guarantee the grammatical correctness of the produced summary and its semantic relevance with the corresponding document. Extractive summarization has been studied for several decades. Traditional methods mainly focus on scoring sentences using graph-based method <ref type="bibr" target="#b7">(Erkan and Radev 2004)</ref>, submodular functions (Lin and Bilmes 2011) or integer linear programming <ref type="bibr" target="#b3">(Berg-Kirkpatrick, Gillick, and Klein 2011)</ref>, which are coupled with handcrafted features. As the distributed representation shows its outstanding capability in capturing semantic and syntactic information of text ( <ref type="bibr" target="#b18">Mikolov et al. 2013;</ref><ref type="bibr" target="#b12">Hu et al. 2016)</ref>, there is an emergence of works that use the deep neural networks to extract salient sentences ( <ref type="bibr" target="#b4">Cheng and Lapata 2016;</ref><ref type="bibr" target="#b19">Nallapati, Zhai, and Zhou 2017)</ref>. Although DNN-based methods can identify the important sentences from the documents, they still lack the ability to ensure coherence of the summary. They may produce summaries with sentences that are semantically independent to each other, which would cause difficulty for readers to comprehend the story as a whole.</p><p>The coherence of a summary is essential for its readability and clarity. However, to the best of our knowledge, there is no work incorporating coherence into the neural extractive model while extracting sentences. This task is challenging because it is difficult to include coherence into the objective function of supervised learning models because the coherence also depends on sentences that are eventually extracted when the inference is performed. In contrary, reinforcement learning (RL) is suitable for this case. RL algorithms aim to train an agent to maximize the reward by interacting with an environment. It is often used in settings where the objective is not differentiable with respect to the model parameters, such as works done by <ref type="bibr" target="#b22">(Paulus, Xiong, and Socher 2017;</ref><ref type="bibr" target="#b21">Nguyen, Boyd-Graber, and Daume 2017)</ref>.</p><p>In this paper, we focus on incorporating coherence into neural extractive model via reinforcement learning. We need a model that estimates coherence in the first place. During the past decades, works in coherence modeling mainly focus on topical coherence. One of the most popular methods is the entity grid model ( <ref type="bibr" target="#b2">Barzilay and Lapata 2008)</ref> The Thirty-Second AAAI Conference on Artificial Intelligence <ref type="bibr">(AAAI-18)</ref> which constructs a grid to represent grammatical and semantic transitions of entities between sentences. However, entity grid model depends on the named entity recognition system whose performance may become the bottleneck of entity grid model. Furthermore, entity grid models transitions of different entities separately, so it fails to capture semantic correlation between entities. Therefore, we instead use a neural coherence model which learns to estimate the coherence degree between two sentences by their distributed representation in an end-to-end fashion.</p><p>The contribution of this paper is twofold. First, we propose a novel neural coherence model which exploits the distributed representation of sentences instead of sparse handcrafted features. The proposed neural coherence model does not rely on any entity recognition systems and can be trained from scratch in an end-to-end fashion. The neural coherence model can capture the cross-sentence local entity transitions and the discourse relations with multiple layers of convolution and max-pooling. The experimental results show that, given one sentence, the neural coherence model can effectively identify the appropriate next sentence to compose a coherent sentence pair.</p><p>Second, we design a novel Reinforced Neural Extractive Summarization (RNES) model that incorporates coherence into neural extractive summarization with reinforcement learning. The output of the neural coherence model is used as immediate rewards during the training of RNES so that it learns to extract coherent summaries. ROUGE score is utilized as the final reward, and hence the proposed RNES model finds a balance between coherence and informative importance of sentences. We evaluate the proposed RNES model on CNN/Daily Mail dataset, and the results show that it achieves the state-of-the-art performance on ROUGE metrics. The qualitative evaluation indicates that the summaries produced by RNES are more informative and coherent.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Related Work</head><p>Our research builds on previous works in the field of neural extractive summarization, reinforcement learning, and coherence modeling.</p><p>Much progress has been made beyond traditional frameworks of extractive summarization models. Most of the recent works are based on deep neural networks. For example, ( <ref type="bibr" target="#b8">Filippova et al. 2015</ref>) use a recurrent neural network (RNN) to delete words from a sentence for sentence compression task. (Cheng and Lapata 2016) use a convolutional neural network to encode sentences, and then an RNN reads the sentence representations sequentially to encode the document. Finally, another RNN is used to label sentences sequentially, taking the encoded document representation and the previously labeled sentences into account. (Cheng and Lapata 2016) mainly consider the importance of sentences and the non-redundancy of the summary. (Nallapati, Zhai, and Zhou 2017) use a similar architecture to encode document, but it explicitly models sentence content, salience, novelty and position in its model for extracting sentences.</p><p>Our work is also related to the application of reinforcement learning in document summarization. Different from classification problem whose output is a single label, the goal of extractive summarization is to make a sequence of extraction decisions. Hence, it is suitable to formulate extractive summarization as a reinforcement learning problem that tries to maximize the quality of the summaries. Although ( <ref type="bibr" target="#b26">Ryang and Abekawa 2012;</ref><ref type="bibr" target="#b24">Rioux, Hasan, and Chali 2014;</ref><ref type="bibr" target="#b9">Henb, Mieskes, and Gurevych 2015)</ref> use value-based RL algorithms for extractive summarization, all of them are based on handcrafted features and do not consider coherence as the part of the reward. With the recent resurgence of DNN models, deep reinforcement learning has drawn considerable attention. For example, <ref type="bibr" target="#b22">(Paulus, Xiong, and Socher 2017)</ref> use the ROUGE-L score as the reinforcement reward and self-critical policy gradient training algorithm to train an abstractive summarization model. ( <ref type="bibr">Ayana et al. 2016;</ref><ref type="bibr" target="#b23">Ranzato et al. 2015)</ref> show that directly optimizing the evaluation metrics via reinforcement learning is more effective than optimizing likelihood for the sequence generation problems. However, these works focus on abstractive summarization and neglect coherence. To our knowledge, no work has been done to apply RL to neural extractive summarization with coherence as part of the reward, and our work is the first step towards filling this gap.</p><p>An essential requirement for summarization systems is the coherence of its output. Coherence is what makes multiple sentences semantically, logically and syntactically coherent <ref type="bibr" target="#b31">(Yao, Wan, and Xiao 2017)</ref>. Entity grid model proposed by <ref type="bibr" target="#b2">(Barzilay and Lapata 2008)</ref> is widely used to model the coherence of text. However, the discrete representation of entity grid suffers from the curse of dimensionality which limits its application on neural summarization. (Nguyen and Joty 2017) presented a local coherence model based on a convolutional neural network that operates over the distributed representation of entity grid. Since (Nguyen and Joty 2017) still rely on the entity grid features, it fails to exploit the full power of DNN in learning the hidden distributed representation of text automatically. ( <ref type="bibr" target="#b15">Li and Hovy 2014)</ref> use the recurrent and recursive neural network to obtain the distributed representation of sentences and then use a pairwise ranking method to train the coherence model. This model does not need any feature engineering, but it is weak in capturing the local entity transition because of the lack of cross-sentence local interaction. Our neural coherence model can be trained from scratch in an end-to-end fashion. It can model the local entity transitions as well as the syntactic and semantic relation between sentences via different levels of cross-sentence local interaction.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Neural Extractive Summarization Model</head><p>We need to construct a neural extractive summarization (NES) model before training it with the reinforcement learning algorithm. In this section, we present the detailed architecture of the proposed NES.</p><p>The extractive summarization model reads the document and sequentially selects a set of sentences to compose a summary. Given a document X = (x 1 , x 2 , · · · , x n ) that consists of n sentences, the NES model outputs a sequence of binary decisions Y = (y 1 , y 2 , · · · , y n ), where n denotes the number of sentences in the document and y i ∈ {0, 1} indicates whether sentence x i is selected. Then the extracted summary is a sequence of l sentences denoted as</p><formula xml:id="formula_0">G = extract(X, Y ) = (x q1 , · · · , x q l ),</formula><p>where 1 ≤ q 1 &lt; · · · &lt; q l ≤ n, and y qi = 1 for i = 1, · · · , l.</p><p>The proposed NES uses a hierarchical deep neural network to encode the document. At the word-level, convolutional neural network (CNN) is used to extract features of the words and their context. Let x t = (w 1 , w 2 , · · · , w m ) denotes the t-th sentence with m words, and v denotes the size of word embedding. Then the sentence could be represented by a matrix M ∈ R m×v . Multiple convolution kernels with different kernel size are used to extract features of word w i :</p><formula xml:id="formula_1">f j i = M i:i+kj −1 W j + b j ,</formula><p>where W j , b j , k j are the kernel weight matrix, the bias and the kernel size of the j-th convolution kernel respectively. The word w i is represented by concatenating the feature maps</p><formula xml:id="formula_2">f wi = [f 1 i ; f 2 i ; · · · ].</formula><p>The sentence x t is represented by the mean of all its word features</p><formula xml:id="formula_3">x t = 1 m m 񮽙 i=1 f wi .</formula><p>At the sentence-level, we use a bi-directional gated recurrent unit (Bi-GRU) to model the context of sentences. Gated recurrent unit is a variant of recurrent neural network proposed by <ref type="bibr" target="#b5">(Chung et al. 2014</ref>). It has two gates, an update gate z t and a reset gate r t . The hidden state h t at time step t could be computed with following equations:</p><formula xml:id="formula_4">z t = σ(W z x t + V z h t−1 + b z ), r t = σ(W r x t + V r h t−1 + b r ), ˆ h t = tanh(W h x t + V h (r t 񮽙 h t−1 ) + b h ), h t = (1 − z t ) 񮽙ˆh񮽙ˆ 񮽙ˆh t + z t 񮽙 h t−1 ,</formula><p>where 񮽙 represents element-wise product, W * 's, V * 's and b * 's are parameters of GRU.</p><p>Using Bi-GRU, the representation of the t-th sentence x t is transformed to a forward hidden state − → h t and a backward hidden state ← − h t . Both states are concatenated to form the contextual representation of the t-th sentence</p><formula xml:id="formula_5">← → h t = [ − → h t ; ← − h t ].</formula><p>The entire document is represented as d by a nonlinear transformation of the mean over all sentence representations:</p><formula xml:id="formula_6">d = tanh(W d ( 1 n n 񮽙 t=1 ← → h t ) + b d ),</formula><p>where W d and b d are parameters of the transformation. The probability of extraction decisions Y conditioned on document X could be factorized as Pr(Y |X) = 񮽙 n t=1 Pr(y t |X, y 1:t−1 ). The probability of extracting the tth sentence is computed as</p><formula xml:id="formula_7">Pr(y t = 1|X, y 1:t−1 ) = MLP( ← → h t , g t−1 , d),<label>(1)</label></formula><p>where g t−1 represents all sentences extracted before time t. MLP(·) means a multilayer perceptron that outputs a probability</p><formula xml:id="formula_8">MLP( ← → h t , g t−1 , d) = σ(W 2 tanh(W 1 [ ← → h t , g t−1 , d] + b 1 ) + b 2 ),</formula><p>where W 1 , W 2 , b 1 and b 2 are parameters of the MLP and σ(·) is the sigmoid function.</p><p>Since NES is trained with supervised learning, ground truth extraction labels (˚ y 1 , · · · , ˚ y n ) are available during training. Then the representation of sentences selected before or at time t is</p><formula xml:id="formula_9">g t = g t−1 + ˚ y t tanh(W g ← → h t ).</formula><p>The NES model is pretrained by minimizing the negative log-likelihood of the ground truth extraction labels</p><formula xml:id="formula_10">L pretrain (Θ) = − N 񮽙 i=1 Ni 񮽙 t=1</formula><p>񮽙˚y 񮽙˚񮽙˚y i t log Pr(y i t = 1|X i , ˚ y i 1:t−1 )</p><formula xml:id="formula_11">+(1 − ˚ y i t ) log Pr(y i t = 0|X i , ˚ y i 1:t−1 ) 񮽙 .</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Reinforced Neural Extractive Summarization Model</head><p>After the NES model is pretrained with supervised learning, we further train it with reinforcement learning to extract coherent and informative summaries by maximizing coherence and ROUGE scores. In this section, we first introduce the REINFORCE algorithm and then describe the proposed neural coherence model and the ROUGE score reward. The overall training algorithm is illustrated in Algorithm 1.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Reinforcement Learning</head><p>The problem of extractive summarization could be formulated as a reinforcement learning problem. The RNES model can be considered as an agent that extracts sentences sequentially from the document. At each time step t, the agent is in state s t = (X, y 1:t−1 ) which includes the document and the previous selections. Agent would take an action y t ∈ {0, 1} that decides whether sentence x t is extracted or not. After the agent takes the action y t , it may receive an immediate reward r t that shows how good the action is. The reward could also be delayed. When the agent finishes extracting sentences from the document, it will receive a final reward r −1 that indicates the performance of the entire action sequence (y 1 , y 2 , · · · , y n ).</p><p>We use the REINFORCE algorithm to train our RNES model. It is a kind of policy gradient method proposed by <ref type="bibr" target="#b30">(Williams 1992)</ref>, and it maximizes the performance of the agent by updating its policy parameters. The policy is defined as the probability of taking an action at time t given a state, which is parameterized by Θ:</p><formula xml:id="formula_12">π(a|s t , Θ) def = Pr(y t = a|s t , Θ) def = Pr(y t = a|X, y 1:t−1 , Θ).</formula><p>In our case, Θ represents all the parameters in the RNES model. We use a shorthand π Θ to denote the policy π parameterized by Θ. By applying Equation 1, we have</p><formula xml:id="formula_13">π Θ (a = 1|s t ) = MLP Θ ( ← → h t , g t−1 , d).</formula><p>Let s 0 = X represents the initial state when no action is taken yet, and v πΘ (s 0 ) be the value function that represents the expected return starting with state s 0 by following policy π Θ . Return at time t is defined as R t = 񮽙 ∞ i=t γ i−t r i , where γ is the discount factor. The objective of REINFORCE is defined as maximizing the value of initial state v πΘ (s 0 ), or minimizing its negative L RF (Θ) = −v πΘ (s 0 ). Therefore, the parameters should be updated by the gradient of L RF (Θ) with respect to parameters Θ:</p><formula xml:id="formula_14">∇L RF (Θ) = −∇v πΘ (s 0 ) = − n 񮽙 t=1 γ t Pr(s t |s 0 , π Θ ) 񮽙 a q πΘ (s t , a)∇π Θ (a|s t ),</formula><p>where q πΘ (s, a) is the action-value function that represents the expected return after taking action a at state s with policy π Θ .</p><p>Since the state space is too large, it is infeasible to compute the exact value of the gradient. We use Monte Carlo sampling to approximate the gradient:</p><formula xml:id="formula_15">∇L RF (Θ) = −E ˜ yt,˜ st∼πΘ 񮽙 γ t ˜ R t ∇ log π Θ (˜ y t |˜s|˜s t ) 񮽙 ,<label>(2)</label></formula><p>where˜swhere˜ where˜s t and˜yand˜ and˜y t are randomly sampled from π Θ , ˜ R t is the actual return received since˜ssince˜ since˜s t and˜yand˜ and˜y t . A detailed proof of Equation 2 could be found in (Sutton and Barto 1998) and is omitted for brevity here. The parameters Θ are updated as follows:</p><formula xml:id="formula_16">Θ ← Θ + γ t ˜ R t ∇ log π Θ (˜ y t |˜s|˜s t ).<label>(3)</label></formula><p>We use γ = 1 for simplicity in this work. The definition of reward is crucial for reinforcement learning because it determines the optimization direction. To ensure that the RNES model extracts coherent and informative summaries, the reward includes both coherence score and ROUGE score, which will be introduced later in this paper. Given a sequence of sampled actions˜Yactions˜ actions˜Y = (˜ y 1 , · · · , ˜ y n ), the corresponding coherence scores are exploited as immediate rewards˜rrewards˜ rewards˜r t and the ROUGE score as the final reward˜rward˜ ward˜r −1 . Therefore, our algorithm is indeed maximizing a weighted sum of coherence and ROUGE score:</p><formula xml:id="formula_17">v π (s 0 ) def = E πΘ [R 0 |s 0 ] = E ˜ yt,˜ st∼πΘ [˜ r −1 + λ n 񮽙 t=1˜r t=1˜ t=1˜r t |s 0 ] = E πΘ [ROUGE( ˜ G) + λCoherence( ˜ G)|X]<label>(4)</label></formula><p>where˜Gwhere˜ where˜G = extract(X, ˜ Y ) is the sampled extractive summary and λ is the coefficient that balances the two rewards. Coherence( ˜ G) is the sum of coherence scores of˜Gof˜ of˜G:</p><formula xml:id="formula_18">Coherence( ˜ G) = 񮽙 ( ˜ S A , ˜ S B )∈adj( ˜ G) Coh( ˜ S A , ˜ S B ),</formula><p>where adj( ˜ G) is the set of adjacent sentences iñ G. The function Coh(·, ·) is defined by the neural coherence model in Equation 5, which will be introduced in the next subsection. Algorithm 1 shows the overall REINFORCE algorithm to train our proposed RNES model. Algorithm 1 Overall training algorithm of RNES model. α is the learning rate, χ is a placeholder sentence for bootstrapping the coherence score of the first extracted sentence.</p><p>1: Ψ ← train the neural coherence model. 2: Θ ← pretrain the neural sentence extractor with supervised learning.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>3: loop 4:</head><p>X, H ← sample a document-summary pair from corpus</p><note type="other">5: ˜ s0 ← X 6: Sample an episode˜s1episode˜ episode˜s1, ˜ y1, · · · , ˜ sn, ˜ yn following πΘ 7: previous ← χ (a placeholder for empty start sentence) 8: for each step t = 1 . . . n do 9: if˜ytif˜ if˜yt = 1 then 10: ˜ rt ← CohΨ(previous, xt) 11: previous ← xt 12: else 13: ˜ rt ← 0 14:</note><formula xml:id="formula_19">˜ G ← extract(X, (˜ y1, · · · , ˜<label>yn))</label></formula><p>15:</p><formula xml:id="formula_20">˜ r−1 = ROUGE( ˜ G, H) 16:</formula><p>for each step t = 1 . . . n do 17:</p><formula xml:id="formula_21">˜ Rt ← λ 񮽙 n i=t˜rii=t˜ i=t˜ri + ˜ r−1 18: Θ ← Θ + α ˜ Rt∇ log πΘ(˜ yt|˜styt|˜st)</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Neural Coherence Reward</head><p>We propose a neural coherence model to compute the cross sentence coherence as part of the reward of RNES model. This model is built on the ARC-II proposed by ( <ref type="bibr" target="#b11">Hu et al. 2014</ref>) for sentence matching. This neural coherence model has some advantages over traditional entity grid models. Our neural coherence model requires no feature engineering and could be trained in an end-to-end fashion. Besides, it uses the distributed text representation which can capture the syntactic and semantic coherence patterns by cross-sentence interaction. The architecture of the neural coherence model is shown in <ref type="figure" target="#fig_1">Figure 1</ref>. Given two sentences S A and S B , in layer 1, it uses sliding windows on both sentences to model all the possible local coherence transition of the two sentences. For segment i on S A and segment j on S B , the local coherence transition is computed as</p><formula xml:id="formula_22">z (1) i,j = ReLU(W (1) ˆ z (0) i,j + b (1) ),</formula><p>where W 1 is the weight parameters for first layer and b 1 is the bias. ReLU is the nonlinear function proposed by <ref type="bibr" target="#b6">(Dahl, Sainath, and Hinton 2013)</ref>. ˆ z</p><p>i,j ∈ R 2k1×De is obtained by concatenating the embeddings of words in S A and S B sequentially:</p><formula xml:id="formula_24">ˆ z (0) i,j = [e(a i ); ...; e(a i+k1−1 ); e(b j ); ...; e(b j+k1−1 )],</formula><p>where a i is the i-th word of S A , b j is the j-th word of S B and e(·) is the embedding lookup function which outputs a D e -dimensional word embedding.</p><p>Layer 2 takes the output of layer 1 and performs a maxpooling in each dimension on non-overlapping 2 × 2 windows.  Following layer 2, there are more convolution and maxpooling layers, analogous to that of convolutional architecture for image input ( <ref type="bibr" target="#b14">LeCun and Bengio 1995)</ref>. Finally, we obtain the fixed length vector h and it is fed into a nonlinear transformation with activation function tanh to compute coherence score of the two sentences:</p><formula xml:id="formula_25">Coh(S A , S B ) = tanh(W c h + b c ),<label>(5)</label></formula><p>where W c is the weight parameters and b c is the bias.</p><p>Hence, the coherence model will output a coherence score Coh(S A , S B ) ∈ (−1, 1) for any sentence pairs (S A , S B ). From the first layer, the neural coherence model can capture the local coherence of two sentences. And it can also obtain higher level coherence representation of S A and S B with more convolution and max-pooling layers.</p><p>For the training of the neural coherence model, we use a pair-wise training strategy with a large margin objective. Suppose we are given the following triples (S A , S B + , S B − ), we adopt the ranking-based loss as objective:</p><formula xml:id="formula_26">L Θ (S A , S B + , S B − ) = max(0, 1 + Coh(S A , S B − ) − Coh(S A , S B + )).</formula><p>The model is trained by minimizing the above objective, to encourage the model to assign higher coherence score to coherent sentence pair (S A , S B + ) than incoherent pair (S A , S B − ).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ROUGE Score Reward</head><p>ROUGE score is used as the final reward to ensure that RNES model extracts reasonably informative sentences. Given a sequence of sampled decisions (˜ y 1 , · · · , ˜ y n ), we can get the sequence of extracted sentences˜Gsentences˜ sentences˜G. Since the dataset comes with news highlights written by human editors, these manual highlights H is treated as the reference summary. Then the ROUGE score between the system summary˜Gsummary˜ summary˜G and the reference H could be computed and used as the final reward for the entire sampled decisions:</p><formula xml:id="formula_27">˜ r −1 (˜ y 1 , · · · , ˜ y n ) = ROUGE( ˜ G, H).</formula><p>Multiple variants of ROUGE score are proposed by <ref type="bibr" target="#b17">(Lin 2004</ref>). Among them, ROUGE-1 (R-1), ROUGE-2 (R-2) and ROUGE-L (R-L) are the most commonly used ones. ROUGE-n (R-n) recall between an extracted summary and a reference summary can be computed as follows:</p><formula xml:id="formula_28">R-n = 񮽙 s∈reference summary 񮽙 gram n ∈s Count match (gram n ) 񮽙 s∈reference summary 񮽙 gram n ∈s Count(gram n ) ,</formula><p>where n stands for the length of n-gram, Count match (gram n ) is the maximum number of n-grams co-occurring in both the extracted summary and the reference. Similarly we could compute the R-n precision and F1. R-1 and R-2 are special cases of R-n in which n = 1 or n = 2. R-L is instead computed based on the length of longest common subsequence between the system summary and the reference. Since using only one variant of ROUGE as reward for training RNES may not increase its performance on other ROUGE variants, we use a combination of ROUGE variants as reward:</p><formula xml:id="formula_29">ROUGE(G, H) =w 1 R-1(G, H) + w 2 R-2(G, H) + w l R-L(G, H),</formula><p>where weights w 1 , w 2 and w l are hyperparameters. We use w 1 = 0.4, w 2 = 1.0, w l = 0.5 in our experiments to ensure balanced enhancement. The overall training algorithm is illustrated in the Algorithm 1. Since REINFORCE algorithm converges very slowly, we pretrain the RNES model with supervised learning. The neural coherence model is also trained and then fixed for the coherence scoring. During the REINFORCE training, a sequence of actions and states is sampled according to the policy. Then the coherence model and the ROUGE package are used for computing the rewards. The parameters of RNES model Θ is then updated according to Equation 3.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Experiments and Results</head><p>We use the CNN/Daily Mail dataset originally introduced by ( <ref type="bibr" target="#b10">Hermann et al. 2015</ref>) to evaluate our model. This dataset contains news documents and their corresponding highlights crawled from CNN and Daily Mail website, and it is commonly used in extractive summarization <ref type="bibr">(Cheng and Lap- ata 2016;</ref><ref type="bibr" target="#b19">Nallapati, Zhai, and Zhou 2017)</ref> and abstractive summarization ( <ref type="bibr" target="#b19">Nallapati et al. 2016;</ref><ref type="bibr">See, Liu, and Man- ning 2017)</ref>. We used the scripts provided by ( <ref type="bibr" target="#b10">Hermann et al. 2015</ref>) to download the dataset. It contains 287,226 documents for training, 13,368 documents for validation and 11,490 documents for test. Since the dataset only contains manual summaries and does not have extractive labels, a greedy algorithm similar to the one presented by <ref type="bibr" target="#b19">(Nallapati, Zhai, and Zhou 2017</ref>) is used to generate extraction labels for supervised training.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Results of the Neural Coherence Model</head><p>The coherence model needs to be trained before it is used to produce coherence score as the reward in the REINFORCE algorithm. In our experiments, we use 64-dimensional word embeddings which are randomly initialized and finetuned in the process of supervised training. The sizes of all its convolutional kernels are set to 3. The first convolution layer has 128 filters. The second and third convolution layers contain 256 and 512 filters respectively. Each convolution layer is followed by a max-pooling layer performed on the sliding non-overlapping 2 × 2 windows. The final two fullyconnected layers have 512 and 256 hidden units respectively. The maximum sentence length is 50. Sentences longer than the limit would be truncated, and those that are shorter than this length would be padded with zeros. The coherence model is trained with stochastic gradient descent (SGD) with batch size 64 and learning rate 0.1.</p><p>The training triplets are sampled from the CNN/Daily Mail dataset. The S A and S B + are adjacent sentences sampled from the documents, and S B − is a sentence randomly sampled such that S B − 񮽙 = S B + . To make the task more difficult so that the model finds more fine grained coherence patterns, S B − is sampled from the same document as (S A , S B + ) and it is less than nine sentences away from</p><formula xml:id="formula_30">S B + .</formula><p>The model is tested on around twenty three thousand positive pairs sampled from the test set, each accompanied with one negative sample. If the model gives a higher score to the positive sample than the negative sample, it is considered correct. The accuracy is 71.3%, versus 50% accuracy for random guess, which indicates that the neural coherence model can capture the cross-sentence coherence.</p><p>We also conducted empirical studies on some example outputs of our proposed neural coherence model. <ref type="table">Table 1</ref> shows some examples of coherence scoring. The first example shows that the model can exploit co-reference for coherence modeling. The model can also capture the semantic coherence between two sentences, such as semantically related words such as "photographer" and "shoot" (example 1), "survey" and "answers" (example 3). Furthermore, the coherence model can discover syntactic patterns such as "As a result . . . " and "According to . . . ", which represents the syntactic coherence across sentences. The third example also shows that there is much noise in our training data. After closer inspection, we found that the S B − rather than S B + , is the right sentence following S A . S B + in example 3 is an image caption embedded in the article, which is not filtered out during the data preprocessing phase. However, thanks to the training on the large-scale text corpus, the neural coherence model is robust enough to score the right sentence much higher. These examples show that the neural coherence model indeed captures the semantic and syntactic coherence patterns across sentences.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Results of the Reinforced Neural Extractive Summarization Model (RNES)</head><p>For the NES/RNES model, we use 128-dimensional word embeddings and the vocabulary size is 150,000. The convolution kernels have size 3, 5, 7 with 128, 256, 256 filters respectively. We set the hidden state size of sentence-level GRU to 256, and the document representation size to 512. The MLP has two layers, with 512 and 256 hidden units respectively. We fix the maximum sentence length to 50 and the maximum number of sentences in a document to 80. Sentences or documents that are longer than the maximum length are truncated to fit the length requirement. The model is trained with stochastic gradient descent (SGD) with batch size 64. When doing supervised train- <ref type="table">Table 1</ref>: Example outputs of neural coherence model. Sentences Score S A : Terry's career as a photographer came after he failed to make it as a punk rock musician. per cent of students didn't lose their virginity until they were 18 years old, with the second most popular age to have sex for the first time being 16.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>0.9999</head><p>ing of the NES, ground truth extraction labels are used for computing the cross-entropy loss. The labels are generated from the dataset by greedily selects sentences to maximize its ROUGE similarity compared to manual highlights. During the training of RNES using reinforcement learning, both the neural coherence model and ROUGE scorer are used to compute the reward. As shown in Equation 4, the hyperparameter λ is used to balance between the two objectives. In our experiments, we explored λ = 1.0, 0.1, 0.01, 0.005. It is found that when λ = 1.0 or 0.1, the model favors coherence so much that ROUGE degrades rapidly and the model eventually converges to a policy that selects consecutive sentences that are not informative. However, when λ = 0.005, the ROUGE objective overpowers coherence, and the coherence rewards drop to approximately zero. We found that λ = 0.01 is a good trade-off such that both rewards increase and eventually converge.</p><p>At test time our model produces summaries by beam search with beam size 10. To compare with previous works, we adopt the same evaluation metrics as in <ref type="bibr" target="#b19">(Nallapati, Zhai, and Zhou 2017)</ref>. We use full-length F1 of ROUGE-1, ROUGE-2, and ROUGE-L to evaluate our model. <ref type="table">Table 2</ref> shows the performance comparison between our models and baselines. Our RNES models (with or without coherence as the reward) outperform current state-of-the-art models and NES by a large margin. The result indicates that the sum-maries extracted by RNES are of higher quality than summaries produced by previous works. <ref type="table">Table 2</ref>: Performance comparison on CNN/Daily Mail test set, evaluated with full-length F1 ROUGE scores (%). All scores of RNES are statistically significant using 95% confidence interval with respect to previous best models.</p><p>Model Though RNES with the coherence reward achieves higher ROUGE scores than baselines, there is a small gap between its score and that of RNES trained without coherence model. This is because that the coherence objective and ROUGE score do not always agree with each other. Since ROUGE is simply computed based on n-grams or longest common subsequence, it is ignorant of the coherence between sentences. Therefore, enhancing coherence may lead to a drop of ROUGE. However, the 95% confidence intervals of the two RNES models overlap heavily, indicating that their difference in ROUGE is insignificant. We also conduct a qualitative evaluation to find out whether the introduction of coherence reward improves the coherence of the output summaries. We randomly sample 50 documents from the test set and ask three volunteers to evaluate the summaries extracted by RNES trained with or without coherence as the reward. They are asked to compare and rank the outputs of two models regarding three aspects: informativeness, coherence and overall quality. The better one will be given rank 1, while the other will be given rank 2 if it is worse. In some cases, if the two outputs are identical or have the same quality, the ranks could be tied, i.e., both of them are given rank 1. <ref type="table" target="#tab_2">Table 3</ref> shows the results of human evaluation. RNES model trained with coherence reward is better than RNES model without coherence reward in all three aspects, especially in the coherence. The result indicates that the introduction of coherence effectively improves the coherence of extracted summaries, as well as the overall quality. It is surprising that summaries produced by RNES with coherence are also more informative than RNES without coherence, indicating that ROUGE might not be the gold standard to evaluate informativeness as well. <ref type="table">Table 4</ref> shows a pair of summary produced by RNES with or without coherence. The summary produced by RNES without coherence starts with pronoun 'That' which is referring to a previously mentioned fact, and hence it may lead to confusion. In contrast, the output of RNES trained with coherence reward includes the sentence "The earthquake disaster . . . " before referring to this fact in the second sentence, and therefore is more coherent and readable. This is because the coherence model gives a higher score to the second sentence if it can form a coherent sentence pair with the first sentence. In REINFORCE training, if the second sentence receives a high coherence score, the action of extracting the first sentence before the second one will be strengthened. This example shows that coherence model is indeed effective in changing the behavior of RNES towards extracting summaries that are more coherent. <ref type="table">Table 4</ref>: Examples of extracted summary.</p><formula xml:id="formula_31">R-1 R-2 R-L Lead</formula><p>Reference: Peter Spinks from the Sydney Morning Herald reported on Amasia. Within 200 million years, he said the new supercontinent will form. One researcher recently travelled to Nepal to gather further information. He spotted that India, Eurasia and other plates are slowly moving together. RNES w/o coherence: That's according to one researcher who travelled to the country to study how the Indian and Eurasian plates are moving together. And using new techniques, researchers can now start examining the changes due to take place over the next tens of millions of years like never before. Earth's continents are slowly moving together, and in 50 to 200 million years they are expected to form a new supercontinent called Amasia. In 2012 a study suggested this may be centered on the North Pole. The idea that Earth is set to form a new supercontinent-dubbed Amasia -is not new. RNES w/ coherence: The earthquake disaster in Nepal has highlighted how Earth's land masses are already in the process of forming a new supercontinent. That's according to one researcher who travelled to the country to study how the Indian and Eurasian plates are moving together. And using new techniques, researchers can now start examining the changes due to take place over the next tens of millions of years like never before. Earth's continents are slowly moving together, and in 50 to 200 million years they are expected to form a new supercontinent called Amasia.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Conclusion</head><p>In this paper, we proposed a Reinforced Neural Extractive Summarization model to extract a coherent and informative summary from a single document. Empirical results show that the proposed RNES model can balance between the cross-sentence coherence and importance of the sentences effectively, and achieve state-of-the-art performance on the benchmark dataset. For future work, we will focus on improving the performance of our neural coherence model and introducing human knowledge into the RNES.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>z</head><label></label><figDesc>(2) i,j = max(z (1) 2i−1,2j−1 , z (1) 2i−1,2j , z (1) 2i,2j−1 , z (1) 2i,2j ).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Illustration of neural coherence model which is built upon ARC-II proposed by (Hu et al. 2014).</figDesc><graphic url="image-1.png" coords="5,53.73,53.71,204.98,84.46" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head>S B + : He got his first big break in 1994 with a: The photographer has also directly music</head><label></label><figDesc></figDesc><table>shoot for Vibe magazine. 
+
+0.9885 
+
+S B 
+− videos in his time. 
+
+0.5198 
+
+S A : These days we are increasingly using outdoor 
+
+space for the occasional barbecue or to relax in a 
+hot tub rather than for tending flowers, according 
+to researchers. 
+
+S B 
++ : As a result, only a handful of traditional 
+
+flowers still grow in English country gardens, with 
+the average one usually containing a mere four 
+species -daffodils, crocuses, roses and tulips. 
+
+0.8934 
+
+S B 
+− : Sir Roy Strong, the landscape designer and 
+
+former director of the Victoria and Albert Museum, 
+told the Sunday Times: 'British people used to take 
+pride in having neat gardens with lots of flowers.' 
+
+-
+0.0067 
+
+S A : The same survey recently showed that univer-
+
+sity pupils in Britain have an average of 8.2 sexual 
+partners by the time they reach the middle of their 
+higher education. 
+
+S B 
++ : A new survey of university students has re-
+
+vealed that they have had an average of 8.2 sexual 
+partners (picture posed by models) 
+
+0.0021 
+
+S B 
+− : According to the answers they received, 22 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Comparison of human evaluation in terms of infor-
+mativeness(Inf), coherence(Coh) and overall ranking. Lower 
+is better. 
+Model 
+Inf 
+Coh 
+Overall 
+RNES w/o coherence 1.183 
+1.325 
+1.492 
+RNES w/ coherence 
+1.125 
+1.092 
+1.209 
+
+</table></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>This work is supported by grants from WeChat-HKUST Joint Lab on Artificial Intelligence Technology (WHAT Lab). Baotian Hu acknowledges partial support from the University of Massachusetts Medical School.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Neural headline generation with minimum risk training</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Sun</surname></persName>
+		</author>
+		<idno>CoRR abs/1604.01904</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Neural machine translation by jointly learning to align and translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno>CoRR abs/1409.0473</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Modeling local coherence: An entity-based approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Barzilay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Lapata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comput. Linguist</title>
+		<imprint>
+			<biblScope unit="volume">34</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="34" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Jointly learning to extract and compress</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Berg-Kirkpatrick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Gillick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL-HLT</title>
+		<meeting>the ACL-HLT</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="481" to="490" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Neural summarization by extracting sentences and words</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Lapata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL</title>
+		<meeting>the ACL</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Empirical evaluation of gated recurrent neural networks on sequence modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.3555</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Improving deep neural networks for lvcsr using rectified linear units and dropout</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Dahl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">N</forename><surname>Sainath</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ICASSP</title>
+		<meeting>the ICASSP</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Lexrank: Graph-based lexical centrality as salience in text summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Erkan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">R</forename><surname>Radev</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Artif. Int. Res</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="457" to="479" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Sentence Compression by Deletion with LSTMs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Filippova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Alfonseca</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">A</forename><surname>Colmenares</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Vinyals</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the EMNLP</title>
+		<meeting>the EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="360" to="368" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">A Reinforcement Learning Approach for Adaptive Single-and MultiDocument Summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Henb</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Mieskes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Gurevych</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">GSCL</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="3" to="12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Teaching machines to read and comprehend</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">M</forename><surname>Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Kocisky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Kay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Suleyman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1693" to="1701" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Convolutional neural network architectures for matching natural language sentences</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chen</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="page" from="2042" to="2050" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">A novel word embedding learning model using the dissociation between nouns and verbs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Kang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neurocomput</title>
+		<imprint>
+			<biblScope unit="volume">171</biblScope>
+			<biblScope unit="page" from="1108" to="1117" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">LCSTS: A large scale chinese short text summarization dataset</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Zhu</surname></persName>
+		</author>
+		<idno>CoRR abs/1506.05865</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Convolutional networks for images, speech and time series. The Handbook of Brain Theory and Neural Networks 3361</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Lecun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">A model of coherence based on distributed sentence representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">H</forename><surname>Hovy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the EMNLP</title>
+		<meeting>the EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="2039" to="2048" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">A class of submodular functions for document summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bilmes</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL-HLT</title>
+		<meeting>the ACL-HLT</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="510" to="520" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Rouge: A package for automatic evaluation of summaries</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C.-Y</forename><surname>Lin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Text Summarization Branches Out: Proceedings of the ACL-04 Workshop</title>
+		<editor>Marie-Francine Moens, S. S.</editor>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="74" to="81" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title level="m" type="main">Efficient estimation of word representations in vector space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Dean</surname></persName>
+		</author>
+		<idno>CoRR abs/1301.3781</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Summarunner: A recurrent neural network based sequence model for extractive summarization of documents</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Nallapati</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Xiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Nallapati</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Zhai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Zhou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 20th SIGNLL Conference on Computational Natural Language Learning</title>
+		<meeting>the 20th SIGNLL Conference on Computational Natural Language Learning</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="3075" to="3081" />
+		</imprint>
+	</monogr>
+	<note>Proceedings of the AAAI</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">A neural local coherence model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">T</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joty</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">R</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL</title>
+		<meeting>the ACL</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="1320" to="1330" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Reinforcement learning for bandit neural machine translation with simulated human feedback</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Boyd-Graber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">I</forename><surname>Daume</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the EMNLP</title>
+		<meeting>the EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">A deep reinforced model for abstractive summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Paulus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<idno>CoRR abs/1705.04304</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Sequence level training with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ranzato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Auli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Zaremba</surname></persName>
+		</author>
+		<idno>CoRR abs/1511.06732</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Fear the REAPER: A System for Automatic Multi-Document Summarization with Reinforcement Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Rioux</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">A</forename><surname>Hasan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Chali</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the EMNLP</title>
+		<meeting>the EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="681" to="690" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">A neural attention model for abstractive sentence summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">M</forename><surname>Rush</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Weston</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the EMNLP</title>
+		<meeting>the EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="379" to="389" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Framework of automatic text summarization using reinforcement learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ryang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abekawa</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the EMNLP</title>
+		<meeting>the EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="256" to="265" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Get To The Point: Summarization with Pointer-Generator Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>See</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">J</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.04368[cs].arXiv:1704.04368</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">Introduction to Reinforcement Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">S</forename><surname>Sutton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">G</forename><surname>Barto</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1998" />
+			<publisher>MIT Press</publisher>
+			<pubPlace>Cambridge, MA, USA</pubPlace>
+		</imprint>
+	</monogr>
+	<note>1st edition</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Document modeling with gated recurrent neural network for sentiment classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Qin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Liu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the EMNLP</title>
+		<meeting>the EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1422" to="1432" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Simple statistical gradient-following algorithms for connectionist reinforcement learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">J</forename><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Machine learning</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">3-4</biblScope>
+			<biblScope unit="page" from="229" to="256" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Recent advances in document summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Yao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Wan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiao</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Knowledge and Information Systems</title>
+		<imprint>
+			<biblScope unit="page" from="1" to="40" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Icrc-hit: A deep learning based comment sequence labeling system for answer selection challenge</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Xiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the SemEval</title>
+		<meeting>the SemEval</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="210" to="214" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

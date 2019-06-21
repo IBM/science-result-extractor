@@ -1,0 +1,678 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:07+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Sentence Compression by Deletion with LSTMs</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Katja</forename><surname>Filippova</surname></persName>
+							<email>katjaf@google.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Enrique</forename><surname>Alfonseca</surname></persName>
+							<email>ealfonseca@google.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carlos</forename><forename type="middle">A</forename><surname>Colmenares</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukasz</forename><surname>Kaiser</surname></persName>
+							<email>lukaszkaiser@google.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+							<email>vinyals@google.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Google</forename><surname>Research</surname></persName>
+						</author>
+						<title level="a" type="main">Sentence Compression by Deletion with LSTMs</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We present an LSTM approach to deletion-based sentence compression where the task is to translate a sentence into a sequence of zeros and ones, corresponding to token deletion decisions. We demonstrate that even the most basic version of the system, which is given no syntactic information (no PoS or NE tags, or dependencies) or desired compression length, performs surprisingly well: around 30% of the compressions from a large test set could be regenerated. We compare the LSTM system with a competitive baseline which is trained on the same amount of data but is additionally provided with all kinds of linguistic features. In an experiment with human raters the LSTM-based model outperforms the baseline achieving 4.5 in readability and 3.8 in informativeness.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Sentence compression is a standard NLP task where the goal is to generate a shorter paraphrase of a sentence. Dozens of systems have been introduced in the past two decades and most of them are deletion-based: generated compressions are token subsequences of the input sentences <ref type="bibr" target="#b8">(Jing, 2000;</ref><ref type="bibr" target="#b9">Knight &amp; Marcu, 2000;</ref><ref type="bibr" target="#b12">McDonald, 2006;</ref><ref type="bibr" target="#b3">Clarke &amp; Lapata, 2008;</ref><ref type="bibr" target="#b0">Berg-Kirkpatrick et al., 2011</ref>, to name a few).</p><p>Existing compression systems heavily use syntactic information to minimize chances of introducing grammatical mistakes in the output. A common approach is to use only some syntactic information <ref type="bibr" target="#b8">(Jing, 2000;</ref><ref type="bibr" target="#b3">Clarke &amp; Lapata, 2008,</ref> among others) or use syntactic features as signals in a statistical model <ref type="bibr" target="#b12">(McDonald, 2006</ref>). It is probably even more common to operate on syntactic trees directly (dependency or constituency) and generate compressions by pruning them <ref type="bibr" target="#b9">(Knight &amp; Marcu, 2000;</ref><ref type="bibr" target="#b0">Berg-Kirkpatrick et al., 2011;</ref><ref type="bibr">Filippova &amp; Altun, 2013, among others)</ref>. Unfortunately, this makes such systems vulnerable to error propagation as there is no way to recover from an incorrect parse tree. With the state-of-the-art parsing systems achieving about 91 points in labeled attachment accuracy <ref type="bibr">(Zhang &amp; McDonald, 2014</ref>), the problem is not a negligible one. To our knowledge, there is no competitive compression system so far which does not require any linguistic preprocessing but tokenization.</p><p>In this paper we research the following question: can a robust compression model be built which only uses tokens and has no access to syntactic or other linguistic information? While phenomena like long-distance relations may seem to make generation of grammatically correct compressions impossible, we are going to present an evidence to the contrary. In particular, we will present a model which benefits from the very recent advances in deep learning and uses word embeddings and Long Short Term Memory models (LSTMs) to output surprisingly readable and informative compressions. Trained on a corpus of less than two million automatically extracted parallel sentences and using a standard tool to obtain word embeddings, in its best and most simple configuration it achieves 4.5 points out of 5 in readability and 3.8 points in informativeness in an extensive evaluation with human judges. We believe that this is an important result as it may suggest a new direction for sentence compression research which is less tied to modeling linguistic structures, especially syntactic ones, than the compression work so far.</p><p>The paper is organized as follows: Section 3 presents a competitive baseline which implements the system of McDonald (2006) for large training sets. The LSTM model and its three configurations are introduced in Section 4. The evaluation set-up and a discussion on wins and losses with examples are presented in Section 5 which is followed by the conclusions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>The problem formulation we adopt in this paper is very simple: for every token in the input sentence we ask whether it should be kept or dropped, which translates into a sequence labeling problem with just two labels: one and zero. The deletion approach is a standard one in compression research, although the problem is often formulated over the syntactic structure and not the raw token sequence. That is, one usually drops constituents or prunes dependency edges <ref type="bibr" target="#b8">(Jing, 2000;</ref><ref type="bibr" target="#b9">Knight &amp; Marcu, 2000;</ref><ref type="bibr" target="#b12">McDonald, 2006;</ref><ref type="bibr" target="#b3">Clarke &amp; Lapata, 2008;</ref><ref type="bibr" target="#b0">Berg-Kirkpatrick et al., 2011;</ref><ref type="bibr" target="#b6">Filippova &amp; Altun, 2013)</ref>. Thus, the relation to existing compression work is that we also use the deletion approach.</p><p>Recent advances in machine learning made it possible to escape the typical paradigm of mapping a fixed dimensional input to a fixed dimensional output to mapping an input sequence onto an output sequence. Even though many of these models were proposed more than a decade ago, it is not until recently that they have empirically been shown to perform well. Indeed, core problems in natural language processing such as translation ( <ref type="bibr" target="#b1">Cho et al., 2014;</ref><ref type="bibr" target="#b20">Sutskever et al., 2014;</ref><ref type="bibr" target="#b11">Luong et al., 2014</ref>), parsing ( <ref type="bibr" target="#b22">Vinyals et al., 2014</ref>), image captioning ( <ref type="bibr" target="#b21">Vinyals et al., 2015;</ref><ref type="bibr" target="#b23">Xu et al., 2015)</ref>, or learning to execute small programs ) employed virtually the same principles-the use of Recurrent Neural Networks (RNNs). Thus, with regard to this line of research, our work comes closest to the recent machine translation work. An important difference is that we do not aim at building a model that generates compressions directly but rather a model which generates a sequence of deletion decisions.</p><p>A more complex translation model is also conceivable and may significantly advance work on compression by paraphrasing, of which there have not been many examples yet <ref type="bibr" target="#b4">(Cohn &amp; Lapata, 2008)</ref>. However, in this paper our goal is to demonstrate that a simple but robust deletionbased system can be built without using any linguistic features other than token boundaries. We leave experiments with paraphrasing models to future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Baseline</head><p>We compare our model against the system of McDonald (2006) which also formulates sentence compression as a binary sequence labeling problem. In contrast to our proposal, it makes use of a large set of syntactic features which are treated as soft evidence. The presence or absence of these features is treated as signals which do not condition the output that the model can produce. Therefore the model is robust against noise present in the precomputed syntactic structures of the input sentences.</p><p>The system was implemented based on the description by McDonald (2006) with two changes which were necessary due to the large size of the training data set used for model fitting. The first change was related to the learning procedure and the second one to the family of features used.</p><p>Regarding the learning procedure, the original model uses a large-margin learning framework, namely MIRA <ref type="bibr" target="#b5">(Crammer &amp; Singer, 2003)</ref>, but with some minor changes as presented by <ref type="bibr">McDon- ald et al. (2005)</ref>. In this set-up, online learning is performed, and at each step an optimization procedure is made where K constraints are included, which correspond to the top-K solutions for a given training observation. This optimization step is equivalent to a Quadratic Programming problem if K &gt; 1, which is time-costly to solve, and therefore not adequate for the large amount of data we used for training the model. Furthermore, in his publication McDonald states clearly that different values of K did not actually have a major impact on the final performance of the model. Consequently, and for the sake of being able to successfully train the model with largescale data, the learning procedure is implemented as a distributed structured perceptron with iterative parameter mixing ( <ref type="bibr" target="#b14">McDonald et al., 2010)</ref>, where each shard is processed with MIRA and K is set to 1.</p><p>Setting K = 1 will only affect the weight update described on line 4 of <ref type="figure" target="#fig_1">Figure 3</ref> of McDonald <ref type="formula">(2006)</ref>, which is now expressed as:</p><formula xml:id="formula_0">w (i+1) ← w (i) + τ × e y t ,y where τ = max 0, L(y t , y ) − w · e y t ,y ||e y t ,y || 2 e y t ,y = F (x t , y t ) − F (x t , y ) y = best(x; w (i) ) F (x, y) = |y| j=2 f (x, I(y j−1 ), I(y j ))</formula><p>The second change concerns the feature set used. While McDonald's original model contains deep syntactic features coming from both dependency and constituency parse trees, we use only dependency-based features. Additionally, and to better compare the baseline with the LSTM models, we have included as an optional feature a 256-dimension embedding-vector representation of each input word and its syntactic parent. The vectors are pre-trained using the Skipgram model 1 ( <ref type="bibr" target="#b15">Mikolov et al., 2013)</ref>. Ultimately, our implementation of McDonald's model contained 463,614 individual features, summarized in three categories:</p><p>• PoS features: Joint PoS tags of selected tokens. Unigram, bigram and trigram PoS context of selected and dropped tokens. All the previous features conjoined with one indicating if the last two selected tokens are adjacent.</p><p>• Deep syntactic features: Dependency labels of taken and dropped tokens and their parent dependencies. Boolean features indicating syntactic relations between selected tokens (i.e., siblings, parents, leaves, etc.). Dependency label of the least common ancestor in the dependency tree between a batch of dropped tokens. All the previous features conjoined with the PoS tag of the involved tokens.</p><p>• Word features: Boolean features indicating if a group of dropped nodes contain a complete or incomplete parenthesization. Wordembedding vectors of selected and dropped tokens and their syntactic parents. The model is fitted over ten epochs on the whole training data, and for model selection a small development set consisting of 5,000 previously unseen sentences is used (none of them belonging to 4 The LSTM model</p><p>Our approach is largely based on the sequence to sequence paradigm proposed in <ref type="bibr" target="#b20">Sutskever et al. (2014)</ref>. We train a model that maximizes the probability of the correct output given the input sentence. Concretely, for each training pair (X, Y ), we will learn a parametric model (with parameters θ), by solving the following optimization problem:</p><formula xml:id="formula_1">θ * = arg max θ X,Y log p(Y |X; θ)<label>(1)</label></formula><p>where the sum is assumed to be over all training examples. To model the probability p, we use the same architecture described by <ref type="bibr" target="#b20">Sutskever et al. (2014)</ref>. In particular, we use a RNN based on the Long Short Term Memory (LSTM) unit <ref type="bibr" target="#b7">(Hochreiter &amp; Schmidhuber, 1997</ref>), designed to avoid vanishing gradients and to remember some long-distance dependences from the input sequence. <ref type="figure" target="#fig_0">Figure 1</ref> shows a basic LSTM architecture. The RNN is fed with input words X i (one at a time), until we feed a special symbol "GO". It is now a common practice ( <ref type="bibr" target="#b20">Sutskever et al., 2014;</ref><ref type="bibr" target="#b10">Li &amp; Jurafsky, 2015)</ref> to start feeding the input in reversed order, as it has been shown to perform better empirically. During the first pass over the input, the network is expected to learn a compact, distributed representation of the input sentence, which will allow it to start generating the right predictions when the second pass starts, after the "GO" symbol is read. We can apply the chain rule to decompose Equation (1) as follows:</p><formula xml:id="formula_2">p(Y |X; θ) = T t=1 p(Y t |Y 1 , . . . , Y t−1 , X; θ) (2)</formula><p>noting that we made no independence assumptions. Once we find the optimal θ * , we construct our estimated compressionˆYcompressionˆ compressionˆY as:   </p><formula xml:id="formula_3">ˆ Y = arg max Y p(Y |X; θ * )<label>(3)</label></formula><formula xml:id="formula_4">i t = tanh(W 3 x t + W 4 h t−1 ) f t = sigm(W 5 x t + W 6 h t−1 ) o t = sigm(W 7 x t + W 8 h t−1 ) m t = m t−1 f t + i t i t h t = m t o t</formula><p>The operator denotes element-wise multiplication, the matrices W 1 , . . . , W 8 and the vector h 0 are the parameters of the model, and all the nonlinearities are computed element-wise. Stochastic gradient descent is used to maximize the training objective (Eq. (1)) w.r.t. all the LSTM parameters.</p><p>Network architecture: In these experiments we have used the architecture depicted in <ref type="figure" target="#fig_1">Figure 3</ref>. Following <ref type="bibr" target="#b22">Vinyals et al. (2014)</ref>, we have used three stacked LSTM layers to allow the upper layers to learn higher-order representations of the input, interleaved with dropout layers to prevent overfitting ( <ref type="bibr" target="#b18">Srivastava et al., 2014</ref>). The output layer is a SoftMax classifier that predicts, after the "GO" symbol is read, one of the following three labels: 1, if a word is to be retained in the compression, 0 if a word is to be deleted, or EOS, which is the output label used for the "GO" input and the end-of-sentence final period.</p><p>Input representation: In the simplest implementation, that we call LSTM, the input layer has 259 dimensions. The first 256 contain the embedding-vector representation of the current in-</p><formula xml:id="formula_5">function DECODE(X)</formula><p>Initialize and feed the reversed input.</p><formula xml:id="formula_6">Lstm ← CREATELSTM LayersState ← INITIALIZELAYERS(Lstm) for all Xi ∈ REVERSE(X) do LayersState ← ONESTEP(Lstm, LayersState, Xi) end for LayersState ← ONESTEP(Lstm, LayersState, GO)</formula><p>Create the beam vector. Each item contains the state of the layers, the labels predicted so far, and probability. Beam ← {(LayersState, (), 1.0)} Beam search for all Xi ∈ X do N extBeam ← {} for all (LayersState, Labels, P rob) ∈ Beam do (N extLayersState, Outputs) ← ONESTEP(Lstm, LayersState, Xi) for all Output ∈ Outputs do N extBeam ← N extBeam∪{(N extLayerState, Labels+Output.label, P rob * Output.prob)} end for end for Beam ← TOPN(N extBeam) end for return TOP(Beam) end function For the LSTM+PAR architecture we first parse the input sentence, and then we provide as input, for each input word, the embedding-vector representation of that word and its parent word in the dependency tree. If the current input is the root node, then a special parent embedding is constructed with all nodes set to zero except for one node. In these settings we want to test the hypothesis whether knowledge about the parent node can be useful to decide if the current constituent is relevant or not for the compression. The dimensionality of the input layer in this case is 515. Similarly to <ref type="bibr" target="#b12">McDonald (2006)</ref>, syntax is used here as a soft feature in the model.</p><p>For the LSTM+PAR+PRES architecture, we again parse the input sentence, and use a 518-sized embedding vector, that includes:</p><p>• The embedding vector for the current word (256 dimensions).</p><p>• The embedding vector for the parent word (256 dimensions).</p><p>• The label predicted for the last word (3 dimensions).</p><p>• A bit indicating whether the parent word has 2 https://code.google.com/p/word2vec/ already been seen and kept in the compression (1 dimension).</p><p>• A bit indicating whether the parent word has already been seen but discarded (1 dimension).</p><p>• A bit indicating whether the parent word comes later in the input (1 dimension).</p><p>Decoding: Eq. (3) involves searching through all possible output sequences (given X). Contrary to the baseline, in the case of LSTMs the complete previous history is taken into account for each prediction and we cannot simplify Eq. <ref type="formula">(2)</ref> with a Markov assumption. Therefore, the search space at decoding time is exponential on the length of the input, and we have used a beam-search procedure as described in <ref type="figure" target="#fig_2">Figure 2</ref>.</p><p>Fixed parameters: For training, we unfold the network 120 times and make sure that none of our training instances is longer than that. The learning rate is initialized at 2, with a decay factor of 0.96 every 300,000 traning steps. The dropping probability for the dropout layers is 0.2. The number of nodes in each LSTM layer is always identical to the number of nodes in the input layer. We have not tuned these parameters nor the number of stacked layers.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Evaluation</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Data</head><p>Both the LSTM systems we introduced and the baseline require a training set of a considerable size. In particular, the LSTM model uses 256-dimensional embeddings of token sequences and cannot be expected to perform well if trained on a thousand parallel sentences, which is the size of the commonly used data sets <ref type="bibr" target="#b9">(Knight &amp; Marcu, 2000;</ref><ref type="bibr" target="#b2">Clarke &amp; Lapata, 2006</ref>). Following the method of <ref type="bibr" target="#b6">Filippova &amp; Altun (2013)</ref>, we collect a much larger corpus of about two million parallel sentence-compression instances from the news where every compression is a subsequence of tokens from the input. For testing, we use the publicly released set of 10,000 sentence-compression pairs <ref type="bibr">3</ref> . We take the first 200 sentences from this set for the manual evaluation with human raters, and the first 1,000 sentences for the automatic evaluation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Experiments</head><p>We evaluate the baseline and our systems on the 200-sentence test set in an experiment with human raters. The raters were asked to rate readability and informativeness of compressions given the input which are the standard evaluation metrics for compression. The former covers the grammatical correctness, comprehensibility and fluency of the output while the latter measures the amount of important content preserved in the compression. Additionally, for experiments on the development set, we used two metrics for automatic evaluation: per-sentence accuracy (i.e., how many compressions could be fully reproduced) and word-based F1-score. The latter differs from the RASP-based relation F-score by <ref type="bibr" target="#b17">Riezler et al. (2003)</ref> in that we simply compute the recall and precision in terms of tokens kept in the golden and the generated compressions. We report these results for completeness although it is the results of the human evaluation from which we draw our conclusions.</p><p>Compression ratio: The three versions of our system (LSTM*) and the baseline (MIRA) have comparable compression ratios (CR) which are defined as the length of the compression in characters divided over the sentence length. Since the ratios are very close, a comparison of the systems' scores is justified <ref type="bibr" target="#b16">(Napoles et al., 2011</ref>).</p><p>Automatic evaluation: A total of 1,000 sentence pairs from the test set <ref type="bibr">4</ref> were used in the automatic evaluation. The results are summarized in <ref type="table">Table 1</ref>.  <ref type="table">Table 1</ref>: F1-score, per-sentence accuracy and compression ratio for the baseline and the systems There is a significant difference in performance of the MIRA baseline and the LSTM models, both in terms of F1-score and in accuracy. More than 30% of golden compressions could be fully regenerated by the LSTM systems which is in sharp contrast with the 20% of MIRA. The differences in F-score between the three versions of LSTM are not significant, all scores are close to 0.81.</p><p>Evaluation with humans: The first 200 sentences from the set of 1,000 used in the automatic evaluation were compressed by each of the four systems. Every sentence-compression pair was rated by three raters who were asked to select a rating on a five-point Likert scale, ranging from one to five. In very few cases (around 1%) the ratings were inconclusive (i.e., 1, 3, 5 were given to the same pair) and had to be skipped.  The results indicate that the LSTM models produce more readable and more informative compressions. Interestingly, there is no benefit in using the syntactic information, at least not with Sentence &amp; LSTM Compression difficulty A Virginia state senator and one-time candidate for governor stabbed by his son said Friday that he is "alive so must live," his first public statement since the assault and his son's suicide shortly thereafter. quotes State senator alive so must live. Gwyneth Paltrow, 41 and husband Chris Martin, 37 are to separate after more than 10 years of marriage, the actress announced on her website GOOP. commas Gwyneth Paltrow are to separate. Chris Hemsworth and the crew of his new movie 'In the Heart of the Sea' were forced to flee flash floods in the Canary Islands yesterday. quotes Chris Hemsworth were forced to flee flash floods. Police in Deltona, Fla., are trying to sniff out the identity of a man who allegedly attempted to pay his water bill with cocaine. nothing Police are trying to sniff out the identity.</p><p>to remove Just a week after a CISF trooper foiled a suicide bid by a woman in the Delhi metro, another woman trooper from the same force prevented two women commuters from ending their lives, an official important said Monday. context Another woman trooper prevented two women commuters. Whatever the crisis or embarrassment to his administration, Pres. Obama don't know nuttin' about it. nothing Pres. Obama don't know nuttin.</p><p>to remove TRADE and Industry Minister Rob Davies defended the government's economic record in Parliament on Tuesday, saying it had implemented structural reforms and countercyclical infrastructure projects to help shore up the economy. Rob Davies defended the government's economic record. Social activist Medha Patkar on Monday extended her "complete" support to Arvind Kejriwal-led Aam Aadmi Party in Maharashtra.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Medha Patkar extended her support to Aam Aadmi Party. State Sen. Stewart Greenleaf discusses his proposed human trafficking bill at Calvery Baptist Church in Willow Grove Thursday night. Stewart Greenleaf discusses his human trafficking bill.</head><p>Alan Turing, known as the father of computer science, the codebreaker that helped win World War 2, and the man tortured by the state for being gay, is to receive a pardon nearly 60 years after his death. Alan Turing is to receive a pardon. Robert Levinson, an American who disappeared in Iran in 2007, was in the country working for the CIA, according to a report from the Associated Press's Matt Apuzzo and Adam Goldman. Robert Levinson was working for the CIA. the amount of parallel data we had at our disposal. The simple LSTM model which only uses token embeddings to generate a sequence of deletion decisions significantly outperforms the baseline which was given not only embeddings but also syntactic and other features.</p><p>Discussion: What are the wins and losses of the LSTM systems? <ref type="figure" target="#fig_4">Figure 4</ref> presents some of the evaluated sentence-compression pairs. In terms of readability, the basic LSTM system performed surprisingly well. Only in a few cases (out of 200) did it get an average score of two or three. Sentences which pose difficulty to the model are the ones with quotes, intervening commas, or other uncommon punctuation patterns. For example, in the second sentence in <ref type="figure" target="#fig_4">Figure 4</ref>, if one removes from the input the age modifiers and the preceding commas, the words and Chris Martin are not dropped and the output compression is grammatical, preserving both conjoined elements.</p><p>With regard to informativeness, the difficult cases are those where there is very little to be removed and where the model still removed more than a half to achieve the compression ratio it observed in the training data. For example, the only part that can be removed from the fourth sentence in <ref type="figure" target="#fig_4">Figure 4</ref> is the modifier of police, everything else being important content. Similarly, in the fifth sentence the context of the event must be retained in the compression for the event to be interpreted correctly.</p><p>Arguably, such cases would also be difficult for other systems. In particular, recognizing when the context is crucial is a problem that can be solved only by including deep semantic and discourse features which has not been attempted yet. And sentences with quotes (direct speech, a song or a book title, etc.) are challenging for parsers which in turn provide important signals for most compression systems.</p><p>The bottom of <ref type="figure" target="#fig_4">Figure 4</ref> contains examples of good compressions. Even though for a significant number of input sentences the compression was a continuous subsequence of tokens, there are many discontinuous compressions. In particular, the LSTM model learned to drop appositions, no matter how long they are, temporal expressions, optional modifiers, introductory clauses, etc.</p><p>Our understanding of why the extended model (LSTM+PAR+PRES) performed worse in the human evlauation than the base model is that, in the absence of syntactic features, the basic LSTM learned a model of syntax useful for compression, while LSTM++, which was given syntactic information, learned to optimize for the particular way the "golden" set was created (tree pruning). While the automatic evaluation penalized all deviations from the single golden variant, in human evals there was no penalty for readable alternatives.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Conclusions</head><p>We presented, to our knowledge, a first attempt at building a competitive compression system which is given no linguistic features from the input. The two important components of the system are (1) word embeddings, which can be obtained by anyone either pre-trained, or by running word2vec on a large corpus, and (2) an LSTM model which draws on the very recent advances in research on RNNs. The training data of about two million sentence-compression pairs was collected automatically from the Internet.</p><p>Our results clearly indicate that a compression model which is not given syntactic information explicitly in the form of features may still achieve competitive performance. The high readability and informativeness scores assigned by human raters support this claim. In the future, we are planning to experiment with more "interesting" paraphrasing models which translate the input not into a zero-one sequence but into words.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: High-level overview of an LSTM unrolled through time.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Architecture of the network used for sentence compression. Note that this basic structure is then unrolled 120 times, with the standard dependences from LSTM networks (Hochreiter &amp; Schmidhuber, 1997).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Pseudocode of the beam-search algorithm for compressing an input sentence.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Example sentences and compressions.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 2 summarizes the results.</head><label>2</label><figDesc></figDesc><table>read info 
+
+MIRA 
+
+4.31 3.55 
+
+LSTM 
+
+4.51  † 3.78  † 
+
+LSTM+PAR 
+
+4.40 3.73 
+LSTM+PAR+PRES 4.37 3.79  † 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 :</head><label>2</label><figDesc>Readability and informativeness for the baseline and the systems: † stands for significantly better than MIRA with 0.95 confidence.</figDesc><table></table></figure>
+
+			<note place="foot" n="1"> https://code.google.com/p/word2vec/ the evaluation set). The automated metric used for this selection was accuracy@1 which is the proportion of golden compressions which could be fully reproduced. The performance on the development set plateaus when getting close to the last epoch.</note>
+
+			<note place="foot" n="3"> http://storage.googleapis.com/ sentencecomp/compression-data.json</note>
+
+			<note place="foot" n="4"> We used the very first 1,000 instances.</note>
+
+			<note place="foot">Zhang, H. &amp; R. McDonald (2014). Enforcing structural diversity in cube-pruned dependency parsing. In Proc. of ACL-14, pp. 656-661.</note>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Jointly learning to extract and compress</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Berg-Kirkpatrick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Gillick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">&amp;amp; D</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of ACL-11</title>
+		<meeting>of ACL-11</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Learning phrase representations using rnn encoder-decoder for statistical machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Van Merrienboer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Bougares</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Schwenk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">&amp;amp; Y</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2014 Conference on Empirical Methods in Natural Language Processing<address><addrLine>Doha, Qatar</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2014-10" />
+			<biblScope unit="page" from="25" to="29" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Models for sentence compression: A comparison across domains, training requirements and evaluation measures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">&amp;amp; M</forename><surname>Clarke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lapata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of COLING-ACL-06</title>
+		<meeting>of COLING-ACL-06</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="377" to="385" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Global inference for sentence compression: An integer linear programming approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">&amp;amp; M</forename><surname>Clarke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lapata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Artificial Intelligence Research</title>
+		<imprint>
+			<biblScope unit="volume">31</biblScope>
+			<biblScope unit="page" from="399" to="429" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Sentence compression beyond word deletion</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">&amp;amp; M</forename><surname>Cohn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lapata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of COLING-08</title>
+		<meeting>of COLING-08</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="137" to="144" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Ultraconservative online algorithms for multiclass problems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">&amp;amp; Y</forename><surname>Crammer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Singer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="951" to="991" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Overcoming the lack of parallel data in sentence compression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">&amp;amp; Y</forename><surname>Filippova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Altun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of EMNLP-13</title>
+		<meeting>of EMNLP-13</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1481" to="1491" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">&amp;amp; J</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Sentence reduction for automatic text summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Jing</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of ANLP-00</title>
+		<meeting>of ANLP-00</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="310" to="315" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Statistics-based summarization -step one: Sentence compression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">&amp;amp; D</forename><surname>Knight</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Marcu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of AAAI-00</title>
+		<meeting>of AAAI-00</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="703" to="711" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">A hierarchical LSTM autoencoder for paragraphs and documents</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">&amp;amp; D</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Jurafsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of ACL-15</title>
+		<meeting>of ACL-15</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Addressing the rare word problem in neural machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M.-T</forename><surname>Luong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><forename type="middle">V</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">&amp;amp;</forename><forename type="middle">W</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zaremba</surname></persName>
+		</author>
+		<idno>abs/1410.8206</idno>
+		<imprint>
+			<date type="published" when="2014" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Discriminative sentence compression with soft syntactic evidence</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Mcdonald</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of EACL-06</title>
+		<meeting>of EACL-06</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="297" to="304" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Online large-margin training of dependency parsers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Mcdonald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Crammer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">&amp;amp; F</forename><surname>Pereira</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of ACL-05</title>
+		<meeting>of ACL-05</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="91" to="98" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Distributed training strategies for the structured perceptron</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Mcdonald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Hall</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">&amp;amp; G</forename><surname>Mann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of NAACL-HLT-10</title>
+		<meeting>of NAACL-HLT-10</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="456" to="464" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Distributed representations of words and phrases and their compositionality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">S</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">&amp;amp;</forename><forename type="middle">J</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="3111" to="3119" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Evaluating sentence compression: Pitfalls and suggested remedies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Napoles</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Callison-Burch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">&amp;amp;</forename><forename type="middle">B</forename><surname>Van Durme</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Workshop on Monolingual Text-to-text Generation</title>
+		<meeting>the Workshop on Monolingual Text-to-text Generation<address><addrLine>Portland, OR</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2011-06-24" />
+			<biblScope unit="page" from="91" to="97" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Statistical sentence condensation using ambiguity packing and stochastic disambiguation methods for Lexical-Functional Grammar</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Riezler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">H</forename><surname>King</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Crouch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">&amp;amp; A</forename><surname>Zaenen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of HLT-NAACL-03</title>
+		<meeting>of HLT-NAACL-03</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="118" to="125" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">&amp;amp; R</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Dropout: A simple way to prevent neural networks from overfitting</title>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Sequence to sequence learning with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><forename type="middle">&amp;amp; Q V</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Le</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of NIPS</title>
+		<meeting>of NIPS</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Show and tell: A neural image caption generator</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Toshev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">&amp;amp; D</forename><surname>Erhan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, CVPR-2015</title>
+		<meeting>the IEEE Conference on Computer Vision and Pattern Recognition, CVPR-2015</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Grammar as a foreign language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Koo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><forename type="middle">&amp;amp; G E</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hinton</surname></persName>
+		</author>
+		<idno>abs/1412.7449</idno>
+		<imprint>
+			<date type="published" when="2014" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Show, attend and tell: Neural image caption generation with visual attention</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Kiros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Zemel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">&amp;amp; Y</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICML-2015</title>
+		<meeting>ICML-2015</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">Learning to execute. CoRR</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">&amp;amp; I</forename><surname>Zaremba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sutskever</surname></persName>
+		</author>
+		<idno>abs/1410.4615</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

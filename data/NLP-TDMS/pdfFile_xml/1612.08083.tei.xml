@@ -1,0 +1,1019 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:41+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Language Modeling with Gated Convolutional Networks</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yann</forename><forename type="middle">N</forename><surname>Dauphin</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Angela</forename><surname>Fan</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Auli</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Grangier</surname></persName>
+						</author>
+						<title level="a" type="main">Language Modeling with Gated Convolutional Networks</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>The predominant approach to language mod-eling to date is based on recurrent neural networks. Their success on this task is often linked to their ability to capture unbounded context. In this paper we develop a finite context approach through stacked convolutions, which can be more efficient since they allow paralleliza-tion over sequential tokens. We propose a novel simplified gating mechanism that outperforms Oord et al. (2016b) and investigate the impact of key architectural decisions. The proposed approach achieves state-of-the-art on the WikiText-103 benchmark, even though it features long-term dependencies, as well as competitive results on the Google Billion Words benchmark. Our model reduces the latency to score a sentence by an order of magnitude compared to a recurrent baseline. To our knowledge, this is the first time a non-recurrent approach is competitive with strong recurrent models on these large scale language tasks.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.">Introduction</head><p>Statistical language models estimate the probability distribution of a sequence of words by modeling the probability of the next word given preceding words, i.e. P (w 0 , . . . , w N ) = P (w 0 ) N i=1 P (w i |w 0 , . . . , w i−1 ), where w i are discrete word indices in a vocabulary. Language models are a critical part of systems for speech recognition <ref type="bibr" target="#b35">(Yu &amp; Deng, 2014</ref>) and machine translation <ref type="bibr" target="#b18">(Koehn, 2010)</ref>.</p><p>Recently, neural networks ( <ref type="bibr" target="#b0">Bengio et al., 2003;</ref><ref type="bibr" target="#b23">Mikolov et al., 2010;</ref><ref type="bibr" target="#b15">Jozefowicz et al., 2016)</ref>  outperform classical n-gram language models <ref type="bibr" target="#b17">(Kneser &amp; Ney, 1995;</ref><ref type="bibr" target="#b2">Chen &amp; Goodman, 1996)</ref>. These classical models suffer from data sparsity, which makes it difficult to represent large contexts and thus, long-range dependencies. Neural language models tackle this issue by embedding words in continuous space over which a neural network is applied. The current state of the art for language modeling is based on long short term memory networks (LSTM; <ref type="bibr" target="#b13">Hochreiter et al., 1997</ref>) which can theoretically model arbitrarily long dependencies.</p><p>In this paper, we introduce new gated convolutional networks and apply them to language modeling. Convolutional networks can be stacked to represent large context sizes and extract hierarchical features over larger and larger contexts with more abstractive features <ref type="bibr" target="#b20">(LeCun &amp; Bengio, 1995)</ref>. This allows them to model long-term dependencies by applying O( N k ) operations over a context of size N and kernel width k. In contrast, recurrent networks view the input as a chain structure and therefore require a linear number O(N ) of operations.</p><p>Analyzing the input hierarchically bears resemblance to classical grammar formalisms which build syntactic tree structures of increasing granuality, e.g., sentences consist of noun phrases and verb phrases each comprising further internal structure <ref type="bibr" target="#b21">(Manning &amp; Schütze, 1999;</ref><ref type="bibr" target="#b32">Steedman, 2002</ref>). Hierarchical structure also eases learning since the number of non-linearities for a given context size is reduced compared to a chain structure, thereby mitigating the vanishing gradient problem <ref type="bibr" target="#b6">(Glorot &amp; Bengio, 2010)</ref>.</p><p>Modern hardware is well suited to models that are highly parallelizable. In recurrent networks, the next output depends on the previous hidden state which does not enable parallelization over the elements of a sequence. Convolutional networks, however, are very amenable to this computing paradigm since the computation of all input words can be performed simultaneously ( §2).</p><p>Gating has been shown to be essential for recurrent neural networks to reach state-of-the-art performance <ref type="bibr">(Jozefow- icz et al., 2016)</ref>. Our gated linear units reduce the vanishing gradient problem for deep architectures by providing a linear path for the gradients while retaining non-linear capabilities ( §5.2).</p><p>We show that gated convolutional networks outperform other recently published language models such as LSTMs trained in a similar setting on the Google Billion Word Benchmark ( <ref type="bibr" target="#b1">Chelba et al., 2013</ref>). We also evaluate the ability of our models to deal with long-range dependencies on the WikiText-103 benchmark for which the model is conditioned on an entire paragraph rather than a single sentence and we achieve a new state-of-the-art on this dataset ( <ref type="bibr" target="#b22">Merity et al., 2016)</ref>. Finally, we show that gated linear units achieve higher accuracy and converge faster than the LSTM-style gating of <ref type="bibr" target="#b16">Oord et al. (2016;</ref><ref type="bibr">§4, §5</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">Approach</head><p>In this paper we introduce a new neural language model that replaces the recurrent connections typically used in recurrent networks with gated temporal convolutions. Neural language models ( <ref type="bibr" target="#b0">Bengio et al., 2003</ref>) produce a representation H = [h 0 , . . . , h N ] of the context for each word w 0 , . . . , w N to predict the next word P (w i |h i ). Recurrent neural networks f compute H through a recurrent function h i = f (h i−1 , w i−1 ) which is an inherently sequential process that cannot be parallelized over i. <ref type="bibr">1</ref> Our proposed approach convolves the inputs with a function f to obtain H = f * w and therefore has no temporal dependencies, so it is easier to parallelize over the individual words of a sentence. This process will compute each context as a function of a number of preceding words. Compared to recurrent networks, the context size is finite but we will demonstrate both that infinite contexts are not necessary and our models can represent large enough contexts to perform well in practice ( §5). <ref type="figure" target="#fig_0">Figure 1</ref> illustrates the model architecture. Words are represented by a vector embedding stored in a lookup table D |V|×e where |V| is the number of words in the vocabulary and e is the embedding size. The input to our model is a sequence of words w 0 , . . . , w N which are represented by</p><formula xml:id="formula_0">word embeddings E = [D w0 , . . . , D w N ]. We compute the hidden layers h 0 , . . . , h L as h l (X) = (X * W + b) ⊗ σ(X * V + c)<label>(1)</label></formula><p>where m, n are respectively the number of input and output feature maps and k is the patch size, X ∈ R N ×m is the input of layer h l (either word embeddings or the outputs of previous layers), W ∈ R k×m×n , b ∈ R n , V ∈ R k×m×n , c ∈ R n are learned parameters, σ is the sigmoid function and ⊗ is the element-wise product between matrices.</p><p>When convolving inputs, we take care that h i does not contain information from future words. We address this by shifting the convolutional inputs to prevent the kernels</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Input sentence</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Text</head><p>The cat sat on the mat .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>w 0 w 1 w 2 w 3 w 4 w 5 w 6</head><p>Lookup <ref type="table">Table   E</ref>  from seeing future context ( <ref type="bibr" target="#b26">Oord et al., 2016a</ref>). Specifically, we zero-pad the beginning of the sequence with k − 1 elements, assuming the first input element is the beginning of sequence marker which we do not predict and k is the width of the kernel.</p><p>The output of each layer is a linear projection X * W + b modulated by the gates σ(X * V + c). Similar to LSTMs, these gates multiply each element of the matrix X * W + b and control the information passed on in the hierarchy.</p><p>We dub this gating mechanism Gated Linear Units (GLU). Stacking multiple layers on top of the input E gives a representation of the context for each word</p><formula xml:id="formula_1">H = h L •. . .•h 0 (E).</formula><p>We wrap the convolution and the gated linear unit in a preactivation residual block that adds the input of the block to the output ( <ref type="bibr" target="#b11">He et al., 2015a</ref>). The blocks have a bottleneck structure for computational efficiency and each block has up to 5 layers.</p><p>The simplest choice to obtain model predictions is to use a softmax layer, but this choice is often computationally inefficient for large vocabularies and approximations such as noise contrastive estimation <ref type="bibr">(Gutmann &amp; Hyvärinen)</ref> or hierarchical softmax <ref type="bibr" target="#b25">(Morin &amp; Bengio, 2005</ref>) are preferred. We choose an improvement of the latter known as adaptive softmax which assigns higher capacity to very frequent words and lower capacity to rare words ( <ref type="bibr" target="#b7">Grave et al., 2016a</ref>). This results in lower memory requirements as well as faster computation at both training and test time.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.">Gating Mechanisms</head><p>Gating mechanisms control the path through which information flows in the network and have proven to be useful for recurrent neural networks <ref type="bibr">(Hochreiter &amp; Schmidhu- ber, 1997</ref>). LSTMs enable long-term memory via a separate cell controlled by input and forget gates. This allows information to flow unimpeded through potentially many timesteps. Without these gates, information could easily vanish through the transformations of each timestep. In contrast, convolutional networks do not suffer from the same kind of vanishing gradient and we find experimentally that they do not require forget gates.</p><p>Therefore, we consider models possessing solely output gates, which allow the network to control what information should be propagated through the hierarchy of layers. We show this mechanism to be useful for language modeling as it allows the model to select which words or features are relevant for predicting the next word. Parallel to our work, <ref type="bibr" target="#b27">Oord et al. (2016b)</ref> have shown the effectiveness of an LSTM-style mechanism of the form tanh(X * W+b)⊗σ(X * V+c) for the convolutional modeling of images. Later, <ref type="bibr" target="#b16">Kalchbrenner et al. (2016)</ref> extended this mechanism with additional gates for use in translation and character-level language modeling.</p><p>Gated linear units are a simplified gating mechanism based on the work of <ref type="bibr" target="#b5">Dauphin &amp; Grangier (2015)</ref> for nondeterministic gates that reduce the vanishing gradient problem by having linear units coupled to the gates. This retains the non-linear capabilities of the layer while allowing the gradient to propagate through the linear unit without scaling. The gradient of the LSTM-style gating of which we dub gated tanh unit (GTU) is</p><formula xml:id="formula_2">[tanh(X) ⊗ σ(X)] = tanh (X)X ⊗ σ(X) +σ (X)X ⊗ tanh(X). (2)</formula><p>Notice that it gradually vanishes as we stack layers because of the downscaling factors tanh (X) and σ (X). In contrast, the gradient of the gated linear unit</p><formula xml:id="formula_3">[X ⊗ σ(X)] = X ⊗ σ(X) + X ⊗ σ (X)X (3)</formula><p>has a path X ⊗ σ(X) without downscaling for the activated gating units in σ(X). This can be thought of as a multiplicative skip connection which helps gradients flow through the layers. We compare the different gating schemes experimentally in Section §5.2 and we find gated linear units allow for faster convergence to better perplexities.  <ref type="bibr">et al., 2016)</ref>. Different from GBW, the sentences are consecutive which allows models to condition on larger contexts rather than single sentences. For both datasets, we add a beginning of sequence marker &lt;S &gt; at the start of each line and an end of sequence marker &lt;/S&gt; at the end of each line. On the Google Billion Word corpus each sequence is a single sentence, while on WikiText-103 a sequence is an entire paragraph. The model sees &lt;S&gt; and &lt;/S &gt; as input but only predicts the end of sequence marker &lt;/S&gt;. We evaluate models by computing the perplexity e 1 N N i − log p(wi|...,wi−1) on the standard held out test portion of each dataset.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.">Experimental Setup</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.">Training</head><p>We implement our models in <ref type="bibr">Torch (Collobert et al., 2011</ref>) and train on Tesla M40 GPUs. The majority of our models are trained on single GPU, as we focused on identifying compact architectures with good generalization and efficient computation at test time. We trained larger models with an 8-GPU setup by copying the model onto each GPU and dividing the batch such that each worker computes 1/8th of the gradients. The gradients are then summed using Nvidia NCCL. The multi-GPU setup allowed us to train models with larger hidden units.</p><p>We train using Nesterov's momentum <ref type="bibr" target="#b33">(Sutskever et al., 2013)</ref>. While the cost in terms of memory is storing another vector of the size of the parameters, it increases the speed of convergence significantly with minimal additional  <ref type="table" target="#tab_3">-13  GCNN-14B  GCNN-9  GCNN-8B  GCNN-8  GCNN-14  Dataset  Google Billion Word  wikitext-103  Lookup  128  280  Conv1</ref> [</p><formula xml:id="formula_4">4, 1268] × 1 [5, 512] × 1 [4, 807] × 1 [1, 512] × 1 [4, 900] × 1 [6, 850] × 3</formula><p>Conv2. computation compared to standard stochastic gradient descent. The speed of convergence was further increased with gradient clipping ( <ref type="bibr" target="#b28">Pascanu et al., 2013</ref>) and weight normalization <ref type="bibr" target="#b29">(Salimans &amp; Kingma, 2016)</ref>. <ref type="bibr" target="#b28">Pascanu et al. (2013)</ref> argue for gradient clipping because it prevents the gradient explosion problem that characterizes RNNs. However, gradient clipping is not tied to RNNs, as it can be derived from the general concept of trust region methods. Gradient clipping is found using a spherical trust region</p><formula xml:id="formula_5">∆θ * = argmin s. t. ∆θ≤ f (θ) + f T ∆θ = − max(f , ) f f .<label>(4)</label></formula><p>Empirically, our experiments converge significantly faster with the use of gradient clipping even though we do not use a recurrent architecture.</p><p>In combination, these methods led to stable and fast convergence with comparatively large learning rates such as 1.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3.">Hyper-parameters</head><p>We found good hyper-parameter configurations by crossvalidating with random search on a validation set. For model architecture, we select the number of residual blocks between {1, . . . , 10}, the size of the embeddings with {128, . . . , 256}, the number of units between {128, . . . , 2048}, and the kernel width between {3, . . . , 5}.</p><p>In general, finding a good architecture was simple and the rule of thumb is that the larger the model, the better the performance. In terms of optimization, we initialize the layers of the model with the Kaiming initialization (He et al., 2015b), with the learning rate sampled uniformly in the interval [1., 2.], the momentum set to 0.99, and clipping set to 0.1. Good hyper-parameters for the optimizer are quite straightforward to find and the optimal values do not change much between datasets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.">Results</head><p>LSTMs and recurrent networks are able to capture long term dependencies and are fast becoming cornerstones in natural language processing. In this section, we compare strong LSTM and RNN models from the literature to our gated convolutional approach on two datasets.</p><p>We find the GCNN outperforms the comparable LSTM results on Google billion words. To accurately compare these approaches, we control for the same number of GPUs and the adaptive softmax output model ( <ref type="bibr" target="#b7">Grave et al., 2016a</ref>), as these variables have a significant influence on performance. In this setting, the GCNN reaches 38.1 test perplexity while the comparable LSTM has 39.8 perplexity <ref type="table" target="#tab_3">(Table 2)</ref>.</p><p>Further, the GCNN obtains strong performance with much greater computational efficiency. <ref type="figure">Figure 2</ref> shows that our approach closes the previously significant gap between models that use the full softmax and models with the usually less accurate hierarchical softmax. Thanks to the adap-</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>Test PPL Hardware Sigmoid-RNN-2048 ( <ref type="bibr" target="#b14">Ji et al., 2015)</ref> 68.3 1 CPU Interpolated KN 5-Gram ( <ref type="bibr" target="#b1">Chelba et al., 2013)</ref> 67.6 100 CPUs Sparse Non-Negative Matrix LM ( <ref type="bibr" target="#b30">Shazeer et al., 2014)</ref> 52.9 -RNN-1024 + MaxEnt 9 Gram Features ( <ref type="bibr" target="#b1">Chelba et al., 2013)</ref> 51.3 24 GPUs LSTM-2048-512 ( <ref type="bibr" target="#b15">Jozefowicz et al., 2016)</ref> 43.7 32 GPUs 2-layer LSTM-8192-1024 ( <ref type="bibr" target="#b15">Jozefowicz et al., 2016)</ref> 30.6 32 GPUs BIG GLSTM-G4 <ref type="bibr" target="#b19">(Kuchaiev &amp; Ginsburg, 2017)</ref> 23.3 * 8 GPUs LSTM-2048 ( <ref type="bibr" target="#b7">Grave et al., 2016a)</ref> 43.9 1 GPU 2-layer LSTM-2048 ( <ref type="bibr" target="#b7">Grave et al., 2016a)</ref> 39.8 1 GPU GCNN-13</p><p>38.1 1 GPU GCNN-14 <ref type="bibr">Bottleneck</ref>  LSTM+Softmax GCNN+AdaSoftmax <ref type="figure">Figure 2</ref>. In comparison to the state-of-the-art ( <ref type="bibr" target="#b15">Jozefowicz et al., 2016</ref>) which uses the full softmax, the adaptive softmax approximation greatly reduces the number of operations required to reach a given perplexity. tive softmax, the GCNN only requires a fraction of the operations to reach the same perplexity values. The GCNN outperforms other single model state-of-the-art approaches except the much larger LSTM of <ref type="bibr" target="#b15">Jozefowicz et al. (2016)</ref>, a model which requires more GPUs and the much more computationally expensive full softmax. In comparison, the largest model we have trained reaches 31.9 test perplexity compared to the 30.6 of that approach, but only requires training for 2 weeks on 8 GPUs compared to 3 weeks of training on 32 GPUs for the LSTM. Note that these results can be improved by either using mixtures of experts <ref type="bibr" target="#b31">(Shazeer et al., 2017</ref>) or ensembles of these models.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="31.9">8 GPUs</head><p>Another relevant concern is if the GCNN's fixed context size can thoroughly model long sequences. On Google Bil- * appeared after submission</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>Test PPL Hardware LSTM-1024 ( <ref type="bibr" target="#b8">Grave et al., 2016b)</ref> 48  We evaluated on the Gigaword dataset following <ref type="bibr" target="#b3">Chen et al. (2016)</ref> to compare with fully connected models. We found that the fully connected and convolutional network reach respectively 55.6 and 29.4 perplexity. We also ran preliminary experiments on the much smaller Penn tree bank dataset. When we score the sentences independently, the GCNN and LSTM have comparable test perplexity with 108.7 and 109.3 respectively. However, it is possible to achieve better results by conditioning on previous sentences. Unlike the LSTM, we found that the GCNN overfits on this quite small dataset and so we note the model is better suited to larger scale problems.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1.">Computational Efficiency</head><p>Computational cost is an important consideration for language models. Depending on the application, there are a number of metrics to consider. We measure the throughput  of a model as the number of tokens that can be processed per second. Throughput can be maximized by processing many sentences in parallel to amortize sequential operations. In contrast, responsiveness is the speed of processing the input sequentially, one token at a time. Throughput is important because it indicates the time required to process a corpus of text and responsiveness is an indicator of the time to finish processing a sentence. A model can have low responsiveness but high throughput by evaluating many sentences simultaneously through batching. In this case, such a model is slow in finishing processing individual sentences, but can process many sentences at a good rate.</p><p>We evaluate the throughput and responsiveness for models that reach approximately 43.9 perplexity on the Google Billion Word benchmark. We consider the LSTM with 2048 units in <ref type="table" target="#tab_3">Table 2</ref>, a GCNN-8Bottleneck with 7 Resnet blocks that have a bottleneck structure as described by <ref type="bibr" target="#b11">(He et al., 2015a</ref>) and a GCNN-8 without bottlenecks. A bottleneck block wedges a k &gt; 1 convolution between two k = 1 layers. This designs reduces computational cost by reducing and increasing dimensionality with the k = 1 layers so that the convolution operates in a lower dimensional space. Our results show that the use of bottleneck blocks is important to maintaining computational efficiency.</p><p>The throughput of the LSTM is measured by using a large batch of 750 sequences of length 20, resulting in 15, 000 tokens per batch. The responsiveness is the average speed to process a sequence of 15, 000 contiguous tokens. <ref type="table" target="#tab_7">Table 4</ref> shows that the throughput for the LSTM and the GCNN are similar. The LSTM performs very well on GPU because the large batch size of 750 enables high parallelization over different sentences. This is because the LSTM implementation has been thoroughly optimized and uses cuDNN, whereas the cuDNN implementation of convolutions is not been optimized for the 1-D convolutions we use in our model. We believe much better performance can be achieved by a more efficient 1-D cuDNN convolution. Unlike the LSTM, the GCNN can be parallelized both over sequences as well as across the tokens of each sequence, allowing the GCNN to have 20x higher responsiveness.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2.">Gating Mechanisms</head><p>In this section, we compare the gated linear unit with other mechanisms as well as to models without gating.</p><p>We consider the LSTM-style gating mechanism (GTU)  <ref type="figure">Figure 4</ref>. Test perplexity as a function of context for Google Billion Word (left) and Wiki-103 (right). We observe that models with bigger context achieve better results but the results start diminishing quickly after a context of 20. the effect of gating since the Tanh model can be thought of as a GTU network with the sigmoid gating units removed. The results <ref type="figure">(Figure 3, left)</ref> show that the gating units make a vast difference and provide useful modeling capabilities, as there is a large difference in the performance between GTU and Tanh units. Similarly, while ReLU unit is not an exact ablation of the gating units in the GLU, it can be seen as a simplification ReLU(X) = X ⊗ (X &gt; 0) where the gates become active depending on the sign of the input. Also in this case, GLU units lead to lower perplexity.</p><formula xml:id="formula_6">tanh(X * W + b) ⊗ σ(X * V + c) of (</formula><p>In <ref type="figure">Figure 3</ref> (right) we repeat the same experiment on the larger Google Billion Words dataset. We consider a fixed time budget of 100 hours because of the considerable training time required for this task. Similar to WikiText-103, the gated linear units achieve the best results on this problem. There is a gap of about 5 perplexity points between the GLU and ReLU which is similar to the difference between the LSTM and RNN models measured by <ref type="bibr">(Jozefow- icz et al., 2016)</ref> on the same dataset.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3.">Non-linear Modeling</head><p>The experiments so far have shown that the gated linear unit benefits from the linear path the unit provides compared to other non-linearities. Next, we compare networks with GLUs to purely linear networks and networks with bilinear layers in order to measure the impact of the nonlinear path provided by the gates of the GLU. One motivation for this experiment is the success of linear models on many natural language processing tasks <ref type="bibr" target="#b21">(Manning &amp; Schütze, 1999</ref>). We consider deep linear convolutional networks where the layers lack the gating units of the GLU and take the form h l (X) = X * W + b. Stacking several layers on top of each other is simply a factorization of the model which remains linear up to the softmax, at which point it becomes log-linear. Another variation of GLUs are bilinear layers <ref type="bibr" target="#b24">(Mnih &amp; Hinton, 2007</ref>) which take the form  <ref type="figure" target="#fig_2">Figure 5</ref> shows that GLUs perform best, followed by bilinear layers and then linear layers. Bilinear layers improve over linear ones by more than 40 perplexity points, and the GLU improves another 20 perplexity points over the bilinear model. The linear model performs very poorly at perplexity 115 even compared to 67.6 of a Kneser-Ney 5-gram model, even though the former has access to more context. Surprisingly, the introduction of the bilinear units is enough to reach 61 perplexity on Google Billion Word, which surpasses both Kneser-Ney 5-gram models and the non-linear neural model of ( <ref type="bibr" target="#b14">Ji et al., 2015)</ref>. <ref type="figure">Figure 4</ref> shows the impact of context size for the gated CNN. We tried different combinations of network depth and kernel widths for each context size and chose the best performing one for each size. Generally, larger contexts improve accuracy but returns drastically diminish with windows larger than 40 words, even for WikiText-103 where we may condition on an entire Wikipedia article. This means that the unlimited context offered by recurrent models is not strictly necessary for language modeling. Furthermore, this finding is also congruent with the fact that good performance with recurrent networks can be obtained by truncating gradients after only 40 timesteps using truncated back propagation through time. <ref type="figure">Figure 4</ref> also shows that WikiText-103 benefits much more from larger context size than Google Billion Word as the performance degrades more sharply with smaller contexts. WikiText-103 provides much more context than Google Billion Word where the average sentence size is 20. However, while the average size of the documents is close to 4000 tokens, we find that strong performance can be achieved with a context size as low as 30 tokens.</p><formula xml:id="formula_7">h l (X) = (X * W + b) ⊗ (X * V + c).</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4.">Context Size</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.5.">Training</head><p>In this section, we perform an ablation study of the impact of weight normalization and gradient clipping. We separately cross-validate the hyper-parameters of each configuration to make the comparison fair. Due to the high cost of each of these experiments, we only consider a single iteration over the training data. <ref type="figure" target="#fig_3">Figure 6</ref> shows that both methods significantly speed up convergence. Weight normalization in particular improves the speed by over two times. This speedup is partly due to the ability to use much larger learning rates (1 instead of 0.01) than would otherwise be possible. Both clipping and weight normalization add computational overhead, but it is minor compared to the large gains in convergence speed. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.">Conclusion</head><p>We introduce a convolutional neural network for language modeling with a novel gating mechanism. Compared to recurrent neural networks, our approach builds a hierarchical representation of the input words that makes it easier to capture long-range dependencies, similar in spirit to the tree-structured analysis of linguistic grammar formalisms. The same property eases learning since features are passed through a fixed number of layers and non-linearities, unlike for recurrent networks where the number of processing steps differs depending on the position of the word in the input. The results show that our gated convolutional network achieves a new state of the art on WikiText-103. On the Google Billion Word benchmark, we show competitive results can be achieved with significantly fewer resources.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 .</head><label>1</label><figDesc>Figure 1. Architecture of the gated convolutional network for language modeling.</figDesc><graphic url="image-130.png" coords="2,323.45,413.86,204.20,59.17" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 5 .</head><label>5</label><figDesc>Figure 5. Learning curves on Google Billion Word for models with varying degrees of non-linearity.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 6 .</head><label>6</label><figDesc>Figure 6. Effect of weight normalization and gradient clipping on Google Billion Word.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="true"><head>Table 2 .</head><label>2</label><figDesc>Results on the Google Billion Word test set. The GCNN outperforms the LSTMs with the same output approximation.</figDesc><table>0 
+200 
+400 
+600 
+800 
+1000 
+MFlops 
+
+30 
+
+35 
+
+40 
+
+45 
+
+50 
+
+55 
+
+Test Perplexity 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 3 .</head><label>3</label><figDesc></figDesc><table>Results for single models on the WikiText-103 dataset. 
+
+lion Word, the average sentence length is quite short -
+only 20 words. We evaluate on WikiText-103 to determine 
+if the model can perform well on a dataset where much 
+larger contexts are available. On WikiText-103, an input se-
+quence is an entire Wikipedia article instead of an individ-
+ual sentence -increasing the average length to 4000 words. 
+However, the GCNN outperforms LSTMs on this problem 
+as well (Table 3). The GCNN-8 model has 8 layers with 
+800 units each and the LSTM has 1024 units. These results 
+show that GCNNs can model enough context to achieve 
+strong results. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head>Table 4 .</head><label>4</label><figDesc></figDesc><table>Processing speed in tokens/s at test time for an LSTM 
+with 2048 units and GCNNs achieving 43.9 perplexity on Google 
+Billion Word. The GCNN with bottlenecks improves the respon-
+siveness by 20 times while maintaining high throughput. 
+
+</table></figure>
+
+			<note place="foot" n="1"> Parallelization is usually done over multiple sequences instead.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We would like to thank Ben Graham, Jonas Gehring, Edouard Grave, Armand Joulin and Ronan Collobert for helpful discussions.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">A neural probabilistic language model. journal of machine learning research</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ducharme</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Réjean</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pascal</forename><surname>Vincent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Jauvin</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003-02" />
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="1137" to="1155" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">One billion word benchmark for measuring progress in statistical language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ciprian</forename><surname>Chelba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tomas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mike</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Qi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Brants</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Thorsten</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phillipp</forename><surname>Koehn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tony</forename><surname>Robinson</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1312.3005</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">An empirical study of smoothing techniques for language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stanley</forename><forename type="middle">F</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joshua</forename><surname>Goodman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 34th annual meeting on Association for Computational Linguistics</title>
+		<meeting>the 34th annual meeting on Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="310" to="318" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Strategies for training large vocabulary neural language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenlin</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Grangier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Auli</surname></persName>
+		</author>
+		<idno>abs/1512.04906</idno>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Torch7: A Matlab-like Environment for Machine Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ronan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Clement</forename><surname>Farabet</surname></persName>
+		</author>
+		<ptr target="http://torch.ch" />
+	</analytic>
+	<monogr>
+		<title level="m">BigLearn, NIPS Workshop</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Predicting distributions with linearizing belief networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yann</forename><forename type="middle">N</forename><surname>Dauphin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Grangier</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.05622</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Understanding the difficulty of training deep feedforward neural networks. The handbook of brain theory and neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xavier</forename><surname>Glorot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Efficient softmax approximation for GPUs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Cissé</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Grangier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jégou</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016-09" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Improving Neural Language Models with a Continuous Cache</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Usunier</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>December</publisher>
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Language Modeling with Gated Convolutional Networks</title>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Noise-contrastive estimation: A new estimation principle for unnormalized statistical models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Gutmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aapo</forename><surname>Hyvärinen</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kaiming</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Xiangyu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shaoqing</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Sun</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1512.03385</idno>
+		<title level="m">Deep residual learning for image recognition</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Delving deep into rectifiers: Surpassing human-level performance on imagenet classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kaiming</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Xiangyu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shaoqing</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Sun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE International Conference on Computer Vision</title>
+		<meeting>the IEEE International Conference on Computer Vision</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1026" to="1034" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Blackout: Speeding up recurrent neural network language models with very large vocabularies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Shihao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Vishwanathan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Svn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Satish</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anderson</forename><surname>Nadathur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Michael</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pradeep</forename><surname>Dubey</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.06909</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Exploring the limits of language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Oriol</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mike</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Wu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1602.02410</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lasse</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Simonyan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Karen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Van Den Oord</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Aaron</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<title level="m">Neural Machine Translation in Linear Time. arXiv</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Improved backing-off for m-gram language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Reinhard</forename><surname>Kneser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hermann</forename><surname>Ney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Acoustics, Speech, and Signal Processing</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="1995" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="181" to="184" />
+		</imprint>
+	</monogr>
+	<note>ICASSP-95</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title level="m" type="main">Statistical Machine Translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philipp</forename><surname>Koehn</surname></persName>
+		</author>
+		<idno>ISBN 0521874157</idno>
+		<imprint>
+			<date type="published" when="2010" />
+			<publisher>Cambridge University Press</publisher>
+			<biblScope unit="page">9780521874151</biblScope>
+			<pubPlace>New York, NY, USA</pubPlace>
+		</imprint>
+	</monogr>
+	<note>1st edition</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Factorization tricks for LSTM networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oleksii</forename><surname>Kuchaiev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Boris</forename><surname>Ginsburg</surname></persName>
+		</author>
+		<idno>abs/1703.10722</idno>
+		<ptr target="http://arxiv.org/abs/1703.10722" />
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Convolutional networks for images, speech, and time series</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yann</forename><surname>Lecun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="volume">3361</biblScope>
+		</imprint>
+	</monogr>
+	<note>The handbook of brain theory and neural networks</note>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Foundations of statistical natural language processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hinrich</forename><surname>Schütze</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016-09" />
+		</imprint>
+	</monogr>
+	<note>Pointer Sentinel Mixture Models. ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Recurrent Neural Network based Language Model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tomáš</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Martin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Karafiát</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Burget</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lukáš</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Cernock´ycernock´y</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Khudanpur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sanjeev</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of INTERSPEECH</title>
+		<meeting>of INTERSPEECH</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="1045" to="1048" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Three new graphical models for statistical language modelling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andriy</forename><surname>Mnih</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 24th international conference on Machine learning</title>
+		<meeting>the 24th international conference on Machine learning</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="641" to="648" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Hierarchical probabilistic neural network language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Frederic</forename><surname>Morin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Aistats</title>
+		<imprint>
+			<publisher>Citeseer</publisher>
+			<date type="published" when="2005" />
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="page" from="246" to="252" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Oord</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Van Den</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nal</forename><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1601.06759</idno>
+		<title level="m">Pixel recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Oord</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Van Den</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Oriol</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lasse</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.05328</idno>
+		<title level="m">Conditional image generation with pixelcnn decoders</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">On the difficulty of training recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Razvan</forename><surname>Pascanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of The 30th International Conference on Machine Learning</title>
+		<meeting>The 30th International Conference on Machine Learning</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1310" to="1318" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+		<title level="m" type="main">Weight normalization: A simple reparameterization to accelerate training of deep neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Salimans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Diederik</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1602.07868</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+		<title level="m" type="main">Skip-gram language modeling using sparse non-negative matrix probability estimation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joris</forename><surname>Pelemans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ciprian</forename><surname>Chelba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.1454</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">Outrageously large neural networks: The sparsely-gated mixtureof-experts layer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mirhoseini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Azalia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Maziarz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Krzysztof</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Andy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Quoc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+		</author>
+		<idno>abs/1701.06538</idno>
+		<ptr target="http://arxiv.org/abs/1701.06538" />
+		<imprint>
+			<date type="published" when="2017" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<title level="m" type="main">The syntactic process</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Steedman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">On the importance of initialization and momentum in deep learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ilya</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Martens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>James</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Dahl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>George</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<monogr>
+		<title level="m" type="main">gencnn: A convolutional architecture for word sequence prediction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mingxuan</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zhengdong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenbin</forename><surname>Jiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qun</forename><surname>Liu</surname></persName>
+		</author>
+		<idno>abs/1503.05034</idno>
+		<ptr target="http://arxiv.org/abs/1503.05034" />
+		<imprint>
+			<date type="published" when="2015" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title level="m" type="main">Automatic Speech Recognition: A Deep Learning Approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dong</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Deng</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+			<publisher>Springer Publishing Company</publisher>
+			<biblScope unit="page">9781447157786</biblScope>
+		</imprint>
+	</monogr>
+	<note>Incorporated</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

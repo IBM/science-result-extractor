@@ -1,0 +1,1891 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:05+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">An improved neural network model for joint POS tagging and dependency parsing</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dat</forename><forename type="middle">Quoc</forename><surname>Nguyen</surname></persName>
+							<email>dqnguyen@unimelb.edu.au</email>
+							<affiliation key="aff0">
+								<orgName type="department">School of Computing and Information Systems</orgName>
+								<orgName type="institution">The University of Melbourne</orgName>
+								<address>
+									<country key="AU">Australia</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karin</forename><surname>Verspoor</surname></persName>
+							<email>karin.verspoor@unimelb.edu.au</email>
+							<affiliation key="aff0">
+								<orgName type="department">School of Computing and Information Systems</orgName>
+								<orgName type="institution">The University of Melbourne</orgName>
+								<address>
+									<country key="AU">Australia</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">An improved neural network model for joint POS tagging and dependency parsing</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We propose a novel neural network model for joint part-of-speech (POS) tagging and dependency parsing. Our model extends the well-known BIST graph-based dependency parser (Kiperwasser and Goldberg, 2016) by incorporating a BiLSTM-based tagging component to produce automatically predicted POS tags for the parser. On the benchmark English Penn treebank, our model obtains strong UAS and LAS scores at 94.51% and 92.87%, respectively, producing 1.5+% absolute improvements to the BIST graph-based parser, and also obtaining a state-of-the-art POS tagging accuracy at 97.97%. Furthermore, experimental results on parsing 61 &quot;big&quot; Universal Dependencies treebanks from raw texts show that our model outperforms the base-line UDPipe (Straka and Straková, 2017) with 0.8% higher average POS tagging score and 3.6% higher average LAS score. In addition, with our model, we also obtain state-of-the-art downstream task scores for biomedical event extraction and opinion analysis applications. Our code is available together with all pre-trained models at: https://github. com/datquocnguyen/jPTDP.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Dependency parsing -a key research topic in natural language processing (NLP) in the last decade <ref type="bibr" target="#b6">(Buchholz and Marsi, 2006;</ref><ref type="bibr" target="#b43">Nivre et al., 2007a;</ref><ref type="bibr" target="#b29">Kübler et al., 2009</ref>) -has also been demonstrated to be extremely useful in many applications such as relation extraction ( <ref type="bibr" target="#b10">Culotta and Sorensen, 2004;</ref><ref type="bibr" target="#b7">Bunescu and Mooney, 2005</ref>), semantic parsing ( <ref type="bibr" target="#b49">Reddy et al., 2016)</ref> and machine translation <ref type="bibr">(Gal- ley and Manning, 2009)</ref>. In general, dependency parsing models can be categorized as graph-based ( <ref type="bibr" target="#b36">McDonald et al., 2005</ref>) and transition-based <ref type="bibr">(Ya- mada and Matsumoto, 2003;</ref><ref type="bibr" target="#b41">Nivre, 2003)</ref>. Most traditional graph-or transition-based models define a set of core and combined features <ref type="bibr">(McDon- ald and Pereira, 2006;</ref><ref type="bibr" target="#b44">Nivre et al., 2007b;</ref><ref type="bibr" target="#b4">Bohnet, 2010;</ref><ref type="bibr" target="#b63">Zhang and Nivre, 2011)</ref>, while recent stateof-the-art models propose neural network architectures to handle feature-engineering ( <ref type="bibr" target="#b28">Kiperwasser and Goldberg, 2016;</ref><ref type="bibr" target="#b34">Ma and Hovy, 2017)</ref>.</p><p>Most traditional and neural network-based parsing models use automatically predicted POS tags as essential features. However, POS taggers are not perfect, resulting in error propagation problems. Some work has attempted to avoid using POS tags for dependency parsing <ref type="bibr" target="#b11">de Lhoneux et al., 2017)</ref>, however, to achieve the strongest parsing scores these methods still require automatically assigned POS tags. Alternatively, joint POS tagging and dependency parsing has also attracted a lot of attention in NLP community as it could help improve both tagging and parsing results over independent modeling <ref type="bibr" target="#b33">(Li et al., 2011;</ref><ref type="bibr" target="#b24">Hatori et al., 2011;</ref><ref type="bibr" target="#b32">Lee et al., 2011;</ref><ref type="bibr" target="#b5">Bohnet and Nivre, 2012;</ref><ref type="bibr" target="#b61">Zhang et al., 2015;</ref><ref type="bibr" target="#b62">Zhang and Weiss, 2016;</ref><ref type="bibr" target="#b57">Yang et al., 2018)</ref>.</p><p>In this paper, we present a novel neural network-based model for jointly learning POS tagging and dependency paring. Our joint model extends the well-known BIST graph-based dependency parser <ref type="bibr" target="#b28">(Kiperwasser and Goldberg, 2016</ref>) with an additional lower-level BiLSTM-based tagging component. In particular, this tagging component generates predicted POS tags for the parser component. Evaluated on the benchmark English Penn treebank test Section 23, our model pro-  duces a 1.5+% absolute improvement over the BIST graph-based parser with a strong UAS score of 94.51% and LAS score of 92.87%; and also obtaining a state-of-the-art POS tagging accuracy of 97.97%. In addition, multilingual parsing experiments from raw texts on 61 "big" Universal Dependencies treebanks <ref type="bibr" target="#b58">(Zeman et al., 2018)</ref> show that our model outperforms the baseline UDPipe ( <ref type="bibr" target="#b52">Straka and Straková, 2017</ref>) with 0.8% higher average POS tagging score, 3.1% higher UAS and 3.6% higher LAS. Furthermore, experimental results on downstream task applications <ref type="bibr" target="#b17">(Fares et al., 2018)</ref> show that our joint model helps produce state-of-the-art scores for biomedical event extraction and opinion analysis.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Our joint model</head><p>This section presents our model for joint POS tagging and graph-based dependency parsing. <ref type="figure" target="#fig_0">Fig- ure 1</ref> illustrates the architecture of our joint model which can be viewed as a two-component mixture of a tagging component and a parsing component. Given word tokens in an input sentence, the tagging component uses a BiLSTM to learn "latent" feature vectors representing these word tokens. Then the tagging component feeds these feature vectors into a multilayer perceptron with one hidden layer (MLP) to predict POS tags. The parsing component then uses another BiLSTM to learn another set of latent feature representations, based on both the input word tokens and the predicted POS tags. These latent feature representations are fed into a MLP to decode dependency arcs and another MLP to label the predicted dependency arcs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Word vector representation</head><p>Given an input sentence s consisting of n word tokens w 1 , w 2 , ..., w n , we represent each i th word w i in s by a vector e i . We obtain e i by concatenating word embedding e </p><formula xml:id="formula_0">e i = e (W) w i • e (C) w i<label>(1)</label></formula><p>Here, each word type w in the training data is represented by a real-valued word embedding e (W)</p><p>w . Given the word type w consisting of k characters w = c 1 c 2 ...c k where each j th character in w is represented by a character embedding c j , we use a sequence BiLSTM (BiLSTM seq ) to learn its character-level vector representation ( <ref type="bibr" target="#b47">Plank et al., 2016)</ref>. The input to BiLSTM seq is the sequence of k character embeddings c 1:k , and the output is a concatenation of outputs of a forward LSTM (LSTM f ) reading the input in its regular order and a reverse LSTM (LSTM r ) reading the input in reverse:</p><formula xml:id="formula_1">e (C) w = BiLSTMseq(c 1:k ) = LSTMf(c 1:k ) • LSTMr(c k:1 )</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Tagging component</head><p>We feed the sequence of vectors e 1:n with an additional context position index i into another BiL-STM (BiLSTM pos ), resulting in latent feature vectors v </p><p>We use a MLP with softmax output (MLP pos ) on top of the BiLSTM pos to predict POS tag of each word in s. The number of nodes in the output layer of this MLP pos is the number of POS tags. Given v (pos) i , we compute an output vector as:</p><formula xml:id="formula_3">ϑ i = MLP pos (v (pos) i )<label>(3)</label></formula><p>Based on output vectors ϑ i , we then compute the cross-entropy objective loss L POS ( ˆ t, t), in whichˆtwhichˆwhichˆt and t are the sequence of predicted POS tags and sequence of gold POS tags of words in the input sentence s, respectively <ref type="bibr" target="#b21">(Goldberg, 2016)</ref>. Our tagging component thus can be viewed as a simplified version of the POS tagging model proposed by <ref type="bibr" target="#b47">Plank et al. (2016)</ref>, without their additional auxiliary loss for rare words.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Parsing component</head><p>Assume that p 1 , p 2 , ..., p n are the predicted POS tags produced by the tagging component for the input words. We represent each i th predicted POS tag by a vector embedding e (P) p i . We then create a sequence of vectors x 1:n in which each x i is produced by concatenating the POS tag embedding e (P) p i and the word vector representation e i :</p><formula xml:id="formula_4">x i = e (P) p i • e i = e (P) p i • e (W) w i • e (C) w i<label>(4)</label></formula><p>We feed the sequence of vectors x 1:n with an additional index i into a BiLSTM (BiLSTM dep ), resulting in latent feature vectors v i as follows:</p><formula xml:id="formula_5">v i = BiLSTM dep (x 1:n , i)<label>(5)</label></formula><p>Based on latent feature vectors v i , we follow a common arc-factored parsing approach to decode dependency arcs <ref type="bibr" target="#b36">(McDonald et al., 2005</ref>). In particular, a dependency tree can be formalized as a directed graph. An arc-factored parsing approach learns the scores of the arcs in the graph <ref type="bibr">(Kübler et al., 2009</ref>). Here, we score an arc by using a MLP with a one-node output layer (MLP arc ) on top of the BiLSTM dep :</p><formula xml:id="formula_6">score arc (i, j) (6) = MLP arc v i • v j • (v i * v j ) • |v i − v j |</formula><p>where (v i * v j ) and |v i − v j | denote the elementwise product and the absolute element-wise difference, respectively; and v i and v j are correspondingly the latent feature vectors associating to the i th and j th words in s, computed by Equation 5. Given the arc scores, we use the Eisner (1996)'s decoding algorithm to find the highest scoring projective parse tree:</p><formula xml:id="formula_7">score(s) = argmaxˆy∈Y argmaxˆ argmaxˆy∈Y(s) (h,m)∈ˆy∈ˆy score arc (h, m) (7)</formula><p>where Y(s) is the set of all possible dependency trees for the input sentence s while score arc (h, m) measures the score of the arc between the head h th word and the modifier m th word in s.</p><p>Following <ref type="bibr" target="#b28">Kiperwasser and Goldberg (2016)</ref>, we compute a margin-based hinge loss L ARC with loss-augmented inference to maximize the margin between the gold unlabeled parse tree and the highest scoring incorrect tree.</p><p>For predicting dependency relation type of a head-modifier arc, we use another MLP with softmax output (MLP rel ) on top of the BiLSTM dep . Here, the number of the nodes in the output layer of this MLP rel is the number of dependency relation types. Given an arc (h, m), we compute an output vector as:</p><formula xml:id="formula_8">v (h,m) (8) = MLP rel v h • v m • (v h * v m ) • |v h − v m |</formula><p>Based on output vectors v (h,m) , we also compute another cross-entropy objective loss L REL for relation type prediction, using only the gold labeled parse tree.</p><p>Our parsing component can be viewed as an extension of the BIST graph-based dependency model <ref type="bibr" target="#b28">(Kiperwasser and Goldberg, 2016)</ref>, where we additionally incorporate the character-level vector representations of words.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.4">Joint model training</head><p>The training objective loss of our joint model is the sum of the POS tagging loss L POS , the structure loss L ARC and the relation labeling loss L REL :</p><formula xml:id="formula_9">L = L POS + L ARC + L REL (9)</formula><p>The model parameters, including word embeddings, character embeddings, POS embeddings, three one-hidden-layer MLPs and three BiLSTMs, are learned to minimize the sum L of the losses. Most neural network-based joint models for POS tagging and dependency parsing are transition-based approaches ( <ref type="bibr" target="#b62">Zhang and Weiss, 2016;</ref><ref type="bibr" target="#b57">Yang et al., 2018</ref>), while our model is a graph-based method. In addition, the joint model JMT ( <ref type="bibr" target="#b23">Hashimoto et al., 2017</ref>) defines its dependency parsing task as a head selection task which produces a probability distribution over possible heads for each word ( <ref type="bibr" target="#b60">Zhang et al., 2017)</ref>.</p><p>Our model is the successor of the joint model jPTDP v1.0 ( <ref type="bibr" target="#b39">Nguyen et al., 2017</ref>) which is also a graph-based method. However, unlike our model, jPTDP v1.0 uses a BiLSTM to learn "shared" latent feature vectors which are then used for both POS tagging and dependency parsing tasks, rather than using two separate layers. As mentioned in Section 4, our model generally outperforms jPTDP v1.0 with 2.5+% LAS improvements on universal dependencies (UD) treebanks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.5">Implementation details</head><p>Our model is released as jPTDP v2.0, available at https://github.com/datquocnguyen/ jPTDP. Our jPTDP v2.0 is implemented using DYNET v2.0 ( <ref type="bibr">Neubig et al., 2017</ref>) with a fixed random seed. 1 Word embeddings are initialized either randomly or by pre-trained word vectors, while character and POS tag embeddings are randomly initialized. For learning character-level word embeddings, we use one-layer BiLSTM seq , and set the size of LSTM hidden states to be equal to the vector size of character embeddings.</p><p>We apply dropout ( <ref type="bibr" target="#b51">Srivastava et al., 2014</ref>) with a 67% keep probability to the inputs of BiLSTMs and MLPs. Following <ref type="bibr" target="#b25">Iyyer et al. (2015)</ref> and <ref type="bibr" target="#b28">Kiperwasser and Goldberg (2016)</ref>, we also apply word dropout to learn an embedding for unknown words: we replace each word token w appearing #(w) times in the training set with a special "unk" symbol with probability p unk (w) = 0.25 0.25+#(w) . This procedure only involves the word embedding part in the input word vector representation.</p><p>We optimize the objective loss using Adam ( <ref type="bibr" target="#b27">Kingma and Ba, 2014</ref>) with an initial learning rate at 0.001 and no mini-batches. For training, we run for 30 epochs, and restart the Adam optimizer and anneal its initial learning rate at a proportion of 0.5 every 10 epochs. We evaluate the mixed accuracy of correctly assigning POS tag together with dependency arc and relation type on the development set after each training epoch. We choose the model with the highest mixed accuracy on the development set, which is then applied to the test set for the evaluation phase.</p><p>For all experiments presented in this paper, we use 100-dimensional word embeddings, 50-dimensional character embeddings and 100-dimensional POS tag embeddings. We also fix the number of hidden nodes in MLPs at 100. Due to limited computational resource, for experiments presented in Section 3, we perform a minimal grid search of hyper-parameters to select the number of BiLSTM pos and BiLSTM dep layers from {1, 2} and the size of LSTM hidden states in each layer from {128, 256}. For experiments presented in sections 4 and 5, we fix the number of BiLSTM layers at 2 and the size of hidden states at 128.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Experiments on English Penn treebank</head><p>Experimental setup: We evaluate our model using the English WSJ Penn treebank <ref type="bibr" target="#b35">(Marcus et al., 1993</ref>). We follow a standard data split to use sections 02-21 for training, Section 22 for development and Section 23 for test <ref type="bibr" target="#b8">(Chen and Manning, 2014)</ref>, employing the Stanford conversion toolkit v3.3.0 to generate dependency trees with Stanford basic dependencies ( <ref type="bibr" target="#b12">de Marneffe and Manning, 2008)</ref>. Word embeddings are initialized by 100-dimensional GloVe word vectors pre-trained on Wikipedia and Gigaword ( <ref type="bibr" target="#b46">Pennington et al., 2014</ref>). <ref type="bibr">2</ref> As mentioned in Section 2.5, we perform a minimal grid search of hyper-parameters and find that the highest mixed accuracy on the development set is obtained when using 2 BiLSTM layers and 256-dimensional LSTM hidden states (in <ref type="table">Table 1</ref>, we present scores obtained on the development set when using 2 BiLSTM layers).</p><p>Main results:  <ref type="table">Table 1</ref>: Results on the development set. #states and "Without pun." denote the size of LSTM hidden states and the scores computed without punctuations, respectively. "POS" indicates the POS tagging accuracy. <ref type="bibr">[K&amp;G16]</ref> denotes results reported in <ref type="bibr" target="#b28">Kiperwasser and Goldberg (2016)</ref>.  The first 11 rows present scores of dependency parsers in which POS tags were predicted by using an external POS tagger such as the Stanford tagger ( <ref type="bibr" target="#b54">Toutanova et al., 2003</ref>). The last 6 rows present scores for joint models. Clearly, our model produces very competitive parsing results. In particular, our model obtains a UAS score at 94.51% and a LAS score at 92.87% which are about 1.4% and 1.9% absolute higher than UAS and LAS scores of the BIST graph-based model <ref type="bibr" target="#b28">(Kiperwasser and Goldberg, 2016)</ref>, respectively. Our model also does better than the previous transition-based joint models in , <ref type="bibr" target="#b62">Zhang and Weiss (2016)</ref> and <ref type="bibr" target="#b57">Yang et al. (2018)</ref>, while obtaining similar UAS and LAS scores to the joint model JMT proposed by <ref type="bibr" target="#b23">Hashimoto et al. (2017)</ref>. We achieve 0.9% lower parsing scores than the state-of-the-art dependency parser of . While also a BiLSTM-and graph-based model, it uses a more sophisticated attention mechanism "biaffine" for better decoding dependency arcs and relation types. In future work, we will extend our model with the biaffine attention mechanism to investigate the benefit for our model. Other differences are that they use a higher dimensional representation than ours, but rely on predicted POS tags.</p><note type="other">BIST-graph [K&amp;G16] 93.3 91.0 Zhang et al. (2017) 94.30 91.95 Ma and Hovy (2017) 94.77 92.66 Dozat and Manning (2017) 95.24 93.37</note></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>POS UAS LAS</head><p>We also obtain a state-of-the-art POS tagging accuracy at 97.97% on the test Section 23, which is about 0.4+% higher than those by Bohnet and Nivre (2012),  and <ref type="bibr" target="#b57">Yang et al. (2018)</ref>. Other previous joint models did not mention their specific POS tagging accuracies. <ref type="bibr">4</ref> </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">UniMelb in the CoNLL 2018 shared task on UD parsing</head><p>Our UniMelb team participated with jPTDP v2.0 in the CoNLL 2018 shared task on parsing 82 treebank test sets (in 57 languages) from raw text to universal dependencies ( <ref type="bibr" target="#b58">Zeman et al., 2018</ref>). The 82 treebanks are taken from UD v2. <ref type="bibr">2 (Nivre et al., 2018)</ref>, where 61/82 test sets are for "big" UD treebanks for which both training and development data sets are available and 5/82 test sets are extra "parallel" test sets in languages where another big treebank exists. In addition, 7/82 test sets are for "small" UD treebanks for which development data is not available. The remaining 9/82 sets are in low-resource languages without training data or with a few gold-annotation sample sentences. For the 7 small treebanks without development data available, we split training data into two parts with a ratio 9:1, and then use the larger part for training and the smaller part for development. For each big or small treebank, we train a joint model for universal POS tagging and dependency parsing, using a fixed random seed and a fixed set Big PUD Small Low (82) (61) (5) (7)  "UPOS" denotes the universal POS tagging score. "All", "Big", "PUD", "Small" and "Low" refer to the macro-average scores over all 81, 61 big treebank, 5 parallel, 7 small treebank and 9 lowresource treebank test sets, respectively. "goldseg." denotes the scores of our jPTDP v2.0 model regarding gold segmentation, detailed in <ref type="table">Table 4</ref>.</p><p>of hyper-parameters as mentioned in Section 2.5. <ref type="bibr">5</ref> We evaluate the mixed accuracy on the development set after each training epoch, and select the model with the highest mixed accuracy. For parsing from raw text to universal dependencies, we employ CoNLL-U test files preprocessed by the baseline UDPipe 1. <ref type="bibr">2 (Straka and Straková, 2017)</ref>. Here, we utilize the tokenization, word and sentence segmentation predicted by UDPipe 1.2. For 68 big and small treebank test files, we use the corresponding trained joint models. We use the joint models trained for cs pdt, en ewt, fi tdt, ja gsd and sv talbanken to process 5 parallel test files cs pud, en pud, fi pud, ja modern and sv pud, respectively. Since we do not focus on low-resource languages, we employ the baseline UDPipe 1.2 to process 9 low-resource treebank test files. The final test runs are carried out on the TIRA platform ( <ref type="bibr" target="#b48">Potthast et al., 2014)</ref>. <ref type="table" target="#tab_5">Table 3</ref> presents our results in the CoNLL 2018 shared task on multilingual parsing from raw texts to universal dependencies ( <ref type="bibr" target="#b58">Zeman et al., 2018)</ref>. Over all 82 test sets, we outperform the baseline UDPipe 1.2 with 0.6% absolute higher average UPOS F1 score and 2.5+% higher average UAS and LAS F1 scores. In particular, for the "big" category consisting of 61 treebank test sets, we obtain 0.8% higher UPOS and 3.1% higher UAS and 3.6% higher LAS than UDPipe 1.2.</p><p>Our (UniMelb) official LAS-based rank is at 14 th place while the baseline UDPipe 1.2 is at 18 th place over total 26 participating systems. <ref type="bibr">6</ref> However, it is difficult to make a clear comparison between our jPTDP v2.0 and the parsing models used in other top systems. Several better participating systems simply reuse the state-of-theart biaffine dependency parser <ref type="bibr">(Dozat and Man- ning, 2017;</ref>, constructing ensemble models or developing treebank concatenation strategies to obtain larger training data, which is likely to produce better scores than ours <ref type="bibr" target="#b58">(Zeman et al., 2018)</ref>.</p><p>Recall that the shared task focuses on parsing from raw texts. Most higher-ranking systems aim to improve the pre-processing steps of tokenization <ref type="bibr">7</ref> , word 8 and sentence 9 segmentation, resulting in significant improvements in final parsing scores. For example, in the CoNLL 2017 shared task on UD parsing ( ), UDPipe 1.2 obtained 0.1+% higher average tokenization and word segmentation scores and 0.2% higher average sentence segmentation score than UDPipe 1.1, resulting in 1+% improvement in the final average LAS F1 score while both UDPipe 1.2 and UDPipe 1.1 shared exactly the same remaining components. Utilizing better pre-processors, as used in other participating systems, should likewise improve our final parsing scores.</p><p>In <ref type="table" target="#tab_5">Table 3</ref>, we also present our average UPOS, UAS and LAS accuracies with respect to (w.r.t.) gold-standard tokenization, word and sentence segmentation. For more details and future comparison, <ref type="table">Table 4</ref> presents the UPOS, UAS and LAS scores w.r.t. gold-standard segmentation, obtained by jPTDP v2.0 on each UD v2.2-CoNLL 2018 shared task test set. Compared to the scores presented in <ref type="table" target="#tab_5">Table 3</ref> in <ref type="bibr" target="#b39">Nguyen et al. (2017)</ref> on overlapped treebanks, our model jPTDP v2.0 generally produces 2.5+% improvements in UAS and LAS scores to jPTDP v1.0 ( <ref type="bibr" target="#b39">Nguyen et al., 2017</ref>  <ref type="table">Table 4</ref>: UPOS, UAS and LAS scores computed on all tokens of our jPTDP v2.0 model regarding goldstandard segmentation on 73 CoNLL-2018 shared task test sets "Big", "PUD" and "Small" -UD v2. <ref type="bibr">2 (Nivre et al., 2018)</ref>.</p><p>[p] and [s] denote the "PUD" extra parallel and small test sets, respectively. For each treebank, a joint model is trained using a fixed set of hyper-parameters as mentioned in Section 2.5.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">UniMelb in the EPE 2018 campaign</head><p>Our UniMelb team also participated with jPTDP v2.0 in the 2018 Extrinsic Parser Evaluation (EPE) campaign <ref type="bibr" target="#b17">(Fares et al., 2018)</ref>. <ref type="bibr">10</ref> The EPE 2018 campaign runs in collaboration with the CoNLL 2018 shared task, which aims to evaluate dependency parsers by comparing their performance on three downstream tasks: biomedical event extraction , negation resolution ( ) and opinion analysis <ref type="bibr">(Jo- hansson, 2017</ref>). Here, participants only need to provide parsing outputs of English raw texts used in these downstream tasks; the campaign organizers then compute end-to-end downstream task 10 http://epe.nlpl.eu scores. General background can be also found in the first EPE edition <ref type="bibr" target="#b26">2017</ref>. Unlike EPE 2017, the EPE 2018 campaign limited the training data to the English UD treebanks only. We unfortunately were unaware of this restriction during development of our model. Thus, we trained a jPTDP v2.0 model on dependency trees generated with the Stanford basic dependencies on a combination of the WSJ treebank, sections 02-21, and the training split of the GENIA treebank ( <ref type="bibr" target="#b53">Tateisi et al., 2005</ref>). We used the fixed set of hyper-parameters as used for the CoNLL 2018 shared task as mentioned in Section 2.5. <ref type="bibr">11</ref> We then submitted the parsing outputs by run-   <ref type="bibr" target="#b17">(Fares et al., 2018</ref>. "SP17" denotes the F1 scores obtained by the EPE 2017 system Stanford-Paris ( <ref type="bibr" target="#b50">Schuster et al., 2017</ref>) with respect to (w.r.t.) the Stanford basic dependencies. The subscript in the SP17 column denotes the F1 scores obtained by Stanford-Paris w.r.t. the UD-v1-enhanced type of dependency representations, in which the average F1 score at 60.51 is the highest one at EPE 2017. ning our trained model on the pre-processed tokenized and sentence-segmented data provided by the campaign on the TIRA platform. <ref type="table" target="#tab_8">Table 5</ref> presents the results we obtained for three downstream tasks at EPE 2018 <ref type="bibr" target="#b17">(Fares et al., 2018</ref>). Since we employed external training data, our obtained scores are not officially ranked. In total 17 participating teams, we obtained the highest average F1 score over the three downstream tasks (i.e., we ranked first, unofficially). In particular, we achieved the highest F1 scores for both biomedical event extraction and opinion analysis. Our results may be high because the training data we used is larger than the English UD treebanks used by other teams. <ref type="table" target="#tab_8">Table 5</ref> also presents scores from the StanfordParis team ( <ref type="bibr" target="#b50">Schuster et al., 2017</ref>)-the first-ranked team at EPE 2017 ( . Both EPE 2017 and 2018 campaigns use the same downstream task setups, therefore the downstream task scores are directly comparable. Note that Stanford-Paris employed the state-of-the-art biaffine dependency parser ) with larger training data. In particular, Stanford-Paris not only used the WSJ sections 02-21 and the training split of the GENIA treebank (as we did), but also included the Brown corpus. The downstream application of negation resolution requires parsing of fiction, which is one the genres included in the Brown corpus. Hence it is reasonable that the Stanford-Paris team produced better negation resolution scores than we did.</p><p>However, in terms of the Stanford basic dependencies, while we employ a less accurate parsing model with smaller training data, we obtain higher downstream task scores for event extraction and opinion analysis than the Stanford-Paris team. Consequently, better intrinsic parsing performance does not always imply better extrinsic downstream application performance. Similar observations on the biomedical event extraction and opinion analysis tasks can also be found in <ref type="bibr" target="#b40">Nguyen and Verspoor (2018)</ref> and <ref type="bibr" target="#b22">Gómez- Rodríguez et al. (2017)</ref>, respectively. Further investigations of this pattern requires much deeper understanding of the architecture of the downstream task systems, which is left for future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Conclusion</head><p>In this paper, we have presented a novel neural network model for joint POS tagging and graphbased dependency parsing. On the benchmark English WSJ Penn treebank, our model obtains strong parsing scores UAS at 94.51% and LAS at 92.87%, and a state-of-the-art POS tagging accuracy at 97.97%.</p><p>We also participated with our joint model in the CoNLL 2018 shared task on multilingual parsing from raw texts to universal dependencies, and obtained very competitive results. Specifically, using the same CoNLL-U files pre-processed by UDPipe ( <ref type="bibr" target="#b52">Straka and Straková, 2017)</ref>, our model produced 0.8% higher POS tagging, 3.1% higher UAS and 3.6% higher LAS scores on average than UDPipe on 61 big UD treebank test sets. Furthermore, our model also helps obtain state-of-the-art downstream task scores for the biomedical event extraction and opinion analysis applications.</p><p>We believe our joint model can serve as a new strong baseline for both intrinsic POS tagging and dependency parsing tasks as well as for extrinsic downstream applications. Our code and pre-trained models are available at: https:// github.com/datquocnguyen/jPTDP.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Illustration of our new model for joint POS tagging and graph-based dependency parsing.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>(</head><label></label><figDesc>pos) i each representing the i th word w i in s: v (pos) i = BiLSTM pos (e 1:n , i)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 compares</head><label>2</label><figDesc>our UAS and LAS scores on the test set with previous published results in terms of the dependency annotations. 3 #states With punctuations Without pun. POS UAS LAS UAS LAS 128 97.64 93.68 92.11 94.42 92.61 256 97.63 93.89 92.33 94.63 92.82 Chen and Manning (2014) 92.0 89.7 Dyer et al. (2015) 93.2 90.9</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Results on the test set. POS tagging accu-
+racies are computed on all tokens. UAS and LAS 
+are computed without punctuations. [•]: the tree-
+bank was converted with the Stanford conversion 
+toolkit v3.5.0. []: the treebank was converted 
+with the head rules of Yamada and Matsumoto 
+(2003). For both [•] and [], obtained parsing 
+scores are just for reference, not for comparison. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Official macro-average F1 scores com-
+puted on all tokens for UniMelb and the baseline 
+UDPipe 1.2 in the CoNLL 2018 shared task on 
+UD parsing from raw texts (Zeman et al., 2018). 
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>) .</head><label>.</label><figDesc></figDesc><table>Treebank 
+
+Code 
+UPOS UAS LAS Treebank 
+Code 
+UPOS UAS LAS 
+Afrikaans-AfriBooms af afribooms 95.73 82.57 78.89 Italian-ISDT 
+it isdt 
+98.01 92.33 90.20 
+Ancient Greek-PROIEL grc proiel 
+96.05 77.57 72.84 Italian-PoSTWITA 
+it postwita 
+95.41 84.20 79.11 
+Ancient Greek-Perseus grc perseus 88.95 65.09 58.35 Japanese-GSD 
+ja gsd 
+97.27 94.21 92.02 
+Arabic-PADT 
+ar padt 
+96.33 86.08 80.97 Japanese-Modern [p] 
+ja modern 
+70.53 66.88 49.51 
+Basque-BDT 
+eu bdt 
+93.62 79.86 75.07 Korean-GSD 
+ko gsd 
+93.35 81.32 76.58 
+Bulgarian-BTB 
+bg btb 
+98.07 91.47 87.69 Korean-Kaist 
+ko kaist 
+93.53 83.59 80.74 
+Catalan-AnCora 
+ca ancora 
+98.46 90.78 88.40 Latin-ITTB 
+la ittb 
+98.12 82.99 79.96 
+Chinese-GSD 
+zh gsd 
+93.26 82.50 77.51 Latin-PROIEL 
+la proiel 
+95.54 74.95 69.76 
+Croatian-SET 
+hr set 
+97.42 88.74 83.62 Latin-Perseus [s] 
+la perseus 
+82.36 57.21 46.28 
+Czech-CAC 
+cs cac 
+98.87 89.85 87.13 Latvian-LVTB 
+lv lvtb 
+93.53 81.06 76.13 
+Czech-FicTree 
+cs fictree 
+97.98 88.94 85.64 North Sami-Giella [s] 
+sme giella 
+87.48 65.79 58.09 
+Czech-PDT 
+cs pdt 
+98.74 89.64 87.04 Norwegian-Bokmaal 
+no bokmaal 97.73 89.83 87.57 
+Czech-PUD [p] 
+cs pud 
+96.71 87.62 82.28 Norwegian-Nynorsk 
+no nynorsk 
+97.33 89.73 87.29 
+Danish-DDT 
+da ddt 
+96.18 82.17 78.88 Norwegian-NynorskLIA [s] 
+no nynorsklia 85.22 64.14 54.31 
+Dutch-Alpino 
+nl alpino 
+95.62 86.34 82.37 Old Church Slavonic-PROIEL cu proiel 
+93.69 80.59 73.93 
+Dutch-LassySmall 
+nl lassysmall 95.21 86.46 82.14 Old French-SRCMF 
+fro srcmf 
+95.12 86.65 81.15 
+English-EWT 
+en ewt 
+95.48 87.55 84.71 Persian-Seraji 
+fa seraji 
+96.66 88.07 84.07 
+English-GUM 
+en gum 
+94.10 84.88 80.45 Polish-LFG 
+pl lfg 
+98.22 95.29 93.10 
+English-LinES 
+en lines 
+95.55 80.34 75.40 Polish-SZ 
+pl sz 
+97.05 90.98 87.66 
+English-PUD [p] 
+en pud 
+95.25 87.49 84.25 Portuguese-Bosque 
+pt bosque 
+96.76 88.67 85.71 
+Estonian-EDT 
+et edt 
+96.87 85.45 82.13 Romanian-RRT 
+ro rrt 
+97.43 88.74 83.54 
+Finnish-FTB 
+fi ftb 
+94.53 86.10 82.45 Russian-SynTagRus 
+ru syntagrus 98.51 91.00 88.91 
+Finnish-PUD [p] 
+fi pud 
+96.44 87.54 84.60 Russian-Taiga [s] 
+ru taiga 
+85.49 65.52 56.33 
+Finnish-TDT 
+fi tdt 
+96.12 86.07 82.92 Serbian-SET 
+sr set 
+97.40 89.32 85.03 
+French-GSD 
+fr gsd 
+97.11 89.45 86.43 Slovak-SNK 
+sk snk 
+95.18 85.88 81.89 
+French-Sequoia 
+fr sequoia 
+97.92 89.71 87.43 Slovenian-SSJ 
+sl ssj 
+97.79 88.26 86.10 
+French-Spoken 
+fr spoken 
+94.25 79.80 73.45 Slovenian-SST 
+sl sst [s] 
+89.50 66.14 58.13 
+Galician-CTG 
+gl ctg 
+97.12 85.09 81.93 Spanish-AnCora 
+es ancora 
+98.57 90.30 87.98 
+Galician-TreeGal [s] 
+gl treegal 
+93.66 77.71 71.63 Swedish-LinES 
+sv lines 
+95.51 83.60 78.97 
+German-GSD 
+de gsd 
+94.07 81.45 76.68 Swedish-PUD [p] 
+sv pud 
+92.10 79.53 74.53 
+Gothic-PROIEL 
+got proiel 
+93.45 79.80 71.85 Swedish-Talbanken 
+sv talbanken 96.55 86.53 83.01 
+Greek-GDT 
+el gdt 
+96.59 87.52 84.64 Turkish-IMST 
+tr imst 
+92.93 70.53 62.55 
+Hebrew-HTB 
+he htb 
+96.24 87.65 82.64 Ukrainian-IU 
+uk iu 
+95.24 83.47 79.38 
+Hindi-HDTB 
+hi hdtb 
+96.94 93.25 89.83 Urdu-UDTB 
+ur udtb 
+93.35 86.74 80.44 
+Hungarian-Szeged 
+hu szeged 
+92.07 76.18 69.75 Uyghur-UDT 
+ug udt 
+87.63 76.14 63.37 
+Indonesian-GSD 
+id gsd 
+93.29 84.64 77.71 Vietnamese-VTB 
+vi vtb 
+87.63 67.72 58.27 
+Irish-IDT [s] 
+ga idt 
+89.74 75.72 65.78 
+Average 94.49 83.11 78.18 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Downstream task scores Precision (Prec.), Recall (Rec.) and F1 for our UniMelb team. The 
+subscript in the F1 column denotes the unofficial rank of UniMelb over 17 participating teams at EPE 
+</table></figure>
+
+			<note place="foot" n="1"> https://github.com/clab/dynet</note>
+
+			<note place="foot" n="2"> https://nlp.stanford.edu/projects/glove 3 Choe and Charniak (2016) reported the highest UAS score at 95.9% and LAS score at 94.1% to date on the test set, using the Stanford conversion toolkit v3.3.0 to convert the output constituent trees into dependency representations.</note>
+
+			<note place="foot" n="4"> Hashimoto et al. (2017) showed that JMT obtains a POS tagging accuracy of 97.55% on WSJ sections 22-24.</note>
+
+			<note place="foot" n="5"> We initialize word embeddings by 100-dimensional pretrained vectors from Ginter et al. (2017). For a language where pre-trained word vectors are not available in Ginter et al. (2017), word embeddings are randomly initialized.</note>
+
+			<note place="foot" n="6"> http://universaldependencies.org/ conll18/results.html 7 http://universaldependencies.org/ conll18/results-tokens.html 8 http://universaldependencies.org/ conll18/results-words.html 9 http://universaldependencies.org/ conll18/results-sentences.html</note>
+
+			<note place="foot" n="11"> Word embeddings are initialized by the 100-dimensional pre-trained GloVe word vectors.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>This work was supported by the ARC Discovery Project DP150101550 and ARC Linkage Project LP160101469.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Improved Transition-Based Parsing and Tagging with Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Coppola</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1354" to="1359" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Globally Normalized Transition-Based Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Andor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aliaksei</forename><surname>Severyn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Presta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kuzman</forename><surname>Ganchev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2442" to="2452" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Improved Transition-based Parsing by Modeling Characters instead of Words with LSTMs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="349" to="359" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">The Biomedical event extraction downstream application</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jari</forename><surname>Björne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Filip</forename><surname>Ginter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tapio</forename><surname>Salakoski</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the EPE 2017 Shared Task</title>
+		<meeting>the EPE 2017 Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="17" to="24" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Very high accuracy and fast dependency parsing is not a contradiction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bernd</forename><surname>Bohnet</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of COLING</title>
+		<meeting>COLING</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="89" to="97" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">A TransitionBased System for Joint Part-of-Speech Tagging and Labeled Non-Projective Dependency Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bernd</forename><surname>Bohnet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joakim</forename><surname>Nivre</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP-CoNLL</title>
+		<meeting>EMNLP-CoNLL</meeting>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="1455" to="1465" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">CoNLL-X shared task on multilingual dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sabine</forename><surname>Buchholz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erwin</forename><surname>Marsi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of CoNLL</title>
+		<meeting>CoNLL</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="149" to="164" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">A Shortest Path Dependency Kernel for Relation Extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Razvan</forename><surname>Bunescu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raymond</forename><surname>Mooney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of HLT/EMNLP</title>
+		<meeting>HLT/EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="724" to="731" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">A fast and accurate dependency parser using neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="740" to="750" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Parsing as Language Modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kook</forename><surname>Do</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Choe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Charniak</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2331" to="2336" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Dependency Tree Kernels for Relation Extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aron</forename><surname>Culotta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Sorensen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="423" to="429" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">From Raw Text to Universal Dependencies -Look, No Tags!</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yan</forename><surname>Miryam De Lhoneux</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ali</forename><surname>Shao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eliyahu</forename><surname>Basirat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sara</forename><surname>Kiperwasser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Stymne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joakim</forename><surname>Goldberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nivre</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the CoNLL 2017 Shared Task</title>
+		<meeting>the CoNLL 2017 Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="207" to="217" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">The Stanford Typed Dependencies Representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marie-Catherine</forename><surname>De Marneffe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Workshop on Cross-Framework and Cross-Domain Parser Evaluation</title>
+		<meeting>the Workshop on Cross-Framework and Cross-Domain Parser Evaluation</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="1" to="8" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Deep Biaffine Attention for Neural Dependency Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Dozat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICLR</title>
+		<meeting>ICLR</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Stanford&apos;s Graph-based Neural Dependency Parser at the CoNLL 2017 Shared Task</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Dozat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peng</forename><surname>Qi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the CoNLL 2017 Shared Task</title>
+		<meeting>the CoNLL 2017 Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="20" to="30" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">TransitionBased Dependency Parsing with Stack Long ShortTerm Memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Austin</forename><surname>Matthews</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL-IJCNLP</title>
+		<meeting>ACL-IJCNLP</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="334" to="343" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Three New Probabilistic Models for Dependency Parsing: An Exploration</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><forename type="middle">M</forename><surname>Eisner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of COLING</title>
+		<meeting>COLING</meeting>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="340" to="345" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Murhaf</forename><surname>Fares</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephan</forename><surname>Oepen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jari</forename><surname>Lilja Vrelid</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Björne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Johansson</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+	<note>The</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">On the downstream utility of English universal dependency parsers</title>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the CoNLL</title>
+		<meeting>the CoNLL</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+	<note>Shared Task on Extrinsic Parser Evaluation. Shared Task. page to appear</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Quadratic-Time Dependency Parsing for Machine Translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michel</forename><surname>Galley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL-IJCNLP</title>
+		<meeting>ACL-IJCNLP</meeting>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="773" to="781" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Filip</forename><surname>Ginter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Hajič</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Juhani</forename><surname>Luotolahti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milan</forename><surname>Straka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Zeman</surname></persName>
+		</author>
+		<ptr target="http://hdl.handle.net/11234/1-1989" />
+		<title level="m">CoNLL 2017 Shared Task -Automatically Annotated Raw Texts and Word Embeddings</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">A Primer on Neural Network Models for Natural Language Processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Artificial Intelligence Research</title>
+		<imprint>
+			<biblScope unit="volume">57</biblScope>
+			<biblScope unit="page" from="345" to="420" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">How important is syntactic parsing accuracy? an empirical evaluation on rulebased sentiment analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carlos</forename><surname>Gómez-Rodríguez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iago</forename><surname>Alonso-Alonso</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Vilares</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Artificial Intelligence Review</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">A Joint ManyTask Model: Growing a Neural Network for Multiple NLP Tasks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuma</forename><surname>Hashimoto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshimasa</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Tsuruoka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="1923" to="1933" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Incremental Joint POS Tagging and Dependency Parsing in Chinese</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Hatori</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Takuya</forename><surname>Matsuzaki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yusuke</forename><surname>Miyao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun&amp;apos;ichi</forename><surname>Tsujii</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IJCNLP</title>
+		<meeting>IJCNLP</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="1216" to="1224" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Deep Unordered Composition Rivals Syntactic Methods for Text Classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohit</forename><surname>Iyyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Varun</forename><surname>Manjunatha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jordan</forename><surname>Boyd-Graber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hal</forename><surname>Daumé</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iii</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL-IJCNLP</title>
+		<meeting>ACL-IJCNLP</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1681" to="1691" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">The TrentoGothenburg opinion extraction system</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Johansson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the EPE 2017 Shared Task</title>
+		<meeting>the EPE 2017 Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="31" to="39" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Adam: A Method for Stochastic Optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Diederik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ba</surname></persName>
+		</author>
+		<idno>CoRR abs/1412.6980</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eliyahu</forename><surname>Kiperwasser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+		<title level="m">Simple and Accurate Dependency Parsing Using Bidirectional LSTM Feature Representations. Transactions of ACL</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="313" to="327" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sandra</forename><surname>Kübler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Mcdonald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joakim</forename><surname>Nivre</surname></persName>
+		</author>
+		<title level="m">Dependency Parsing. Synthesis Lectures on Human Language Technologies, Morgan &amp; cLaypool publishers</title>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Distilling an Ensemble of Greedy Dependency Parsers into One MST Parser</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adhiguna</forename><surname>Kuncoro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lingpeng</forename><surname>Kong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1744" to="1753" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">The Sherlock negation resolution downstream application</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emanuele</forename><surname>Lapponi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephan</forename><surname>Oepen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lilja</forename><surname>Øvrelid</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the EPE 2017 Shared Task</title>
+		<meeting>the EPE 2017 Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="25" to="30" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">A Discriminative Model for Joint Morphological Disambiguation and Dependency Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Naradowsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL-HLT</title>
+		<meeting>ACL-HLT</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="885" to="894" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Joint Models for Chinese POS Tagging and Dependency Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhenghua</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Min</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wanxiang</forename><surname>Che</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ting</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenliang</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Haizhou</forename><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="1180" to="1191" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Neural Probabilistic Model for Non-projective MST Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuezhe</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IJCNLP</title>
+		<meeting>IJCNLP</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="59" to="69" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Building a Large Annotated Corpus of English: The Penn Treebank</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell</forename><forename type="middle">P</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Beatrice</forename><surname>Santorini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mary</forename><forename type="middle">Ann</forename><surname>Marcinkiewicz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="313" to="330" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Online large-margin training of dependency parsers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Mcdonald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koby</forename><surname>Crammer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fernando</forename><surname>Pereira</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="91" to="98" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Online Learning of Approximate Dependency Parsing Algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Mcdonald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fernando</forename><surname>Pereira</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EACL</title>
+		<meeting>EACL</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="81" to="88" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Graham</forename><surname>Neubig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Austin</forename><surname>Matthews</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Waleed</forename><surname>Ammar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antonios</forename><surname>Anastasopoulos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Chiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Clothiaux</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Trevor</forename><surname>Cohn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Duh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Manaal</forename><surname>Faruqui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cynthia</forename><surname>Gan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Garrette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yangfeng</forename><surname>Ji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lingpeng</forename><surname>Kong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adhiguna</forename><surname>Kuncoro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gaurav</forename><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chaitanya</forename><surname>Malaviya</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Michel</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1701.03980</idno>
+		<title level="m">Swabha Swayamdipta, and Pengcheng Yin. 2017. DyNet: The Dynamic Neural Network Toolkit</title>
+		<meeting><address><addrLine>Yusuke Oda, Matthew Richardson, Naomi Saphra</addrLine></address></meeting>
+		<imprint/>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">A Novel Neural Network Model for Joint POS Tagging and Graph-based Dependency Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Dat Quoc Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Dras</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the CoNLL 2017 Shared Task</title>
+		<meeting>the CoNLL 2017 Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="134" to="142" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<monogr>
+		<title level="m" type="main">From POS tagging to dependency parsing for biomedical event extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karin</forename><surname>Dat Quoc Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Verspoor</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1808.03731</idno>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">An efficient algorithm for projective dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joakim</forename><surname>Nivre</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IWPT</title>
+		<meeting>IWPT</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<monogr>
+		<title level="m" type="main">Universal Dependencies 2.2</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joakim</forename><surname>Nivre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell</forename><surname>Abrams</surname></persName>
+		</author>
+		<ptr target="http://hdl.handle.net/11234/1-2837" />
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">The CoNLL 2007 Shared Task on Dependency Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joakim</forename><surname>Nivre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Johan</forename><surname>Hall</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sandra</forename><surname>Kübler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Mcdonald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jens</forename><surname>Nilsson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Riedel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Deniz</forename><surname>Yuret</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the CoNLL Shared Task Session of EMNLP-CoNLL</title>
+		<meeting>the CoNLL Shared Task Session of EMNLP-CoNLL</meeting>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">MaltParser: A language-independent system for data-driven dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joakim</forename><surname>Nivre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Johan</forename><surname>Hall</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jens</forename><surname>Nilsson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Atanas</forename><surname>Chanev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gülsen</forename><surname>Eryigit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sandra</forename><surname>Kübler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Svetoslav</forename><surname>Marinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erwin</forename><surname>Marsi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Natural Language Engineering</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="95" to="135" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">Shared Task on Extrinsic Parser Evaluation. Towards a reusable community infrastructure</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephan</forename><surname>Oepen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lilja</forename><surname>Øvrelid</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jari</forename><surname>Björne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Johansson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emanuele</forename><surname>Lapponi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Filip</forename><surname>Ginter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erik</forename><surname>Velldal</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the EPE 2017 Shared Task</title>
+		<meeting>the EPE 2017 Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="1" to="16" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">Glove: Global Vectors for Word Representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1532" to="1543" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">Multilingual Part-of-Speech Tagging with Bidirectional Long Short-Term Memory Models and Auxiliary Loss</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barbara</forename><surname>Plank</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="412" to="418" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<analytic>
+		<title level="a" type="main">Improving the Reproducibility of PAN&apos;s Shared Tasks: Plagiarism Detection, Author Identification, and Author Profiling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Potthast</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Gollub</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Francisco</forename><surname>Rangel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paolo</forename><surname>Rosso</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Efstathios</forename><surname>Stamatatos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Benno</forename><surname>Stein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of CLEF Initiative</title>
+		<meeting>CLEF Initiative</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="268" to="299" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<analytic>
+		<title level="a" type="main">Transforming Dependency Structures to Logical Forms for Semantic Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Siva</forename><surname>Reddy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oscar</forename><surname>Täckström</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tom</forename><surname>Kwiatkowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dipanjan</forename><surname>Das</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Steedman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mirella</forename><surname>Lapata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Transactions of ACL</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="127" to="141" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Paris and Stanford at EPE 2017: Downstream Evaluation of Graph-based Dependency Representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><surname>De La Clergerie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marie</forename><surname>Candito</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Benoit</forename><surname>Sagot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Djamé</forename><surname>Seddah</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the EPE 2017 Shared Task</title>
+		<meeting>the EPE 2017 Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="47" to="59" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<analytic>
+		<title level="a" type="main">Dropout: A Simple Way to Prevent Neural Networks from Overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b52">
+	<analytic>
+		<title level="a" type="main">Tokenizing, POS Tagging, Lemmatizing and Parsing UD 2.0 with UDPipe</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milan</forename><surname>Straka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jana</forename><surname>Straková</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the CoNLL 2017 Shared Task</title>
+		<meeting>the CoNLL 2017 Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="88" to="99" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b53">
+	<analytic>
+		<title level="a" type="main">Syntax Annotation for the GENIA Corpus</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuka</forename><surname>Tateisi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Akane</forename><surname>Yakushiji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomoko</forename><surname>Ohta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun&amp;apos;ichi</forename><surname>Tsujii</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IJCNLP: Companion Volume</title>
+		<meeting>IJCNLP: Companion Volume</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="220" to="225" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b54">
+	<analytic>
+		<title level="a" type="main">Feature-Rich Partof-Speech Tagging with a Cyclic Dependency Network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kristina</forename><surname>Toutanova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoram</forename><surname>Singer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NAACL-HLT</title>
+		<meeting>NAACL-HLT</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b55">
+	<analytic>
+		<title level="a" type="main">Structured training for neural network transition-based parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL-IJCNLP</title>
+		<meeting>ACL-IJCNLP</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="323" to="333" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b56">
+	<analytic>
+		<title level="a" type="main">Statistical dependency analysis with support vector machines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hiroyasu</forename><surname>Yamada</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuji</forename><surname>Matsumoto</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings IWPT</title>
+		<meeting>IWPT</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="195" to="206" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b57">
+	<analytic>
+		<title level="a" type="main">Joint POS Tagging and Dependence Parsing With TransitionBased Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Liner</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Meishan</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yang</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maosong</forename><surname>Sun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nan</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guohong</forename><surname>Fu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE/ACM Trans. Audio, Speech &amp; Language Processing</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1352" to="1358" />
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b58">
+	<analytic>
+		<title level="a" type="main">CoNLL 2018 Shared Task: Multilingual Parsing from Raw Text to Universal Dependencies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Zeman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Filip</forename><surname>Ginter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Hajič</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joakim</forename><surname>Nivre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Popel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milan</forename><surname>Straka</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the CoNLL</title>
+		<meeting>the CoNLL</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+	<note>Shared Task. page to appear</note>
+</biblStruct>
+
+<biblStruct xml:id="b59">
+	<analytic>
+		<title level="a" type="main">Shared Task: Multilingual Parsing from Raw Text to Universal Dependencies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Zeman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Popel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milan</forename><surname>Straka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Hajic</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joakim</forename><surname>Nivre</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the CoNLL 2017 Shared Task</title>
+		<meeting>the CoNLL 2017 Shared Task</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="1" to="19" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b60">
+	<analytic>
+		<title level="a" type="main">Dependency Parsing as Head Selection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xingxing</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianpeng</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mirella</forename><surname>Lapata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EACL</title>
+		<meeting>EACL</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="665" to="676" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b61">
+	<analytic>
+		<title level="a" type="main">Randomized greedy inference for joint segmentation, pos tagging and dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuan</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chengtao</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Regina</forename><surname>Barzilay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kareem</forename><surname>Darwish</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NAACL-HLT</title>
+		<meeting>NAACL-HLT</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="42" to="52" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b62">
+	<analytic>
+		<title level="a" type="main">Stackpropagation: Improved Representation Learning for Syntax</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuan</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1557" to="1566" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b63">
+	<analytic>
+		<title level="a" type="main">Transition-based dependency parsing with rich non-local features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yue</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joakim</forename><surname>Nivre</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings ACL-HLT</title>
+		<meeting>ACL-HLT</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="188" to="193" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

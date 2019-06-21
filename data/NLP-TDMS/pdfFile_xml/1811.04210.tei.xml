@@ -1,0 +1,1395 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:10+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Densely Connected Attention Propagation for Reading Comprehension</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yi</forename><surname>Tay</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anh</forename><surname>Luu</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tuan</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Siu</forename><forename type="middle">Cheung</forename><surname>Hui</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Su</surname></persName>
+							<affiliation key="aff1">
+								<orgName type="department">Institute for Infocomm Research</orgName>
+								<address>
+									<country key="SG">Singapore</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="institution">Nanyang Technological University</orgName>
+								<address>
+									<country key="SG">Singapore</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Densely Connected Attention Propagation for Reading Comprehension</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We propose DECAPROP (Densely Connected Attention Propagation), a new densely connected neural architecture for reading comprehension (RC). There are two distinct characteristics of our model. Firstly, our model densely connects all pairwise layers of the network, modeling relationships between passage and query across all hierarchical levels. Secondly, the dense connectors in our network are learned via attention instead of standard residual skip-connectors. To this end, we propose novel Bidirectional Attention Connectors (BAC) for efficiently forging connections throughout the network. We conduct extensive experiments on four challenging RC benchmarks. Our proposed approach achieves state-of-the-art results on all four, outperforming existing baselines by up to 2.6% − 14.2% in absolute F1 score.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>The dominant neural architectures for reading comprehension (RC) typically follow a standard 'encode-interact-point' design [ <ref type="bibr" target="#b35">Wang and Jiang, 2016;</ref><ref type="bibr" target="#b26">Seo et al., 2016;</ref><ref type="bibr" target="#b41">Xiong et al., 2016;</ref><ref type="bibr" target="#b38">Wang et al., 2017c;</ref><ref type="bibr" target="#b18">Kundu and Ng, 2018]</ref>. Following the embedding layer, a compositional encoder typically encodes Q (query) and P (passage) individually. Subsequently, an (bidirectional) attention layer is then used to model interactions between P/Q. Finally, these attended representations are then reasoned over to find (point to) the best answer span. While, there might be slight variants of this architecture, this overall architectural design remains consistent across many RC models.</p><p>Intuitively, the design of RC models often possess some depth, i.e., every stage of the network easily comprises several layers. For example, the R-NET [ <ref type="bibr" target="#b38">Wang et al., 2017c]</ref> architecture adopts three BiRNN layers as the encoder and two additional BiRNN layers at the interaction layer. BiDAF <ref type="bibr" target="#b26">[Seo et al., 2016</ref>] uses two BiLSTM layers at the pointer layer, etc. As such, RC models are often relatively deep, at the very least within the context of NLP.</p><p>Unfortunately, the depth of a model is not without implications. It is well-established fact that increasing the depth may impair gradient flow and feature propagation, making networks harder to train <ref type="bibr" target="#b9">[He et al., 2016;</ref><ref type="bibr" target="#b28">Srivastava et al., 2015;</ref>. This problem is prevalent in computer vision, where mitigation strategies that rely on shortcut connections such as Residual networks <ref type="bibr" target="#b9">[He et al., 2016]</ref>, GoogLeNet <ref type="bibr" target="#b29">[Szegedy et al., 2015]</ref> and DenseNets  were incepted. Naturally, many of the existing RC models already have some built-in designs to workaround this issue by shortening the signal path in the network. Examples include attention flow * Equal contribution 32nd Conference on Neural Information Processing Systems (NIPS 2018), Montréal, Canada.</p><p>[ <ref type="bibr" target="#b26">Seo et al., 2016]</ref>, residual connections  or simply the usage of highway encoders <ref type="bibr" target="#b28">[Srivastava et al., 2015]</ref>. As such, we hypothesize that explicitly improving information flow can lead to further and considerable improvements in RC models.</p><p>A second observation is that the flow of P/Q representations across the network are often well-aligned and 'synchronous', i.e., P is often only matched with Q at the same hierarchical stage (e.g., only after they have passed through a fixed number of encoder layers). To this end, we hypothesize that increasing the number of interaction interfaces, i.e., matching in an asynchronous, cross-hierarchical fashion, can also lead to an improvement in performance.</p><p>Based on the above mentioned intuitions, this paper proposes a new architecture with two distinct characteristics. Firstly, our network is densely connected, connecting every layer of P with every layer of Q. This not only facilitates information flow but also increases the number of interaction interfaces between P/Q. Secondly, our network is densely connected by attention, making it vastly different from any residual mitigation strategy in the literature. To the best of our knowledge, this is the first work that explicitly considers attention as a form of skip-connector.</p><p>Notably, models such as BiDAF incorporates a form of attention propagation (flow). However, this is inherently unsuitable for forging dense connections throughout the network since this would incur a massive increase in the representation size in subsequent layers. To this end, we propose efficient Bidirectional Attention Connectors (BAC) as a base building block to connect two sequences at arbitrary layers. The key idea is to compress the attention outputs so that they can be small enough to propagate, yet enabling a connection between two sequences. The propagated features are collectively passed into prediction layers, which effectively connect shallow layers to deeper layers. Therefore, this enables multiple bidirectional attention calls to be executed without much concern, allowing us to efficiently connect multiple layers together.</p><p>Overall, we propose DECAPROP (Densely Connected Attention Propagation), a novel architecture for reading comprehension. DECAPROP achieves a significant gain of 2.6% − 14.2% absolute improvement in F1 score over the existing state-of-the-art on four challenging RC datasets, namely NewsQA <ref type="bibr" target="#b33">[Trischler et al., 2016]</ref>, Quasar-T [ <ref type="bibr" target="#b5">Dhingra et al., 2017]</ref>, SearchQA <ref type="bibr" target="#b7">[Dunn et al., 2017]</ref> and NarrativeQA <ref type="bibr" target="#b17">[Kočisk`Kočisk`y et al., 2017]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Bidirectional Attention Connectors (BAC)</head><p>This section introduces the Bidirectional Attention Connectors (BAC) module which is central to our overall architecture. The BAC module can be thought of as a connector component that connects two sequences/layers.</p><p>The key goals of this module are to (1) connect any two layers of P/Q in the network, returning a residual feature that can be propagated 2 to deeper layers, (2) model cross-hierarchical interactions between P/Q and (3) minimize any costs incurred to other network components such that this component may be executed multiple times across all layers.</p><p>Let P ∈ R p×d and Q ∈ R q×d be inputs to the BAC module. The initial steps in this module remains identical to standard bi-attention in which an affinity matrix is constructed between P/Q. In our bi-attention module, the affinity matrix is computed via:</p><formula xml:id="formula_0">E ij = 1 √ d F(p i ) F(q j )<label>(1)</label></formula><p>where F(.) is a standard dense layer with ReLU activations and d is the dimensionality of the vectors. Note that this is the scaled dot-product attention from Vaswani et al. <ref type="bibr">[2017]</ref>. Next, we learn an alignment between P/Q as follows:</p><formula xml:id="formula_1">A = Softmax(E )P and B = Softmax(E)Q<label>(2)</label></formula><p>where A, B are the aligned representations of the query/passsage respectively. In many standard neural QA models, it is common to pass an augmented 3 matching vector of this attentional representation to subsequent layers. For this purpose, functions such as <ref type="bibr" target="#b35">Wang and Jiang, 2016]</ref>. However, simple/naive augmentation would not suffice in our use case. Even without augmentation, every call of bi-attention returns a new d dimensional vector for each element in the sequence. If the network has l layers, then connecting 4 all pairwise layers would require l 2 connectors and therefore an output dimension of l 2 × d. This is not only computationally undesirable but also require a large network at the end to reduce this vector. With augmentation, this problem is aggravated. Hence, standard birectional attention is not suitable here.</p><formula xml:id="formula_2">f = W ([b i ; p i ; b i p i , b i − p i ]) + b have been used [</formula><p>To overcome this limitation, we utilize a parameterized function G(.) to compress the bi-attention vectors down to scalar.</p><formula xml:id="formula_3">g p i = [G([b i ; p i ]); G(b i − p i ); G(b i p i )]<label>(3)</label></formula><p>where g p i ∈ R 3 is the output (for each element in P ) of the BAC module. This is done in an identical fashion for a i and q i to form g q i for each element in Q. Intuitively g * i where * = {p, q} are the learned scalar attention that is propagated to upper layers. Since there are only three scalars, they will not cause any problems even when executed for multiple times. As such, the connection remains relatively lightweight. This compression layer can be considered as a defining trait of the BAC, differentiating it from standard bi-attention.</p><p>Naturally, there are many potential candidates for the function G(.). One natural choice is the standard dense layer (or multiple dense layers). However, dense layers are limited as they do not compute dyadic pairwise interactions between features which inhibit its expressiveness. On the other hand, factorization-based models are known to not only be expressive and efficient, but also able to model low-rank structure well.</p><p>To this end, we adopt factorization machines (FM) <ref type="bibr" target="#b25">[Rendle, 2010]</ref> as G(.). The FM layer is defined as:</p><formula xml:id="formula_4">G(x) = w 0 + n i=1 w i x i + n i=1 n j=i+1 v i , v j x i x j (4)</formula><p>where v ∈ R d×k , w 0 ∈ R and w i ∈ R d . The output G(x) is a scalar. Intuitively, this layer tries to learn pairwise interactions between every x i and x j using factorized (vector) parameters v. In the context of our BAC module, the FM layer is trying to learn a low-rank structure from the 'match' vector (e.g.,</p><formula xml:id="formula_5">b i − p i , b i p i or [b i ; p i ])</formula><p>. Finally, we note that the BAC module takes inspiration from the main body of our CAFE model <ref type="bibr" target="#b30">[Tay et al., 2017]</ref> for entailment classification. However, this work demonstrates the usage and potential of the BAC as a residual connector. . BAC supports connecting two sequence layers with attention and produces connectors that can be propagated to deeper layers of the network.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Densely Connected Attention Propagation (DECAPROP)</head><p>In this section, we describe our proposed model in detail. <ref type="figure" target="#fig_1">Figure 2</ref> depicts a high-level overview of our proposed architecture.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Contextualized Input Encoder</head><p>The inputs to our model are two sequences P and Q which represent passage and query respectively. Given Q, the task of the RC model is to select a sequence of tokens in P as the answer. Following many RC models, we enhance the input representations with (1) character embeddings (passed into a BiRNN encoder), (2) a binary match feature which denotes if a word in the query appears in the passage (and vice versa) and (3) a normalized frequency score denoting how many times a word appears in the passage. The Char BiRNN of h c dimensions, along with two other binary features, is concatenated with the word embeddings w i ∈ R dw , to form the final representation of d w + h c + 2 dimensions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Densely Connected Attention Encoder (DECAENC)</head><p>The DECAENC accepts the inputs P and Q from the input encoder. DECAENC is a multi-layered encoder with k layers. For each layer, we pass P/Q into a bidirectional RNN layer of h dimensions. Next, we apply our attention connector (BAC) to H P /H Q ∈ R where H represents the hidden state outputs from the BiRNN encoder where the RNN cell can either be a GRU or LSTM encoder. Let d be the input dimensions of P and Q, then this encoder goes through a process of d → h → h+3 → h in which the BiRNN at layer l + 1 consumes the propagated features from layer l.</p><p>Intuitively, this layer models P/Q whenever they are at the same network hierarchical level. At this point, we include 'asynchronous' (cross hierarchy) connections between P and Q. Let P i , Q i denote the representations of P, Q at layer i. We apply the Bidirectional Attention Connectors (BAC) as follows:</p><formula xml:id="formula_6">Z ij p , Z ij q = F C (P i , Q j ) ∀ i, j = 1, 2 · · · n<label>(5)</label></formula><p>where F C represents the BAC component. This densely connects all representations of P and Q across multiple layers. Z ij * ∈ R 3× represents the generated features for each ij combination of P/Q. In total, we obtain 3n 2 compressed attention features for each word. Intuitively, these features capture fine-grained relationships between P/Q at different stages of the network flow. The output of the encoder is the concatenation of all the BiRNN hidden states H 1 , H 2 · · · H k and Z * which is a matrix of (nh + 3n 2 ) × dimensions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Densely Connected Core Architecture (DECACORE)</head><p>This section introduces the core architecture of our proposed model. This component corresponds to the interaction segment of standard RC model architecture.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Gated Attention</head><p>The outputs of the densely connected encoder are then passed into a standard gated attention layer. This corresponds to the 'interact' component in many other popular RC models that models Q/P interactions with attention. While there are typically many choices of implementing this layer, we adopt the standard gated bi-attention layer following <ref type="bibr" target="#b38">[Wang et al., 2017c]</ref>.</p><formula xml:id="formula_7">S = 1 √ d F(P ) (F(Q)<label>(6)</label></formula><p>¯ P = Softmax(S)Q (7)</p><formula xml:id="formula_8">P = BiRNN(σ(W g ([P ; ¯ P ]) + b g ) P )<label>(8)</label></formula><p>where σ is the sigmoid function and F (.) are dense layers with ReLU activations. The output P is the query-dependent passage representation.</p><p>Gated Self-Attention Next, we employ a self-attention layer, applying Equation (8) yet again on P , matching P against itself to form B, the output representation of the core layer. The key idea is that self-attention models each word in the query-dependent passsage representation against all other words, enabling each word to benefit from a wider global view of the context.</p><p>Dense Core At this point, we note that there are two intermediate representations of P , i.e., one after the gated bi-attention layer and one after the gated self-attention layer. We denote them as U 1 , U 2 respectively. Unlike the Densely Connected Attention Encoder, we no longer have two representations at each hierarchical level since they have already been 'fused'. Hence, we apply a one-sided BAC to all permutations of [U 1 , U 2 ] and Q i , ∀i = 1, 2 · · · k. Note that the one-sided BAC only outputs values for the left sequence, ignoring the right sequence.</p><formula xml:id="formula_9">R kj = F C (U j , Q k ) ∀ k = 1, 2 · · · n, ∀j = 1, 2<label>(9)</label></formula><p>where R kj ∈ R 3× represents the connection output and F C is the one-sided BAC function. All values of R kj , ∀j = 1, 2 , ∀k = 1, 2 · · · n are concatenated to form a matrix R of (2n × 6) × , which is then concatenated with U 2 to form M ∈ R p×(d+12n) . This final representation is then passed to the answer prediction layer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Answer Pointer and Prediction Layer</head><p>Next, we pass M through a stacked BiRNN model with two layers and obtain two representations, H † 1 and H † 2 respectively.</p><formula xml:id="formula_10">H † 1 = BiRNN(M ) and H † 2 = BiRNN(H † 1 )<label>(10)</label></formula><p>The start and end pointers are then learned via:</p><formula xml:id="formula_11">p 1 = Softmax(w 1 H † 1 ) and p 2 = Softmax(w 2 H † 2 )<label>(11)</label></formula><p>where w 1 , w 2 ∈ R d are parameters of this layer. To train the model, following prior work, we minimize the sum of negative log probabilities of the start and end indices:</p><formula xml:id="formula_12">L(θ) = − 1 N N i log(p 1 y 1 i ) + log(p 2 y 2 i )<label>(12)</label></formula><p>where N is the number of samples, y 1 i , y 2 i are the true start and end indices. p k is the k-th value of the vector p. The test span is chosen by finding the maximum value of p 1 k , p 2 l where k ≤ l.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Experiments</head><p>This section describes our experiment setup and empirical results.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Datasets and Competitor Baselines</head><p>We conduct experiments on four challenging QA datasets which are described as follows:</p><p>NewsQA This challenging RC dataset <ref type="bibr" target="#b33">[Trischler et al., 2016]</ref> comprises 100k QA pairs. Passages are relatively long at about 600 words on average. This dataset has also been extensively used in benchmarking RC models. On this dataset, the key competitors are BiDAF <ref type="bibr" target="#b26">[Seo et al., 2016]</ref>, Match-LSTM [ <ref type="bibr" target="#b35">Wang and Jiang, 2016]</ref>, FastQA/FastQA-Ext , R2-BiLSTM <ref type="bibr" target="#b39">[Weissenborn, 2017]</ref>, AMANDA <ref type="bibr" target="#b18">[Kundu and Ng, 2018]</ref>. NarrativeQA <ref type="bibr" target="#b17">[Kočisk`Kočisk`y et al., 2017]</ref> is a recent QA dataset that involves comprehension over stories. We use the summaries setting 5 which is closer to a standard QA or reading comprehension setting. We compare with the baselines in the original paper, namely Seq2Seq, Attention Sum Reader and BiDAF. We also compare with the recent BiAttention + MRU model <ref type="bibr" target="#b32">[Tay et al., 2018b]</ref>.</p><formula xml:id="formula_13">Quasar-T</formula><p>As compared to the popular SQuAD dataset <ref type="bibr" target="#b24">[Rajpurkar et al., 2016]</ref>, these datasets are either (1) more challenging <ref type="bibr">6</ref> , involves more multi-sentence reasoning or <ref type="formula" target="#formula_1">(2)</ref> is concerned with searching across multiple documents in an 'open domain' setting (SearchQA/Quasar-T). Hence, these datasets accurately reflect real world applications to a greater extent. However, we regard the concatenated documents as a single context for performing reading comprehension. The evaluation metrics are the EM (exact match) and F1 score. Note that for all datasets, we compare all models solely on the RC task. Therefore, for fair comparison we do not compare with algorithms that use a second-pass answer re-ranker [ <ref type="bibr" target="#b37">Wang et al., 2017b]</ref>. Finally, to ensure that our model is not a failing case of SQuAD, and as requested by reviewers, we also include development set scores of our model on SQuAD.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Experimental Setup</head><p>Our model is implemented in Tensorflow <ref type="bibr" target="#b0">[Abadi et al., 2015]</ref>. The sequence lengths are capped at 800/700/1500/1100 for NewsQA, SearchQA, Quasar-T and NarrativeQA respectively. We use Adadelta <ref type="bibr" target="#b44">[Zeiler, 2012]</ref> with α = 0.5 for NewsQA, Adam <ref type="bibr" target="#b16">[Kingma and Ba, 2014]</ref> with α = 0.001 for SearchQA, Quasar-T and NarrativeQA. The choice of the RNN encoder is tuned between GRU and LSTM cells and the hidden size is tuned amongst {32, 50, 64, 75}. We use the CUDNN implementation of the RNN encoder. Batch size is tuned amongst {16, 32, 64}. Dropout rate is tuned amongst {0.1, 0.2, 0.3} and applied to all RNN and fully-connected layers. We apply variational dropout <ref type="bibr" target="#b8">[Gal and Ghahramani, 2016]</ref> in-between RNN layers. We initialize the word embeddings with 300D GloVe embeddings <ref type="bibr" target="#b21">[Pennington et al., 2014]</ref> and are fixed during training. The size of the character embeddings is set to 8 and the character RNN is set to the same as the word-level RNN encoders. The maximum characters per word is set to 16. The number of layers in DECAENC is set to 3 and the number of factors in the factorization kernel is set to 64. We use a learning rate decay factor of 2 and patience of 3 epochs whenever the EM (or ROUGE-L) score on the development set does not increase.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Results</head><p>Overall, our results are optimistic and promising, with results indicating that DECAPROP achieves state-of-the-art performance 7 on all four datasets.     <ref type="bibr">al., 2018]</ref> 73.6 82.7 <ref type="table">Table 6</ref>: Single model dev scores (published scores) of some representative models on SQuAD.</p><p>NewsQA <ref type="table">Table 1</ref> reports the results on NewsQA. On this dataset, DECAPROP outperforms the existing state-of-the-art, i.e., the recent AMANDA model by (+4.7% EM / +2.6% F1). Notably, AMANDA is a strong neural baseline that also incorporates gated self-attention layers, along with question-aware pointer layers. Moreover, our proposed model also outperforms well-established baselines such as Match-LSTM (+18% EM / +16.3% F1) and BiDAF (+16% EM / +14% F1).</p><p>Quasar-T <ref type="table">Table 2</ref> reports the results on Quasar-T. Our model achieves state-of-the-art performance on this dataset, outperforming the state-of-the-art R 3 (Reinforced Ranker Reader) by a considerable margin of +4.4% EM / +6% F1. Performance gain over standard baselines such as BiDAF and GA are even larger (&gt; 15% F1).</p><p>SearchQA <ref type="table" target="#tab_3">Table 3 and Table 4</ref> report the results 8 on SearchQA. On the original setting, our model outperforms AMANDA by +15.4% EM and +14.2% in terms of F1 score. On the overall setting, our model outperforms both AQA (+18.1% EM / +18% F1) and Reinforced Reader Ranker (+7.8% EM / +8.3% F1). Both models are reinforcement learning based extensions of existing strong baselines such as BiDAF and Match-LSTM.</p><p>NarrativeQA <ref type="table">Table 5</ref> reports the results on NarrativeQA. Our proposed model outperforms all baseline systems (Seq2Seq, ASR, BiDAF) in the original paper. On average, there is a ≈ +5% improvement across all metrics.</p><p>SQuAD <ref type="table">Table 6</ref> reports dev scores 9 of our model against several representative models on the popular SQuAD benchmark. While our model does not achieve state-of-the-art performance, our model can outperform the base R-NET (both our implementation as well as the published score). Our model achieves reasonably competitive performance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Ablation Study</head><p>We conduct an ablation study on the NewsQA development set ( <ref type="table" target="#tab_5">Table 7</ref>). More specifically, we report the development scores of seven ablation baselines. In (1), we removed the entire DECAPROP architecture, reverting it to an enhanced version of the original R-NET model <ref type="bibr">10</ref> . In (2), we removed DECACORE and passed U 2 to the answer layer instead of M . In <ref type="formula" target="#formula_3">(3)</ref>, we removed the DECAENC layer and used a 3-layered BiRNN instead. In (4), we kept the DECAENC but only compared layer of the same hierarchy and omitted cross hierarchical comparisons. In <ref type="formula" target="#formula_6">(5)</ref>, we removed the Gated Bi-Attention and Gated Self-Attention layers. Removing these layers simply allow previous layers to pass through. In (6-7), we varied n, the number of layers of DECAENC. Finally, in (8-9), we varied the FM with linear and nonlinear feed-forward layers.   From (1), we observe a significant gap in performance between DECAPROP and R-NET. This demonstrates the effectiveness of our proposed architecture. Overall, the key insight is that all model components are crucial to DECAPROP. Notably, the DECAENC seems to contribute the most to the overall performance. Finally, <ref type="figure">Figure 8</ref> shows the performance plot of the development EM metric (NewsQA) over training. We observe that the superiority of DECAPROP over R-NET is consistent and relatively stable. This is also observed across other datasets but not reported due to the lack of space.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Related Work</head><p>In recent years, there has been an increase in the number of annotated RC datasets such as SQuAD Early testing of our model was actually done on SQuAD. However, since taking part on the heavily contested public leaderboard requires more computational resources than we could muster, we decided to focus on other datasets. In lieu of reviewer requests, we include preliminary results of our model on SQuAD dev set.</p><p>10 For fairer comparison, we make several enhancements to the R-NET model as follows: (1) We replaced the additive attention with scaled dot-product attention similar to ours. (2) We added shortcut connections after the encoder layer. (3) We replaced the original Pointer networks with our BiRNN Pointer Layer. We found that these enhancements consistently lead to improved performance. The original R-NET performs at ≈ 2% lower on NewsQA.</p><p>[ <ref type="bibr" target="#b19">Lai et al., 2017]</ref>. Spurred on by the avaliability of data, many neural models have also been proposed to tackle these challenges. These models include BiDAF <ref type="bibr" target="#b26">[Seo et al., 2016]</ref>, Match-LSTM <ref type="bibr" target="#b35">[Wang and Jiang, 2016]</ref>, DCN/DCN+ <ref type="bibr" target="#b41">[Xiong et al., 2016</ref>, R-NET [ <ref type="bibr" target="#b38">Wang et al., 2017c]</ref>, DrQA , AoA Reader <ref type="bibr" target="#b3">[Cui et al., 2016]</ref>, Reinforced Mnemonic Reader [ <ref type="bibr" target="#b10">Hu et al., 2017]</ref>, ReasoNet <ref type="bibr" target="#b27">[Shen et al., 2017]</ref>, AMANDA <ref type="bibr" target="#b18">[Kundu and Ng, 2018]</ref>, R 3 Reinforced Reader Ranker [ <ref type="bibr" target="#b36">Wang et al., 2017a]</ref> and QANet . Many of these models innovate at either (1) the bidirectional attention layer (BiDAF, DCN), (2) invoking multi-hop reasoning (Mnemonic Reader, ReasoNet), (3) reinforcement learning (R 3 , DCN+), (4) self-attention (AMANDA, R-NET, QANet) and finally, (5) improvements at the encoder level (QANet). While not specifically targeted at reading comprehension, a multitude of pretraining schemes <ref type="bibr" target="#b20">[McCann et al., 2017;</ref><ref type="bibr" target="#b22">Peters et al., 2018;</ref><ref type="bibr" target="#b23">Radford et al.;</ref><ref type="bibr" target="#b4">Devlin et al., 2018]</ref> have recently proven to be very effective for language understanding tasks.</p><p>Our work is concerned with densely connected networks aimed at improving information flow <ref type="bibr" target="#b28">Srivastava et al., 2015;</ref><ref type="bibr" target="#b29">Szegedy et al., 2015]</ref>. While most works are concerned with computer vision tasks or general machine learning, there are several notable works in the NLP domain. <ref type="bibr" target="#b6">Ding et al. [2018]</ref> proposed Densely Connected BiLSTMs for standard text classification tasks. <ref type="bibr" target="#b31">[Tay et al., 2018a]</ref> proposed a co-stacking residual affinity mechanims that includes all pairwise layers of a text matching model in the affinity matrix calculation. In the RC domain, DCN+  used Residual Co-Attention encoders. QANet  used residual self-attentive convolution encoders. While the usage of highway/residual networks is not an uncommon sight in NLP, the usage of bidirectional attention as a skip-connector is new. Moreover, our work introduces new cross-hierarchical connections, which help to increase the number of interaction interfaces between P/Q.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Conclusion</head><p>We proposed a new Densely Connected Attention Propagation (DECAPROP) mechanism. For the first time, we explore the possibilities of using birectional attention as a skip-connector. We proposed Bidirectional Attention Connectors (BAC) for efficient connection of any two arbitary layers, producing connectors that can be propagated to deeper layers. This enables a shortened signal path, aiding information flow across the network. Additionally, the modularity of the BAC allows it to be easily equipped to other models and even other domains. Our proposed architecture achieves state-of-the-art performance on four challenging QA datasets, outperforming strong and competitive baselines such as Reinforced Reader Ranker (R 3 ), AMANDA, BiDAF and R-NET.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: High level overview of our proposed Bidrectional Attention Connectors (BAC). BAC supports connecting two sequence layers with attention and produces connectors that can be propagated to deeper layers of the network.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Overview of our proposed model architecture</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Dev</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>[</head><label></label><figDesc>Rajpurkar et al., 2016], NewsQA [Trischler et al., 2016], TriviaQA [Joshi et al., 2017] and RACE 9</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Evaluation on original setting, Unigram 
+Accuracy and N-gram F1 scores on SearchQA 
+dataset. 
+
+Dev 
+Test 
+EM 
+F1 
+EM 
+F1 
+BiDAF 
+31.7 37.9 28.6 34.6 
+AQA 
+40.5 47.4 38.7 45.6 
+R 3 
+N/A N/A 49.0 55.3 
+DECAPROP 58.8 65.5 56.8 63.6 
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Evaluation on Exact Match and F1 Metrics 
+on SearchQA dataset. 
+
+Test / Validation 
+BLEU-1 
+BLEU-4 
+METEOR 
+ROUGE-L 
+Seq2Seq 
+15.89 / 16.10 
+1.26 / 1.40 
+4.08 / 4.22 
+13.15 / 13.29 
+Attention Sum Reader 23.20 / 23.54 
+6.39 / 5.90 
+7.77 / 8.02 
+22.26 / 23.28 
+BiDAF 
+33.72 / 33.45 15.53 / 15.69 15.38 / 15.68 36.30 / 36.74 
+BiAttention + MRU 
+-/ 36.55 
+-/19.79 
+-/ 17.87 
+-/ 41.44 
+DECAPROP 
+42.00 / 44.35 23.42 / 27.61 23.42 / 21.80 40.07 / 44.69 
+Table 5: Evaluation on NarrativeQA (Story Summaries). 
+
+Model 
+EM 
+F1 
+DCN [Xiong et al., 2016] 
+66.2 75.9 
+DCN + CoVE [McCann et al., 2017] 
+71.3 79.9 
+R-NET (Wang et al.) [Wang et al., 2017c] 72.3 80.6 
+R-NET (Our re-implementation) 
+71.9 79.6 
+DECAPROP (This paper) 
+72.9 81.4 
+QANet [Yu et </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 7 :</head><label>7</label><figDesc></figDesc><table>Ablation study on NewsQA development 
+set. 
+
+0 
+4 
+8 
+12 
+16 
+20 
+24 
+28 
+
+(pRch 
+
+20 
+
+25 
+
+30 
+
+35 
+
+40 
+
+45 
+
+50 
+
+(xDct 0Dtch ((0) 
+
+DecD3rRp 
+5-1(T 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 8 :</head><label>8</label><figDesc></figDesc><table>Development EM score (DECAPROP versus 
+R-NET) on NewsQA. 
+
+</table></figure>
+
+			<note place="foot" n="2"> Notably, signals still have to back-propagate through the BAC parameters. However, this still enjoys the benefits when connecting far away layers and also by increasing the number of pathways. 3 This refers to common element-wise operations such as the subtraction or multiplication.</note>
+
+			<note place="foot" n="4"> See encoder component of Figure 2 for more details.</note>
+
+			<note place="foot" n="5"> Notably, a new SOTA was set by [Hu et al., 2018] after the NIPS submission deadline. 6 This is claimed by authors in most of the dataset papers. 7 As of NIPS 2018 submission deadline.</note>
+
+			<note place="foot" n="8"> The original SearchQA paper [Dunn et al., 2017], along with AMANDA [Kundu and Ng, 2018] report results on Unigram Accuracy and N-gram F1. On the other hand, [Buck et al., 2017] reports results on overall EM/F1 metrics. We provide comparisons on both.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Acknowledgements</head><p>This paper is partially supported by Baidu I 2 R Research Centre, a joint laboratory between Baidu and A-Star I 2 R. The authors would like to thank the anonymous reviewers of NIPS 2018 for their valuable time and feedback!</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">TensorFlow: Large-scale machine learning on heterogeneous systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martín</forename><surname>Abadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Agarwal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Barham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Brevdo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhifeng</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Craig</forename><surname>Citro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andy</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Dean</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthieu</forename><surname>Devin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sanjay</forename><surname>Ghemawat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ian</forename><surname>Goodfellow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Harp</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Irving</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Isard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yangqing</forename><surname>Jia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Manjunath</forename><surname>Kudlur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Josh</forename><surname>Levenberg</surname></persName>
+		</author>
+		<ptr target="http://tensorflow.org/.Softwareavailablefromtensorflow.org" />
+		<editor>Kunal Talwar, Paul Tucker, Vincent Vanhoucke, Vijay Vasudevan, Fernanda Viégas, Oriol Vinyals, Pete Warden, Martin Wattenberg, Martin Wicke, Yuan Yu, and Xiaoqiang Zheng</editor>
+		<imprint>
+			<date type="published" when="2015" />
+			<pubPlace>Dan Mané, Rajat Monga, Sherry Moore, Derek Murray, Chris Olah, Mike Schuster, Jonathon Shlens, Benoit Steiner, Ilya Sutskever</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Ask the right questions: Active question reformulation with reinforcement learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Buck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jannis</forename><surname>Bulian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Massimiliano</forename><surname>Ciaramita</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrea</forename><surname>Gesmundo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Neil</forename><surname>Houlsby</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wojciech</forename><surname>Gajewski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Wang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.07830</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Reading wikipedia to answer opendomain questions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Fisch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.00051</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Attention-over-attention neural networks for reading comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yiming</forename><surname>Cui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhipeng</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Si</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shijin</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ting</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guoping</forename><surname>Hu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.04423</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Bert: Pre-training of deep bidirectional transformers for language understanding</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Devlin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming-Wei</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kristina</forename><surname>Toutanova</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Quasar: Datasets for question answering by search and reading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bhuwan</forename><surname>Dhingra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kathryn</forename><surname>Mazaitis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William W</forename><surname>Cohen</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.03904</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Densely connected bidirectional lstm with applications to sentence classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zixiang</forename><surname>Ding</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rui</forename><surname>Xia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfei</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiang</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Yang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1802.00889</idno>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Searchqa: A new q&amp;a dataset augmented with context from a search engine</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Dunn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Levent</forename><surname>Sagun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Higgins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ugur</forename><surname>Guney</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Volkan</forename><surname>Cirik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.05179</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">A theoretically grounded application of dropout in recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yarin</forename><surname>Gal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zoubin</forename><surname>Ghahramani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1019" to="1027" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Deep residual learning for image recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kaiming</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiangyu</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shaoqing</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Sun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE conference on computer vision and pattern recognition</title>
+		<meeting>the IEEE conference on computer vision and pattern recognition</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="770" to="778" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Mnemonic reader for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minghao</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuxing</forename><surname>Peng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xipeng</forename><surname>Qiu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.02798</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Attention-guided answer distillation for machine reading comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minghao</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuxing</forename><surname>Peng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Furu</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhen</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dongsheng</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nan</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Zhou</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1808.07644</idno>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Densely connected convolutional networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gao</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhuang</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Laurens</forename><surname>Van Der Maaten</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kilian</forename><forename type="middle">Q</forename><surname>Weinberger</surname></persName>
+		</author>
+		<idno type="doi">doi:10.1109/CVPR.2017.243</idno>
+		<ptr target="https://doi.org/10.1109/CVPR.2017.243" />
+	</analytic>
+	<monogr>
+		<title level="m">2017 IEEE Conference on Computer Vision and Pattern Recognition</title>
+		<meeting><address><addrLine>Honolulu, HI, USA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2017-07-21" />
+			<biblScope unit="page" from="2261" to="2269" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Triviaqa: A large scale distantly supervised challenge dataset for reading comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mandar</forename><surname>Joshi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eunsol</forename><surname>Choi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Daniel S Weld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zettlemoyer</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.03551</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Text understanding with the attention sum reader network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rudolf</forename><surname>Kadlec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Schmid</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ondrej</forename><surname>Bajgar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Kleindienst</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.01547</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Laurent Charlin, and Chris Pal. Focused hierarchical rnns for conditional sequence processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nan</forename><forename type="middle">Rosemary</forename><surname>Ke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Konrad</forename><surname>Zolna</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Sordoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhouhan</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Trischler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joelle</forename><surname>Pineau</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1806.04342</idno>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Diederik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ba</surname></persName>
+		</author>
+		<idno>abs/1412.6980</idno>
+		<imprint>
+			<date type="published" when="2014" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomáš</forename><surname>Kočisk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">`</forename><surname>Kočisk`y</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename><surname>Schwarz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karl</forename><forename type="middle">Moritz</forename><surname>Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gábor</forename><surname>Melis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1712.07040</idno>
+		<title level="m">The narrativeqa reading comprehension challenge</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title level="m" type="main">A question-focused multi-factor attention network for question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Souvik</forename><surname>Kundu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hwee Tou</forename><surname>Ng</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Race: Large-scale reading comprehension dataset from examinations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guokun</forename><surname>Lai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qizhe</forename><surname>Xie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hanxiao</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yiming</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.04683</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Learned in translation: Contextualized word vectors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bryan</forename><surname>Mccann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="6294" to="6305" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2014 Conference on Empirical Methods in Natural Language Processing<address><addrLine>Doha, Qatar</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2014-10-25" />
+			<biblScope unit="page" from="1532" to="1543" />
+		</imprint>
+	</monogr>
+	<note>A meeting of SIGDAT, a Special Interest Group of the ACL</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Matthew E Peters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohit</forename><surname>Neumann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matt</forename><surname>Iyyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Gardner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zettlemoyer</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1802.05365</idno>
+		<title level="m">Deep contextualized word representations</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Improving language understanding by generative pre-training</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alec</forename><surname>Radford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karthik</forename><surname>Narasimhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Salimans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">Squad: 100,000+ questions for machine comprehension of text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pranav</forename><surname>Rajpurkar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Konstantin</forename><surname>Lopyrev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.05250</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Factorization machines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steffen</forename><surname>Rendle</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE 10th International Conference on</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="995" to="1000" />
+		</imprint>
+	</monogr>
+	<note>Data Mining (ICDM)</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Bidirectional attention flow for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minjoon</forename><surname>Seo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aniruddha</forename><surname>Kembhavi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ali</forename><surname>Farhadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hannaneh</forename><surname>Hajishirzi</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01603</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Reasonet: Learning to stop reading in machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yelong</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Po-Sen</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Weizhu</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 23rd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining</title>
+		<meeting>the 23rd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="1047" to="1055" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh Kumar</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Greff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<idno>abs/1505.00387</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Szegedy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yangqing</forename><surname>Jia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pierre</forename><surname>Sermanet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Scott</forename><surname>Reed</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dragomir</forename><surname>Anguelov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dumitru</forename><surname>Erhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent</forename><surname>Vanhoucke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Rabinovich</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+	<note>et al. Going deeper with convolutions</note>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+		<title level="m" type="main">A compare-propagate architecture with alignment factorization for natural language inference</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yi</forename><surname>Tay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anh</forename><surname>Luu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Siu Cheung</forename><surname>Tuan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hui</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1801.00102</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Co-stack residual affinity networks with multi-level attention refinement for matching text sequences</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yi</forename><surname>Tay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anh</forename><forename type="middle">Tuan</forename><surname>Luu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Siu Cheung</forename><surname>Hui</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2018 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2018 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+			<biblScope unit="page" from="4492" to="4502" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<title level="m" type="main">Multi-range reasoning for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yi</forename><surname>Tay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anh</forename><surname>Luu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Siu Cheung</forename><surname>Tuan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hui</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1803.09074</idno>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Trischler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tong</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xingdi</forename><surname>Yuan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Justin</forename><surname>Harris</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Sordoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philip</forename><surname>Bachman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kaheer</forename><surname>Suleman</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.09830</idno>
+		<title level="m">Newsqa: A machine comprehension dataset</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Attention is all you need</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Vaswani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Niki</forename><surname>Parmar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jakob</forename><surname>Uszkoreit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Llion</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aidan</forename><forename type="middle">N</forename><surname>Gomez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Łukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Illia</forename><surname>Polosukhin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="6000" to="6010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title level="m" type="main">Machine comprehension using match-lstm and answer pointer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shuohang</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jing</forename><surname>Jiang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.07905</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shuohang</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mo</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaoxiao</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiguo</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Klinger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shiyu</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gerald</forename><surname>Tesauro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jing</forename><surname>Jiang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1709.00023</idno>
+		<title level="m">R3: Reinforced reader-ranker for open-domain question answering</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+		<title level="m" type="main">Evidence aggregation for answer re-ranking in open-domain question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shuohang</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mo</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jing</forename><surname>Jiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaoxiao</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shiyu</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiguo</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Klinger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gerald</forename><surname>Tesauro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Murray</forename><surname>Campbell</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1711.05116</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Gated self-matching networks for reading comprehension and question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenhui</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nan</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Furu</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Baobao</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Zhou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="189" to="198" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+		<title level="m" type="main">Reading twice for natural language understanding</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dirk</forename><surname>Weissenborn</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1706.02596</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<monogr>
+		<title level="m" type="main">Making neural qa as simple as possible but not simpler</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dirk</forename><surname>Weissenborn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Georg</forename><surname>Wiese</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Laura</forename><surname>Seiffe</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1703.04816</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<monogr>
+		<title level="m" type="main">Dynamic coattention networks for question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno>abs/1611.01604</idno>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<monogr>
+		<title level="m" type="main">Dcn+: Mixed objective and deep residual coattention for question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victor</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1711.00106</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<monogr>
+		<title level="m" type="main">Qanet: Combining local convolution with global self-attention for reading comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adams</forename><forename type="middle">Wei</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Dohan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minh-Thang</forename><surname>Luong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rui</forename><surname>Zhao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohammad</forename><surname>Norouzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc V</forename><surname>Le</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1804.09541</idno>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Matthew D Zeiler</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1212.5701</idno>
+		<title level="m">Adadelta: an adaptive learning rate method</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

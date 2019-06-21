@@ -1,0 +1,1154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:05+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Closed-Book Training to Improve Summarization Encoder Memory</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+				<date>October 31 -November 4, 2018</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yichen</forename><surname>Jiang</surname></persName>
+							<email>yichenj@cs.unc.edu</email>
+							<affiliation key="aff0">
+								<orgName type="institution">UNC Chapel Hill</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohit</forename><surname>Bansal</surname></persName>
+							<email>mbansal@cs.unc.edu</email>
+							<affiliation key="aff0">
+								<orgName type="institution">UNC Chapel Hill</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Closed-Book Training to Improve Summarization Encoder Memory</title>
+					</analytic>
+					<monogr>
+						<title level="m">Proceedings of the 2018 Conference on Empirical Methods in Natural Language Processing</title>
+						<meeting>the 2018 Conference on Empirical Methods in Natural Language Processing <address><addrLine>Brussels; Belgium</addrLine></address>
+						</meeting>
+						<imprint>
+							<biblScope unit="page" from="4067" to="4077"/>
+							<date type="published">October 31 -November 4, 2018</date>
+						</imprint>
+					</monogr>
+					<note>4067</note>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>A good neural sequence-to-sequence summa-rization model should have a strong encoder that can distill and memorize the important information from long input texts so that the de-coder can generate salient summaries based on the encoder&apos;s memory. In this paper, we aim to improve the memorization capabilities of the encoder of a pointer-generator model by adding an additional &apos;closed-book&apos; decoder without attention and pointer mechanisms. Such a decoder forces the encoder to be more selective in the information encoded in its memory state because the decoder can&apos;t rely on the extra information provided by the attention and possibly copy modules, and hence improves the entire model. On the CNN/Daily Mail dataset, our 2-decoder model outperforms the baseline significantly in terms of ROUGE and METEOR metrics, for both cross-entropy and reinforced setups (and on human evaluation). Moreover, our model also achieves higher scores in a test-only DUC-2002 generalizability setup. We further present a memory ability test, two saliency metrics, as well as several sanity-check ab-lations (based on fixed-encoder, gradient-flow cut, and model capacity) to prove that the en-coder of our 2-decoder model does in fact learn stronger memory representations than the baseline encoder.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Text summarization is the task of condensing a long passage to a shorter version that only covers the most salient information from the original text. Extractive summarization models <ref type="bibr">(Jing and McK- eown, 2000;</ref><ref type="bibr" target="#b19">Knight and Marcu, 2002;</ref><ref type="bibr" target="#b6">Clarke and Lapata, 2008;</ref><ref type="bibr" target="#b9">Filippova et al., 2015</ref>) directly pick words, phrases, and sentences from the source text to form a summary, while an abstractive model generates (samples) words from a fixed-size vocabulary instead of copying from text directly.</p><p>Original Text (truncated): a family have claimed the body of an infant who was discovered deceased and buried on a sydney beach last year , in order to give her a proper funeral . on november 30 , 2014 , two young boys were playing on maroubra beach when they uncovered the body of a baby girl buried under 30 centimetres of sand . now locals filomena d'alessandro and bill green have claimed the infant 's body in order to provide her with a fitting farewell . 'we're local and my husband is a police officer and he's worked with many of the officers investigating it , ' ms d'alessandro told daily mail australia . scroll down for video . a sydney family have claimed the body of a baby girl who was found buried on maroubra beach ( pictured ) on november 30 , 2014 . filomena d'alessandro and bill green have claimed the infant 's remains , who they have named lily grace , in order to provide her with a fitting farewell . ' above all as a mother i wanted to do something for that little girl , ' she added . since january the couple , who were married last year and have three children between them , have been trying to claim the baby after they heard police were going to give her a ' destitute burial ' ...</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Pointer-Generator baseline:</head><p>a sydney family have claimed the body of a baby girl was found buried on maroubra beach on november <ref type="bibr">30 , 2014</ref> . locals filomena d'alessandro and bill green have claimed the infant 's body in order to provide her with a fitting farewell . now locals have claimed the infant 's body in order to provide her with a fitting farewell .</p><p>Pointer-Generator + closed-book decoder: two young boys were playing on maroubra beach when they uncovered the body of a baby girl buried under 30 centimetres of sand . now locals filomena d'alessandro and bill green have claimed the infant 's body in order to provide her with a fitting farewell . ` above all as a mother i wanted to do something for that little girl , ' she added .</p><p>Reference summary: sydney family claimed the remains of a baby found on maroubra beach . filomena d'alessandro and bill green have vowed to give her a funeral . the baby 's body was found by two boys , buried in sand on november 30 . the infant was found about 20-30 metres from the water 's edge . police were unable to identify the baby girl or her parents .</p><p>Figure 1: Baseline model repeats itself twice (italic), and fails to find all salient information (highlighted in red in the original text) from the source text that is covered by our 2-decoder model. The summary generated by our 2-decoder model also recovers most of the information mentioned in the reference summary (highlighted in blue in the reference summary).</p><p>The last few years have seen significant progress on both extractive and abstractive approaches, of which a large number of studies are fueled by neural sequence-to-sequence models ( <ref type="bibr" target="#b32">Sutskever et al., 2014</ref>). One popular formulation of such models is an RNN/LSTM encoder that encodes the source passage to a fixed-size memory-state vector, and another RNN/LSTM decoder that generates the summary from this memory state. This paradigm is enhanced by attention mechanism ( <ref type="bibr" target="#b0">Bahdanau et al., 2015</ref>) and pointer network ( , such that the decoder can refer to (and weigh) all the encod-ing steps' hidden states or directly copy words from the source text, instead of relying solely on encoder's final memory state for all information about the source passage. Recent studies <ref type="bibr" target="#b30">(Rush et al., 2015;</ref><ref type="bibr" target="#b40">Zeng et al., 2016;</ref><ref type="bibr" target="#b14">Gu et al., 2016b;</ref><ref type="bibr" target="#b15">Gulcehre et al., 2016;</ref><ref type="bibr" target="#b31">See et al., 2017</ref>) have demonstrated success with such seq-attention-seq and pointer models in summarization tasks.</p><p>While the advantage of attention and pointer models compared to vanilla sequence-to-sequence models in summarization is well supported by previous studies, these models still struggle to find the most salient information in the source text when generating summaries. This is because summarization, being different from other textto-text generation tasks (where there is an almost one-to-one correspondence between input and output words, e.g., machine translation), requires the sequence-attention-sequence model to additionally decide where to attend and where to ignore, thus demanding a strong encoder that can determine the importance of different words, phrases, and sentences and flexibly encode salient information in its memory state. To this end, we propose a novel 2-decoder architecture by adding another 'closed book' decoder without attention layer to a popular pointer-generator baseline, such that the 'closed book' decoder and pointer decoder share an encoder. We argue that this additional 'closed book' decoder encourages the encoder to be better at memorizing salient information from the source passage, and hence strengthen the entire model. We provide both intuition and evidence for this argument in the following paragraphs.</p><p>Consider the following case. Two students are learning to do summarization from scratch. During training, both students can first scan through the passage once (encoder's pass). Then student A is allowed to constantly look back (attention) at the passage when writing the summary (similar to a pointer-generator model), while student B has to occasionally write the summary without looking back (similar to our 2-decoder model with a non-attention/copy decoder). During the final test, both students can look at the passage while writing summaries. We argue that student B will write more salient summaries in the test because s/he learns to better distill and memorize important information in the first scan/pass by not looking back at the passage in training.</p><p>In terms of back-propagation intuition, during the training of a seq-attention-seq model (e.g., <ref type="bibr" target="#b31">See et al. (2017)</ref>), most gradients are back-propagated from the decoder to the encoder's hidden states through the attention layer. This encourages the encoder to correctly encode salient words at the corresponding encoding steps, but does make sure that this information is not forgotten (overwritten in the memory state) by the encoder afterward. However, for a plain LSTM (closed-book) decoder without attention, its generated gradient flow is back-propagated to the encoder through the memory state, which is the only connection between itself and the encoder, and this, therefore, encourages the encoder to encode only the salient, important information in its memory state. Hence, to achieve this desired effect, we jointly train the two decoders, which share one encoder, by optimizing the weighted sum of their losses. This approximates the training routine of student B because the sole encoder has to perform well for both decoders. During inference, we only employ the pointer decoder due to its copying advantage over the closed-book decoder, similar to the situation of student B being able to refer back to the passage during the test for best performance (but is still trained hard to do well in both situations). <ref type="figure">Fig. 1</ref> shows an example of our 2-decoder summarizer generating a summary that covers the original passage with more saliency than the baseline model.</p><p>Empirically, we test our 2-decoder architecture on the CNN/Daily Mail dataset ( <ref type="bibr" target="#b17">Hermann et al., 2015;</ref>), and our model surpasses the strong pointer-generator baseline significantly on both ROUGE <ref type="bibr" target="#b20">(Lin, 2004</ref>) and ME-TEOR <ref type="bibr" target="#b7">(Denkowski and Lavie, 2014</ref>) metrics, as well as based on human evaluation. This holds true both for a cross-entropy baseline as well as a stronger, policy-gradient based reinforcement learning setup <ref type="bibr" target="#b37">(Williams, 1992)</ref>. Moreover, our 2-decoder models (both cross-entropy and reinforced) also achieve reasonable improvements on a test-only generalizability/transfer setup on the DUC-2002 dataset.</p><p>We further present a series of numeric and qualitative analysis to understand whether the improvements in these automatic metric scores are in fact due to the enhanced memory and saliency strengths of our encoder. First, by evaluating the representation power of the encoder's final memory state after reading long passages (w.r.t. the memory state after reading ground-truth summaries) via a cosine-similarity test, we prove that our 2-decoder model indeed has a stronger encoder with better memory ability. Next, we conduct three sets of ablation studies based on fixedencoder, gradient-flow cut, and model capacity to show that the stronger encoder is the reason behind the significant improvements in ROUGE and ME-TEOR scores. Finally, we show that summaries generated by our 2-decoder model are qualitatively better than baseline summaries as the former achieved higher scores on two saliency metrics (based on cloze-Q&amp;A blanks and a keyword classifier) than the baseline summaries, while maintaining similar length and better avoiding repetitions. This directly demonstrates our 2-decoder model's enhanced ability to memorize and recover important information from the input document, which is our main contribution in this paper.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>Extractive and Abstractive Summarization: Early models for automatic text summarization were usually extractive <ref type="bibr" target="#b18">(Jing and McKeown, 2000;</ref><ref type="bibr" target="#b19">Knight and Marcu, 2002;</ref><ref type="bibr">Clarke and La- pata, 2008;</ref><ref type="bibr" target="#b9">Filippova et al., 2015</ref>). For abstractive summarization, different early non-neural approaches were applied, based on graphs <ref type="bibr">(Gian- nakopoulos, 2009;</ref><ref type="bibr" target="#b10">Ganesan et al., 2010)</ref>, discourse trees <ref type="bibr" target="#b11">(Gerani et al., 2014</ref>), syntactic parse trees ( <ref type="bibr" target="#b4">Cheung and Penn, 2014;</ref><ref type="bibr" target="#b35">Wang et al., 2013)</ref>, and a combination of linguistic compression and topic detection ( <ref type="bibr" target="#b39">Zajic et al., 2004</ref>). Recent neuralnetwork models have tackled abstractive summarization using methods such as hierarchical encoders and attention, coverage, and distraction ( <ref type="bibr" target="#b30">Rush et al., 2015;</ref><ref type="bibr">Nal- lapati et al., 2016;</ref><ref type="bibr" target="#b3">Chen et al., 2016;</ref><ref type="bibr" target="#b33">Takase et al., 2016</ref>) as well as various initial large-scale, shortlength summarization datasets like DUC-2004 and Gigaword.  adapted the CNN/Daily Mail ( <ref type="bibr" target="#b17">Hermann et al., 2015</ref>) dataset for long-text summarization, and provided an abstractive baseline using attentional sequence-tosequence model. Pointer Network for Summarization: Pointer networks ( ) are useful for summarization models because summaries often need to copy/contain a large number of words that have appeared in the source text. This provides the advantages of both extractive and abstractive approaches, and usually includes a gating function to model the distribution for the extended vocabulary including the pre-set vocabulary and words from the source text ( <ref type="bibr" target="#b40">Zeng et al., 2016;</ref><ref type="bibr" target="#b14">Gu et al., 2016b;</ref><ref type="bibr" target="#b15">Gulcehre et al., 2016;</ref><ref type="bibr" target="#b22">Miao and Blunsom, 2016)</ref>. <ref type="bibr" target="#b31">See et al. (2017)</ref> used a soft gate to control model's behavior of copying versus generating. They further applied coverage mechanism and achieved the state-of-the-art results on CNN/Daily Mail dataset. Memory Enhancement: Some recent works ( <ref type="bibr" target="#b36">Wang et al., 2016;</ref><ref type="bibr" target="#b13">Gu et al., 2016a</ref>) have studied enhancing the memory capacity of sequence-to-sequence models. They studied this problem in Neural Machine Translation by keeping an external memory state analogous to data in the Von Neumann architecture, while the instructions are represented by the sequenceto-sequence model. Our work is novel in that we aim to improve the internal long-term memory of the encoder LSTM by adding a closed-book decoder that has no attention layer, yielding a more efficient internal memory that encodes only important information from the source text, which is crucial for the task of long-document summarization. Reinforcement Learning: Teacher forcing style maximum likelihood training suffers from exposure bias ( , so recent works instead apply reinforcement learning style policy gradient algorithms (REINFORCE <ref type="bibr" target="#b37">(Williams, 1992)</ref>) to directly optimize on metric scores ( <ref type="bibr" target="#b16">Henß et al., 2015;</ref><ref type="bibr" target="#b26">Paulus et al., 2018)</ref>. Reinforced models that employ this method have achieved good results in a number of tasks including image captioning ( <ref type="bibr" target="#b28">Ranzato et al., 2016)</ref>, machine translation ( <ref type="bibr" target="#b1">Bahdanau et al., 2016;</ref><ref type="bibr" target="#b24">Norouzi et al., 2016)</ref>, and text summarization ( <ref type="bibr" target="#b28">Ranzato et al., 2016;</ref><ref type="bibr" target="#b26">Paulus et al., 2018</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Models</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Pointer-Generator Baseline</head><p>The pointer-generator network proposed in <ref type="bibr" target="#b31">See et al. (2017)</ref> can be seen as a hybrid of extractive and abstractive summarization models. At each decoding step, the model can either sample a word from its vocabulary, or copy a word directly from the source passage. This is enabled by the attention mechanism ( <ref type="bibr" target="#b0">Bahdanau et al., 2015)</ref>, which includes a distribution a i over all encoding steps, and a context vector c t that is the weighted sum of encoder's hidden states. The attention mechanism  <ref type="figure">Figure 2</ref>: Our 2-decoder summarization model with a pointer decoder and a closed-book decoder, both sharing a single encoder (this is during training; next, at inference time, we only employ the memory-enhanced encoder and the pointer decoder). is modeled as:</p><formula xml:id="formula_0">e t i = v T tanh(W h h i + W s s t + b attn ) a t i = softmax(e t i ); c t = i a t i h i<label>(1)</label></formula><p>where v, W h , W s , and b attn are learnable parameters. h i is encoder's hidden state at i th encoding step, and s t is decoder's hidden state at t th decoding step. The distribution a t i can be seen as the amount of attention at decode step t towards the i th encoder state. Therefore, the context vector c t is the sum of the encoder's hidden states weighted by attention distribution a t .</p><p>At each decoding step, the previous context vector c t−1 is concatenated with current input x t , and fed through a non-linear recurrent function along with the previous hidden state s t−1 to produce the new hidden state s t . The context vector c t is then calculated according to Eqn. 1 and concatenated with the decoder state s t to produce the logits for the vocabulary distribution P vocab at decode step t:</p><formula xml:id="formula_1">P t vocab = softmax(V 2 (V 1 [s t , c t ]+b 1 )+b 2 ), where V 1 , V 2 , b 1 , b 2</formula><p>are learnable parameters. To enable copying out-of-vocabulary words from source text, a pointer similar to  is built upon the attention distribution and controlled by the generation probability p gen :</p><formula xml:id="formula_2">p t gen = σ(U c c t + U s s t + U x x t + b ptr ) P t attn (w) = p t gen P t vocab (w) + (1 − p t gen ) i:w i =w a t i</formula><p>where U c , U s , U x , and b ptr are learnable parameters. x t and s t are the input token and decoder's state at t th decoding step. σ is the sigmoid function. We can see p gen as a soft gate that controls the model's behavior of copying from text with attention distribution a t i versus sampling from vocabulary with generation distribution P t vocab .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Closed-Book Decoder</head><p>As shown in Eqn. 1, the attention distribution a i depends on decoder's hidden state s t , which is derived from decoder's memory state c t . If c t does not encode salient information from the source text or encodes too much unimportant information, the decoder will have a hard time to locate relevant encoder states with attention. However, as explained in the introduction, most gradients are back-propagated through attention layer to the encoder's hidden state h t , not directly to the final memory state, and thus provide little incentive for the encoder to memorize salient information in c t . Therefore, to enhance encoder's memory, we add a closed-book decoder, which is a unidirectional LSTM decoder without attention/pointer layer. The two decoders share a single encoder and word-embedding matrix, while out-of-vocabulary (OOV) words are simply represented as <ref type="bibr">[UNK]</ref> for the closed-book decoder. The entire 2-decoder model is represented in <ref type="figure">Fig. 2</ref>. During training, we optimize the weighted sum of negative log likelihoods from the two decoders:</p><formula xml:id="formula_3">L XE = 1 T T t=1 − ((1 − γ) log P t attn (w|x 1:t ) + γ log P t cbdec (w|x 1:t ))<label>(2)</label></formula><p>where P cbdec is the generation probability from the closed-book decoder. The mix ratio γ is tuned on the validation set.  <ref type="table">Table 1</ref>: ROUGE F1 and METEOR scores (noncoverage) on CNN/Daily Mail test set of previous works and our models. 'pg' is the pointer-generator baseline, and 'pg + cbdec' is our 2-decoder model with closed-book decoder(cbdec). The model marked with is trained and evaluated on the anonymized version of the data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Reinforcement Learning</head><p>In the reinforcement learning setting, our summarization model is the policy network that generates words to form a summary. Following <ref type="bibr" target="#b26">Paulus et al. (2018)</ref>, we use a self-critical policy gradient training algorithm ( <ref type="bibr" target="#b29">Rennie et al., 2016;</ref><ref type="bibr" target="#b37">Williams, 1992</ref>) for both our baseline and 2-decoder model. For each passage, we sample a summary y s = w s 1:T +1 , and greedily generate a summaryˆysummaryˆ summaryˆy = ˆ w 1:T +1 by selecting the word with the highest probability at each step. Then these two summaries are fed to a reward function r, which is the ROUGE-L scores in our case. The RL loss function is:</p><formula xml:id="formula_4">L RL = 1 T T t=1</formula><p>(r(ˆ y) − r(y s )) log P t attn (w s t+1 |w s 1:t )</p><p>where the reward for the greedily-generated summary (r(ˆ y)) acts as a baseline to reduce variance. We train our reinforced model using the mixture of Eqn. 3 and Eqn. 2, since <ref type="bibr" target="#b26">Paulus et al. (2018)</ref> showed that a pure RL objective would lead to summaries that receive high rewards but are not fluent. The final mixed loss function for RL is:</p><formula xml:id="formula_6">L XE+RL = λL RL +(1−λ)L XE ,</formula><p>where the value of λ is tuned on the validation set.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Experimental Setup</head><p>We evaluate our models mainly on CNN/Daily Mail dataset ( <ref type="bibr" target="#b17">Hermann et al., 2015;</ref><ref type="bibr">Nallap- ati et al., 2016)</ref>, which is a large-scale, longparagraph summarization dataset. It has online news articles (781 tokens or ~40 sentences on average) with paired human-generated summaries (56 tokens or 3.75 sentences on average). The    <ref type="bibr" target="#b31">See et al. (2017)</ref>, which is the original text with no preprocessing to replace named entities. We also use DUC-2002, which is also a long-paragraph summarization dataset of news articles. This dataset has 567 articles and 1~2 summaries per article.</p><p>All the training details (e.g., vocabulary size, RNN dimension, optimizer, batch size, learning rate, etc.) are provided in the supplementary materials.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Results</head><p>We first report our evaluation results on CNN/Daily Mail dataset.</p><p>As shown in Table 1, our 2-decoder model achieves statistically significant improvements 1 upon the pointergenerator baseline (pg), with +1.51, +0.74, and +0.96 points advantage in ROUGE-1, ROUGE-2 and ROUGE-L <ref type="bibr" target="#b20">(Lin, 2004)</ref>, and +1.43 points advantage in METEOR <ref type="bibr" target="#b7">(Denkowski and Lavie, 2014</ref>). In the reinforced setting, our 2-decoder model still maintains significant (p &lt; 0.001) Reference summary: mitchell moffit and greg brown from asapscience present theories. different personality traits can vary according to expectations of parents. beyoncé, hillary clinton and j. k. rowling are all oldest children.</p><p>Pointer-Gen baseline: the kardashians are a strong example of a large celebrity family where the siblings share very different personality traits. on asapscience on youtube, the pair discuss how being the first, middle, youngest, or an only child affects us.</p><p>Pointer-Gen + closed-book decoder: the kardashians are a strong example of a large celebrity family where the siblings share very different personality traits. on asapscience on youtube , the pair discuss how being the first, middle, youngest, or an only child affects us. the personality traits are also supposedly affected by whether parents have high expectations and how strict they were.  advantage in all metrics over the pointer-generator baseline.</p><p>We further add the coverage mechanism as in <ref type="bibr" target="#b31">See et al. (2017)</ref> to both baseline and 2-decoder model, and our 2-decoder model (pg + cbdec) again receives significantly higher 2 scores than the original pointer-generator (pg) from <ref type="bibr" target="#b31">See et al. (2017)</ref> and our own pg baseline, in all ROUGE and METEOR metrics (see <ref type="table" target="#tab_3">Table 2</ref>). In the reinforced setting, our 2-decoder model (RL + pg + cbdec) outperforms our strong RL baseline (RL + pg) by a considerable margin (stat. significance of p &lt; 0.001). <ref type="figure">Fig. 1</ref> and <ref type="figure" target="#fig_0">Fig. 3</ref> show two examples of our 2-decoder model generating summaries that cover more salient information than those generated by the pointer-generator baseline (see supplementary materials for more example summaries).</p><p>We also evaluate our 2-decoder model with coverage on the DUC-2002 test-only generalizability/transfer setup by decoding the entire dataset with our models pre-trained on CNN/Daily Mail, again achieving decent improvements (shown in <ref type="table" target="#tab_4">Table 3</ref>) over the single-decoder baseline as well as <ref type="bibr" target="#b31">See et al. (2017)</ref>, in both a cross-entropy and a reinforcement learning setup. <ref type="bibr">2</ref> All our improvements in <ref type="table" target="#tab_3">Table 2</ref> are statistically significant with p &lt; 0.001, and have a 95% ROUGE-significance interval of at most ±0.25.</p><formula xml:id="formula_7">similarity pg (baseline) 0.817 pg + cbdec (γ = 1 2 ) 0.869 pg + cbdec (γ = 2 3 ) 0.889 pg + cbdec (γ = 5 6 )</formula><p>0.872 pg + cbdec (γ = 10 11 )</p><p>0.860 <ref type="table">Table 5</ref>: Cosine-similarity between memory states after two forward passes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Human Evaluation</head><p>We also conducted a small-scale human evaluation study by randomly selecting 100 samples from the CNN/DM test set and then asking human annotators to rank the baseline summaries versus the 2-decoder's summaries (randomly shuffled to anonymize model identity) according to an overall score based on readability (grammar, fluency, coherence) and relevance (saliency, redundancy, correctness). As shown in <ref type="table" target="#tab_5">Table 4</ref>, our 2-decoder model outperforms the pointer-generator baseline (stat. significance of p &lt; 0.03).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Analysis</head><p>In this section, we present a series of analysis and tests in order to understand the improvements of the 2-decoder models reported in the previous section, and to prove that it fulfills our intuition that the closed-book decoder improves the encoder's ability to encode salient information in the memory state.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Memory Similarity Test</head><p>To verify our argument that the closed-book decoder improves the encoder's memory ability, we design a test to numerically evaluate the representation power of encoder's final memory state. We perform two forward passes for each encoder (2-decoder versus pointer-generator baseline). For the first pass, we feed the entire article to the encoder and collect the final memory state; for the second pass we feed the ground-truth summary to the encoder and collect the final memory state. Then we calculate the cosine similarity between these two memory-state vectors. For an optimal summarization model, its encoder's memory state after reading the entire article should be highly similar to its memory state after reading the ground truth summary (which contains all the important information), because this shows that when reading a long passage, the model is only encoding important information in its memory and forgets the unimportant information. The results in <ref type="table">Table 5</ref> show that the encoder of our 2-decoder model achieves significantly (p &lt; 0.001) higher article-summary similarity score than the encoder of a pointer-generator baseline. This observation verifies our hypothesis that the closed-book decoder can improve the memory ability of the encoder.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Ablation Studies and Sanity Check</head><p>Fixed-Encoder Ablation: Next, we conduct an ablation study in order to prove the qualitative superiority of our 2-decoder model's encoder to the baseline encoder. To do this, we train two pointergenerators with randomly initialized decoders and word embeddings. For the first model, we restore the pre-trained encoder from our pointer-generator baseline; for the second model, we restore the pretrained encoder from our 2-decoder model. We then fix the encoder's parameters for both models during the training, only updating the embeddings and decoders with gradient descent. As shown in the upper half of <ref type="table" target="#tab_7">Table 6</ref>, the pointer-generator with our 2-decoder model's encoder receives significantly higher (p &lt; 0.001) scores in ROUGE than the pointer-generator with baseline's encoder.</p><p>Since these two models have the exact same structure with only the encoders initialized according to different pre-trained models, the significant improvements in metric scores suggest that our 2-decoder model does have a stronger encoder than the pointer-generator baseline. Gradient-Flow-Cut Ablation: We further design another ablation test to identify how the gradients from the closed-book decoder influence the entire model during training. <ref type="figure" target="#fig_2">Fig. 4</ref> demonstrates the forward pass (solid line) and gradient flow (dashed line) between encoder, decoders, and embeddings in our 2-decoder model. As we can see, the closedbook decoder only depends on the word embeddings and encoder. Therefore it can affect the entire model during training by influencing either the encoder or the word-embedding matrix. When we stop the gradient flow between the encoder and closed-book decoder ( 1 in <ref type="figure" target="#fig_2">Fig. 4)</ref>, and keep the flow between closed-book decoder and embedding matrix ( 2 in <ref type="figure" target="#fig_2">Fig. 4</ref>), we observe non-significant improvements in ROUGE compared to the baseline. On the other hand, when we stop the gradient flow at 2 and keep 1 , the improvements are statistically significant (p &lt; 0.01) (see the lower half    of <ref type="table" target="#tab_7">Table 6</ref>). This proves that the gradients backpropagated from closed-book decoder to the encoder can strengthen the entire model, and hence verifies the gradient-flow intuition discussed in introduction (Sec. 1).</p><p>Model Capacity: To validate and sanity-check that the improvements are the result of the inclusion of our closed-book decoder and not due to some trivial effects of having two decoders or larger model capacity (more parameters), we train a variant of our model with two duplicated (initialized to be different) attention-pointer decoders. We also evaluate a pointer-generator baseline with 2-layer encoder and decoder (pg-2layer) and increase the LSTM hidden dimension and word embedding dimension of the pointer-generator baseline (pg-big) to exceed the total number of parameters of our 2-decoder model (34.5M versus 34.4M parameters). <ref type="table" target="#tab_9">Table 7</ref> shows that neither of these variants can match our 2-decoder model in terms of ROUGE and METEOR scores, and hence proves that the improvements of our model are indeed because of the closed-book decoder rather than due to simply having more parameters. <ref type="bibr">3</ref> Mixed-loss Ratio Ablation: We also present eval-    uation results (on the CNN/Daily Mail validation set) of our 2-decoder models with different closedbook-decoder:pointer-decoder mixed-loss ratio (γ in Eqn. 2) in <ref type="table" target="#tab_10">Table 8</ref>. The model achieves the best ROUGE and METEOR scores at γ = 2 3 . Comparing <ref type="table" target="#tab_10">Table 8 with Table 5</ref>, we observe a similar trend between the increasing ROUGE/METEOR scores and increasing memory cosine-similarities, which suggests that the performance of a pointergenerator is strongly correlated with the representation power of the encoder's final memory state.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Saliency and Repetition</head><p>Finally, we show that our 2-decoder model can make use of this better encoder memory state to summarize more salient information from the source text, as well as to avoid generating unnecessarily lengthy and repeated sentences besides achieving significant improvements on ROUGE and METEOR metrics. Saliency: To evaluate saliency, we design a keyword-matching test based on the original CNN/Daily Mail cloze blank-filling task <ref type="bibr">(Her- mann et al., 2015)</ref>. Each news article in the dataset is marked with a few cloze-blank keywords that represent salient entities, including names, locations, etc. We count the number of keywords that appear in our generated summaries, and found that the output of our best teacher-forcing model (pg+cbdec with coverage) contains 62.1% of those keywords, while the output provided by <ref type="bibr" target="#b31">See et al. (2017)</ref>    parison is shown in the first column of <ref type="table" target="#tab_12">Table 9</ref>. We also use the saliency metric in <ref type="bibr" target="#b25">Pasunuru and Bansal (2018)</ref>, which finds important words detected via a keyword classifier (trained on the SQuAD dataset ( <ref type="bibr" target="#b27">Rajpurkar et al., 2016)</ref>). The results are shown in the second column of Table 9. Both saliency tests again demonstrate our 2-decoder model's ability to memorize important information and address them properly in the generated summary. <ref type="figure">Fig. 1</ref> and <ref type="figure" target="#fig_0">Fig. 3</ref> show two examples of summaries generated by our 2-decoder model compared to baseline summaries. Summary Length: On average, summaries generated by our 2-decoder model have 66.42 words per summary, while the pointer-generator-baseline summaries have 65.88 words per summary (and the same effect holds true for RL models, where there is less than 1-word difference in average length). This shows that our 2-decoder model is able to achieve higher saliency with similar-length summaries (i.e., it is not capturing more salient content simply by generating longer summaries).</p><p>Repetition: We observe that out 2-decoder model can generate summaries that are less redundant compared to the baseline, when both models are not trained with coverage mechanism. <ref type="table" target="#tab_13">Table 10</ref> shows the percentage of repeated n-grams/sentences in summaries generated by the pointer-generator baseline and our 2-decoder model. Abstractiveness: Abstractiveness is another major challenge for current abstractive summarization models other than saliency. Since our baseline is an abstractive model, we measure the percentage of novel n-grams (n=2, 3, 4) in our generated summaries, and find that our 2-decoder model generates 1.8%, 4.8%, 7.6% novel n-grams while our baseline summaries have 1.6%, 4.4%, 7.1% on the same test set. Even though generating more abstractive summaries is not our focus in this paper, we still show that our improvements in metric and saliency scores are not obtained at the cost of making the model more extractive.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.4">Discussion: Connection to Multi-Task Learning</head><p>Our 2-decoder model somewhat resembles a Multi-Task Learning (MTL) model, in that both try to improve the model with extra knowledge that is not available to the original single-task baseline. While our model uses MTL-style parameter sharing to introduce extra knowledge from the same dataset, traditional Multi-Task Learning usually employs additional/out-of-domain auxiliary tasks/datasets as related knowledge (e.g., translation with 2 language-pairs). Our 2-decoder model is more about how to learn to do a single task from two different points of view, as the pointer decoder is a hybrid of extractive and abstractive summarization models (primary view), and the closedbook decoder is trained for abstractive summarization only (auxiliary view). The two decoders share their encoder and embeddings, which helps enrich the encoder's final memory state representation. Moreover, as shown in Sec. 6.2, our 2-decoder model (pg + cbdec) significantly outperforms the 2-duplicate-decoder model (pg + ptrdec) as well as single-decoder models with more layers/parameters, hence proving that our design of the auxiliary view (closed-book decoder doing abstractive summarization) is the reason behind the improved performance, rather than some simplistic effects of having a 2-decoder ensemble or higher #parameters.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Conclusion</head><p>We presented a 2-decoder sequence-to-sequence architecture for summarization with a closed-book decoder that helps the encoder to better memorize salient information from the source text. On CNN/Daily Mail dataset, our proposed model significantly outperforms the pointer-generator baselines in terms of ROUGE and METEOR scores (in both a cross-entropy (XE) setup and a reinforcement learning (RL) setup). It also achieves improvements in a test-only transfer setup on the DUC-2002 dataset in both XE and RL cases. We further showed that our 2-decoder model indeed has a stronger encoder with better memory capabilities, and can generate summaries with more salient information from the source text. To the best of our knowledge, this is the first work that studies the "representation power" of the encoders final state in an encoder-decoder model. Furthermore, our simple, insightful 2-decoder architecture can also be useful for other tasks that require long-term memory from the encoder, e.g., long-context QA/dialogue and captioning for long videos.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: The summary generated by our 2-decoder model covers salient information (highlighted in red) mentioned in the reference summary, which is not presented in the baseline summary.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>ROUGE</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Solid lines represent the forward pass, and dashed lines represent the gradient flow in backpropagation. For the two ablation tests, we stop the gradient at 1 and 2 respectively.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>ROUGE</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 :</head><label>2</label><figDesc>ROUGE F1 and METEOR scores (with- coverage) on the CNN/Daily Mail test set. Cover- age mechanism (See et al., 2017) is used in all mod- els except the RL model (Paulus et al., 2018). The model marked with is trained and evaluated on the anonymized version of the data.</figDesc><table>ROUGE 
+MTR 
+1 
+2 
+L 
+Full 
+pg (See17) 
+37.22 15.78 33.90 13.69 
+pg (baseline) 
+37.15 15.68 33.92 13.65 
+pg + cbdec 
+37.59 16.84 34.43 13.82 
+RL + pg 
+39.92 16.71 36.13 15.12 
+RL + pg + cbdec 41.48 18.69 37.71 15.88 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 3 :</head><label>3</label><figDesc>ROUGE F1 and METEOR scores on DUC- 2002 (test-only transfer setup). entire dataset has 287,226 training pairs, 13,368 validation pairs and 11,490 test pairs. We use the same version of data as</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Human evaluation for our 2-decoder model 
+versus the pointer-generator baseline. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head>Table 6 :</head><label>6</label><figDesc></figDesc><table>ROUGE F1 scores of ablation studies, evalu-
+ated on CNN/Daily Mail validation set. 
+
+Encoder 
+
+Pointer/attention 
+decoder 
+
+Closed-book decoder 
+
+Word embeddings 
+
+1 
+2 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_9" validated="false"><head>Table 7 :</head><label>7</label><figDesc></figDesc><table>ROUGE F1 and METEOR scores of sanity 
+check ablations, evaluated on CNN/DM validation set. 
+
+ROUGE 
+1 
+2 
+L 
+γ = 0 
+37.73 16.52 34.49 
+γ = 1/2 
+38.09 16.71 34.89 
+γ = 2/3 
+38.87 16.93 35.38 
+γ = 5/6 
+38.21 16.69 34.81 
+γ = 10/11 37.99 16.39 
+34.7 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_10" validated="false"><head>Table 8 :</head><label>8</label><figDesc></figDesc><table>ROUGE F1 scores on CNN/DM validation 
+set, of 2-decoder models with different values of the 
+closed-book-decoder:pointer-decoder mixed loss ratio. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_12" validated="false"><head>Table 9 : Saliency scores based on CNN/Daily</head><label>9</label><figDesc></figDesc><table>Mail 
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_13" validated="false"><head>Table 10 :</head><label>10</label><figDesc></figDesc><table>Percentage of repeated 3, 4, 5-grams and sen-
+tences in generated summaries. 
+
+</table></figure>
+
+			<note place="foot" n="1"> Our improvements in Table 1 are statistically significant with p &lt; 0.001 (using bootstrapped randomization test with 100k samples (Efron and Tibshirani, 1994)) and have a 95% ROUGE-significance interval of at most ±0.25.</note>
+
+			<note place="foot" n="3"> It is also important to point out that our model is not a 2-decoder ensemble, because we use only the pointer decoder during inference. Therefore, the number of parameters used for inference is the same as the pointer-generator baseline.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Acknowledgement</head><p>We thank the reviewers for their helpful comments. This work was supported by DARPA (YFA17-D17AP00022), Google Faculty Research Award, Bloomberg Data Science Research Grant, Nvidia GPU awards, and Amazon AWS. The views contained in this article are those of the authors and not of the funding agency.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Neural Machine Translation by Jointly Learning to Align and Translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Third International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">An actor-critic algorithm for sequence prediction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philemon</forename><surname>Brakel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kelvin</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anirudh</forename><surname>Goyal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Lowe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joelle</forename><surname>Pineau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Scheduled sampling for sequence prediction with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samy</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Navdeep</forename><surname>Jaitly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1171" to="1179" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Distraction-based neural networks for modeling documents</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qian</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodan</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhenhua</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Si</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hui</forename><surname>Jiang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IJCAI</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Unsupervised sentence enhancement for automatic summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jackie</forename><forename type="middle">Chi</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kit</forename><surname>Cheung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gerald</forename><surname>Penn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2014 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="775" to="786" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Abstractive sentence summarization with attentive recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Auli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander M</forename><surname>Rush</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2016 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 2016 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="93" to="98" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Global inference for sentence compression: An integer linear programming approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Clarke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mirella</forename><surname>Lapata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Artificial Intelligence Research</title>
+		<imprint>
+			<biblScope unit="volume">31</biblScope>
+			<biblScope unit="page" from="399" to="429" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Meteor universal: Language specific translation evaluation for any target language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Denkowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alon</forename><surname>Lavie</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ninth workshop on statistical machine translation</title>
+		<meeting>the ninth workshop on statistical machine translation</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="376" to="380" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">An introduction to the bootstrap</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bradley</forename><surname>Efron</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Robert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tibshirani</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1994" />
+			<publisher>CRC press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Sentence compression by deletion with lstms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Katja</forename><surname>Filippova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Enrique</forename><surname>Alfonseca</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carlos</forename><forename type="middle">A</forename><surname>Colmenares</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="360" to="368" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Opinosis: a graph-based approach to abstractive summarization of highly redundant opinions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kavita</forename><surname>Ganesan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chengxiang</forename><surname>Zhai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiawei</forename><surname>Han</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 23rd international conference on computational linguistics</title>
+		<meeting>the 23rd international conference on computational linguistics</meeting>
+		<imprint>
+			<publisher>ACL</publisher>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="340" to="348" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Abstractive summarization of product reviews using discourse structure</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shima</forename><surname>Gerani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yashar</forename><surname>Mehdad</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Giuseppe</forename><surname>Carenini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Raymond</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bita</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nejat</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2014 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="page" from="1602" to="1613" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Automatic summarization from multiple documents</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">George</forename><surname>Giannakopoulos</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+<note type="report_type">Ph. D. dissertation</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Guided sequence-to-sequence learning with external rule memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiatao</forename><surname>Gu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Baotian</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hang</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><forename type="middle">K</forename><surname>Victor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Incorporating copying mechanism in sequence-to-sequence learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiatao</forename><surname>Gu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hang</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><forename type="middle">K</forename><surname>Victor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Pointing the unknown words</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caglar</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sungjin</forename><surname>Ahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ramesh</forename><surname>Nallapati</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">A reinforcement learning approach for adaptive single-and multi-document summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Henß</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Margot</forename><surname>Mieskes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iryna</forename><surname>Gurevych</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">GSCL</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="3" to="12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Teaching machines to read and comprehend</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karl</forename><surname>Moritz Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Kocisky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lasse</forename><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Will</forename><surname>Kay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mustafa</forename><surname>Suleyman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1693" to="1701" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Cut and paste based text summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hongyan</forename><surname>Jing</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kathleen</forename><forename type="middle">R</forename><surname>Mckeown</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 1st North American Chapter of the Association for Computational Linguistics Conference, NAACL 2000</title>
+		<meeting>the 1st North American Chapter of the Association for Computational Linguistics Conference, NAACL 2000<address><addrLine>Stroudsburg, PA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="178" to="185" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Summarization beyond sentence extraction: A probabilistic approach to sentence compression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Knight</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Marcu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Artificial Intelligence</title>
+		<imprint>
+			<biblScope unit="volume">139</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="91" to="107" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Rouge: A package for automatic evaluation of summaries</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chin-Yew</forename><surname>Lin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Text summarization branches out: Proceedings of the ACL-04 workshop</title>
+		<meeting><address><addrLine>Barcelona, Spain</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="volume">8</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Improved Image Captioning via Policy Gradient optimization of SPIDEr</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Ye</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guadarrama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Murphy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Computer Vision</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Language as a latent variable: Discrete generative models for sentence compression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yishu</forename><surname>Miao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2016 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2016 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Abstractive text summarization using sequence-to-sequence rnns and beyond</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ramesh</forename><surname>Nallapati</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bing</forename><surname>Xiang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computational Natural Language Learning</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Reward augmented maximum likelihood for neural structured prediction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohammad</forename><surname>Norouzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samy</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Navdeep</forename><surname>Jaitly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dale</forename><surname>Schuurmans</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances In Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1723" to="1731" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Multireward reinforced summarization with saliency and entailment</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ramakanth</forename><surname>Pasunuru</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohit</forename><surname>Bansal</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 16th Annual Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 16th Annual Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</meeting>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">A deep reinforced model for abstractive summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Romain</forename><surname>Paulus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Learning Representation</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Squad: 100,000+ questions for machine comprehension of text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pranav</forename><surname>Rajpurkar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Konstantin</forename><surname>Lopyrev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2016 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2016 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Sequence level training with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Marc&amp;apos;aurelio Ranzato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wojciech</forename><surname>Auli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zaremba</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Self-critical sequence training for image captioning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Etienne</forename><surname>Steven J Rennie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Youssef</forename><surname>Marcheret</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jarret</forename><surname>Mroueh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vaibhava</forename><surname>Ross</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Goel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Vision and Pattern Recognition (CVPR)</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">A neural attention model for abstractive sentence summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Alexander M Rush</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Weston</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Empirical Methods in Natural Language Processing</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Get to the point: Summarization with pointergenerator networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abigail</forename><surname>See</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><forename type="middle">J</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics. Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics. Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Sequence to sequence learning with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc V</forename><surname>Le</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="3104" to="3112" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Neural headline generation on abstract meaning representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Sho Takase</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Naoaki</forename><surname>Suzuki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tsutomu</forename><surname>Okazaki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Masaaki</forename><surname>Hirao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nagata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2016 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2016 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1054" to="1059" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Pointer networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Meire</forename><surname>Fortunato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Navdeep</forename><surname>Jaitly</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="2692" to="2700" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">A sentence compression based framework to query-focused multidocument summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lu</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hema</forename><surname>Raghavan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vittorio</forename><surname>Castelli</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+	<note>Radu Florian, and Claire Cardie</note>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Memory-enhanced decoder for neural machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mingxuan</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengdong</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hang</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qun</forename><surname>Liu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Simple statistical gradientfollowing algorithms for connectionist reinforcement learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ronald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Machine learning</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">3-4</biblScope>
+			<biblScope unit="page" from="229" to="256" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Multi-channel encoder for neural machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhongjun</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaoguang</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hua</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Bbn/umd at duc-2004: Topiary</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Zajic</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bonnie</forename><surname>Dorr</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Schwartz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the HLT-NAACL 2004 Document Understanding Workshop</title>
+		<meeting>the HLT-NAACL 2004 Document Understanding Workshop<address><addrLine>Boston</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="112" to="119" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<monogr>
+		<title level="m" type="main">Efficient summarization with read-again and copy mechanism</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenyuan</forename><surname>Zeng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenjie</forename><surname>Luo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sanja</forename><surname>Fidler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raquel</forename><surname>Urtasun</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.03382</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

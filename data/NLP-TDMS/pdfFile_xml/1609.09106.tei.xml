@@ -1,0 +1,1531 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:07+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">HYPERNETWORKS</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Ha</surname></persName>
+							<email>hadavid@google.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Dai</surname></persName>
+							<email>adai@google.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc</forename><forename type="middle">V</forename><surname>Le Google Brain</surname></persName>
+						</author>
+						<title level="a" type="main">HYPERNETWORKS</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>This work explores hypernetworks: an approach of using a one network, also known as a hypernetwork, to generate the weights for another network. Hypernet-works provide an abstraction that is similar to what is found in nature: the relationship between a genotype-the hypernetwork-and a phenotype-the main network. Though they are also reminiscent of HyperNEAT in evolution, our hyper-networks are trained end-to-end with backpropagation and thus are usually faster. The focus of this work is to make hypernetworks useful for deep convolutional networks and long recurrent networks, where hypernetworks can be viewed as relaxed form of weight-sharing across layers. Our main result is that hypernetworks can generate non-shared weights for LSTM and achieve near state-of-the-art results on a variety of sequence modelling tasks including character-level language modelling, handwriting generation and neural machine translation, challenging the weight-sharing paradigm for recurrent networks. Our results also show that hypernetworks applied to convolutional networks still achieve respectable results for image recognition tasks compared to state-of-the-art baseline models while requiring fewer learnable parameters.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>In this work, we consider an approach of using a small network (called a "hypernetwork") to generate the weights for a larger network (called a main network). The behavior of the main network is the same with any usual neural network: it learns to map some raw inputs to their desired targets; whereas the hypernetwork takes a set of inputs that contain information about the structure of the weights and generates the weight for that layer (see <ref type="figure">Figure 1</ref>). <ref type="figure">Figure 1</ref>: A hypernetwork generates the weights for a feedforward network. Black connections and parameters are associated the main network whereas orange connections and parameters are associated with the hypernetwork.</p><p>HyperNEAT ( <ref type="bibr" target="#b41">Stanley et al., 2009</ref>) is an example of hypernetworks where the inputs are a set of virtual coordinates for each weight in the main network. In this work, we will focus on a more powerful approach where the input is an embedding vector that describes the entire weights of a given layer. Our embedding vectors can be fixed parameters that are also learned during end-to-end training, allowing approximate weight-sharing within a layer and across layers of the main network. In addition, our embedding vectors can also be generated dynamically by our hypernetwork, allowing the weights of a recurrent network to change over timesteps and also adapt to the input sequence.</p><p>We perform experiments to investigate the behaviors of hypernetworks in a range of contexts and find that hypernetworks mix well with other techniques such as batch normalization and layer normalization. Our main result is that hypernetworks can generate non-shared weights for LSTM that work better than the standard version of LSTM <ref type="bibr" target="#b17">(Hochreiter &amp; Schmidhuber, 1997</ref>). On language modelling tasks with Character Penn Treebank, Hutter Prize Wikipedia datasets, hypernetworks for LSTM achieve near state-of-the-art results. On a handwriting generation task with IAM handwriting dataset, Hypernetworks for LSTM achieves high quantitative and qualitative results. On image classification with CIFAR-10, hypernetworks, when being used to generate weights for a deep convnet ( <ref type="bibr" target="#b26">LeCun et al., 1990)</ref>, obtain respectable results compared to state-of-the-art models while having fewer learnable parameters. In addition to simple tasks, we show that Hypernetworks for LSTM offers an increase in performance for large, production-level neural machine translation models.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">MOTIVATION AND RELATED WORK</head><p>Our approach is inspired by methods in evolutionary computing, where it is difficult to directly operate in large search spaces consisting of millions of weight parameters. A more efficient method is to evolve a smaller network to generate the structure of weights for a larger network, so that the search is constrained within the much smaller weight space. An instance of this approach is the work on the HyperNEAT framework ( <ref type="bibr" target="#b41">Stanley et al., 2009</ref>). In the HyperNEAT framework, Compositional Pattern-Producing Networks (CPPNs) are evolved to define the weight structure of much larger main network. Closely related to our approach is a simplified variation of HyperNEAT, where the structure is fixed and the weights are evolved through Discrete Cosine Transform (DCT) is called Compressed Weight Search ( <ref type="bibr" target="#b24">Koutnik et al., 2010)</ref>. Even more closely related to our approach are Differentiable Pattern Producing Networks (DPPNs), where the structure is evolved but the weights are learned <ref type="bibr" target="#b10">(Fernando et al., 2016)</ref>, and ACDC-Networks ( , where linear layers are compressed with DCT and the parameters are learned.</p><p>Most reported results using these methods, however, are in small scales, perhaps because they are both slow to train and require heuristics to be efficient. The main difference between our approach and HyperNEAT is that hypernetworks in our approach are trained end-to-end with gradient descent together with the main network, and therefore are more efficient.</p><p>In addition to end-to-end learning with gradient descent, our approach strikes a good balance between Compressed Weight Search and HyperNEAT in terms of model flexibility and training simplicity. First, it can be argued that Discrete Cosine Transform used in Compressed Weight Search may be too simple and using the DCT prior may not be suitable for many problems. Second, even though HyperNEAT is more flexible, evolving both the architecture and the weights in HyperNEAT is often an overkill for most practical problems.</p><p>Even before the work on HyperNEAT and DCT, <ref type="bibr" target="#b37">Schmidhuber (1992;</ref><ref type="bibr" target="#b38">1993)</ref> has suggested the concept of fast weights in which one network can produce context-dependent weight changes for a second network. Small scale experiments were conducted to demonstrate fast weights for feed forward networks at the time, but perhaps due to the lack of modern computational tools, the recurrent network version was mentioned mainly as a thought experiment <ref type="bibr" target="#b38">(Schmidhuber, 1993)</ref>. A subsequent work demonstrated practical applications of fast weights <ref type="bibr" target="#b11">(Gomez &amp; Schmidhuber, 2005)</ref>, where a generator network is learnt through evolution to solve an artificial control problem. The concept of a network interacting with another network is central to the work of ( <ref type="bibr" target="#b1">Andrychowicz et al., 2016)</ref>, and especially <ref type="bibr" target="#b9">(Denil et al., 2013;</ref><ref type="bibr" target="#b46">Yang et al., 2015;</ref><ref type="bibr">Bertinetto et al., 2016;</ref><ref type="bibr" target="#b8">De Brabandere et al., 2016)</ref>, where certain parameters in a convolutional network are predicted by another network. These studies however did not explore the use of this approach to recurrent networks, which is a main contribution of our work.</p><p>The focus of this work is to generate weights for practical architectures, such as convolutional networks and recurrent networks by taking layer embedding vectors as inputs. However, our hypernetworks can also be utilized to generate weights for a fully connected network by taking coordinate information as inputs similar to DPPNs. Using this setting, hypernetworks can approximately re-cover the convolutional architecture without explicitly being told to do so, a similar result obtained by "Convolution by Evolution" <ref type="bibr" target="#b10">(Fernando et al., 2016</ref>). This result is described in Appendix A.1.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">METHODS</head><p>In this paper, we view convolutional networks and recurrent networks as two ends of a spectrum. On one end, recurrent networks can be seen as imposing weight-sharing across layers, which makes them inflexible and difficult to learn due to vanishing gradient. On the other end, convolutional networks enjoy the flexibility of not having weight-sharing, at the expense of having redundant parameters when the networks are deep. Hypernetworks can be seen as a form of relaxed weightsharing, and therefore strikes a balance between the two ends. See Appendix A.2 for conceptual diagrams of Static and Dynamic Hypernetworks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">STATIC HYPERNETWORK: A WEIGHT FACTORIZATION APPROACH FOR DEEP CONVOLUTIONAL NETWORKS</head><p>First we will describe how we construct a hypernetwork for the purpose of generating the weights of a feedforward convolutional network. In a typical deep convolutional network, the majority of model parameters are in the kernels of convolutional layers. Each kernel contain N in × N out filters and each filter has dimensions f size × f size . Let's suppose that these parameters are stored in a matrix K j ∈ R Ninfsize×Noutfsize for each layer j = 1, .., D, where D is the depth of the main convolutional network. For each layer j, the hypernetwork receives a layer embedding z j ∈ R Nz as input and predicts K j , which can be generally written as follows:</p><formula xml:id="formula_0">K j = g(z j ), ∀j = 1, ..., D<label>(1)</label></formula><p>We note that this matrix K j can be broken down as N in slices of a smaller matrix with dimensions f size ×N out f size , each slice of the kernel is denoted as K j i ∈ R fsize×Noutfsize . Therefore, in our approach, the hypernetwork is a two-layer linear network. The first layer of the hypernetwork takes the input vector z j and linearly projects it into the N in inputs, with N in different matrices W i ∈ R d×Nz and bias vectors B i ∈ R d , where d is the size of the hidden layer in the hypernetwork. For our purpose, we fix d to be equal to N z although they can be different. The final layer of the hypernetwork is a linear operation which takes an input vector a i of size d and linearly projects that into K i using a common tensor W out ∈ R fsize×Noutfsize×d and bias matrix B out ∈ R fsize×Noutfsize . The final kernel K j will be a concatenation of every K j i . Thus g(z j ) can be written as follows:</p><formula xml:id="formula_1">a j i = W i z j + B i , ∀i = 1, .., N in , ∀j = 1, ..., D K j i = W out , a j i 1 + B out , ∀i = 1, .., N in , ∀j = 1, ..., D K j = K j 1 K j 2 ... K j i ... K j Nin , ∀j = 1, ..., D<label>(2)</label></formula><p>In our formulation, the learnable parameters are W i , B i , W out , B out together with all z j 's. During inference, the model simply takes the layer embeddings z j learned during training to reproduce the kernel weights for layer j in the main convolutional network. As a side effect, the number of learnable parameters in hypernetwork will be much lower than the main convolutional network. In fact, the total number of learnable parameters in hypernetwork is</p><formula xml:id="formula_2">N z × D + d × (N z + 1) × N i + f size × N out × f size × (d + 1) compared to the D × N in × f size × N out × f size</formula><p>parameters for the kernels of the main convolutional network.</p><p>Our approach of constructing g(.) is similar to the hierarchically semiseparable matrix approach proposed by <ref type="bibr" target="#b45">Xia et al. (2010)</ref>. Note that even though it seems redundant to have a two-layered linear hypernetwork as that is equivalent to a one-layered hypernetwork, the fact that W out and B out are shared makes our two-layered hypernetwork more compact than a one-layered hypernetwork. More concretely, a one-layered hypernetwork would have N z × N in × f size × N out × f size learnable parameters which is usually much bigger than a two-layered hypernetwork does.</p><p>The above formulation assumes that the network architecture consists of kernels with same dimensions. In practice, deep convolutional network architectures consists of kernels of varying dimensions. Typically, in many designs, the kernel dimensions are integer multiples of a basic size. This is indeed the case in the residual network family of architectures ( <ref type="bibr" target="#b13">He et al., 2016a</ref>) that we will be experimenting with later is an example of such a design. In our experiments, although the kernels of a residual network do not share the same dimensions, the N i and N out dimensions for each kernel are integer multiples of 16. To modify our approach to work with this architecture, we have our hypernetwork generate kernels for this basic size of 16, and if we require a larger kernel for a certain layer, we will concatenate multiple basic kernels together to form the larger kernel.</p><formula xml:id="formula_3">K 32×64 = K 1 K 2 K 3 K 4 K 5 K 6 K 7 K 8<label>(3)</label></formula><p>For example, if we need to generate a kernel with N i = 32 and N out = 64, we will tile eight basic kernels together. Each basic kernel is generated by a unique z embedding, hence the larger kernel will be expressed with eight embeddings. Therefore, kernels that are larger in size will require a proportionally larger number of embedding vectors. For visualizations of concatenated kernels, please see Appendix A.2.1. <ref type="figure" target="#fig_0">Figure 2</ref> shows the similarity between kernels learned by a ConvNet to classify MNIST digits and those learned by a hypernetwork generating weights for a ConvNet. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">DYNAMIC HYPERNETWORK: ADAPTIVE WEIGHT GENERATION FOR RECURRENT NETWORKS</head><p>In the previous section, we outlined a procedure for using a hypernetwork to generate the weights for a deep convolutional network. In this section, we will use a recurrent network to dynamically generate weights for another recurrent network, such that the weights can vary across many timesteps. In this context, hypernetworks are called dynamic hypernetworks, and can be seen as a form of relaxed weight-sharing, a compromise between hard weight-sharing of traditional recurrent networks, and no weight-sharing of convolutional networks. This relaxed weight-sharing approach allows us to control the trade off between the number of model parameters and model expressiveness.</p><p>Our dynamic hypernetworks can be used to generate weights for RNN and LSTM. When a hypernetwork is used to generate the weights for an RNN, it is called HyperRNN. At every time step t, a HyperRNN takes as input the concatenated vector of input x t and the hidden states of the main RNN h t−1 , it then generates as output the vectorˆhvectorˆ vectorˆh t . This vector is then used to generate the weights for the main RNN at the same timestep. Both the HyperRNN and the main RNN are trained jointly with backpropagation and gradient descent. In the following, we will give a more formal description of the model.</p><p>The standard formulation of a Basic RNN is given by:</p><formula xml:id="formula_4">h t = φ(W h h t−1 + W x x t + b)<label>(4)</label></formula><p>where h t is the hidden state, φ is a non-linear operation such as tanh or relu, and the weight matrices and bias In HyperRNN, we allow W h and W x to float over time by using a smaller hypernetwork to generate these parameters of the main RNN at each step (see <ref type="figure" target="#fig_1">Figure 3</ref>). More concretely, the parameters W h , W x , b of the main RNN are different at different time steps, so that h t can now be computed as:</p><formula xml:id="formula_5">W h ∈ R N h ×N h , W x ∈ R N h ×Nx , b ∈ R N h is fixed each timestep for an input sequence X = (x 1 , x 2 , . . . , x T ).</formula><formula xml:id="formula_6">h t = φ W h (z h )h t−1 + W x (z x ) + b(z b )</formula><p>, where</p><formula xml:id="formula_7">W h (z h ) = W hz , z h W x (z x ) = W xz , z x b(z b ) = W bz z b + b 0<label>(5)</label></formula><p>Where</p><formula xml:id="formula_8">W hz ∈ R N h ×N h ×Nz , W xz ∈ R N h ×Nx×Nz , W bz ∈ R N h ×Nz , b 0 ∈ R N h and z h , z x , z z ∈ R Nz .</formula><p>We use a recurrent hypernetwork to compute z h , z x and z b as a function of x t and h t−1 :</p><formula xml:id="formula_9">ˆ x t = h t−1 x t ˆ h t = φ(W ˆ h ˆ h t−1 + W ˆ x ˆ x t + ˆ b) z h = W ˆ hhˆh hhˆ hhˆh t−1 + b ˆ hh z x = W ˆ hxˆh hxˆ hxˆh t−1 + b ˆ hx z b = W ˆ hbˆh hbˆ hbˆh t−1<label>(6)</label></formula><p>Where</p><formula xml:id="formula_10">W ˆ h ∈ R N ˆ h ×Nˆh×Nˆ ×Nˆh , W ˆ x ∈ R N ˆ h ×(N h +Nz) , b ∈ R N ˆ h , and W ˆ hh , W ˆ hx , W ˆ hb ∈ R Nz×NˆhNz×Nˆ Nz×Nˆh and b ˆ hh , b ˆ hx ∈ R Nz . This HyperRNN Cell has N ˆ h hidden units. Typically N ˆ h is much smaller than N h .</formula><p>As the embeddings z h , z x and z b are of dimensions N z , which is typically smaller than the hidden state size N ˆ h of the HyperRNN cell, a linear network is used to project the output of the HyperRNN cell into the embeddings in Equation 6. After the embeddings are computed, they will be used to generate the full weight matrix of the main RNN.</p><p>The above is a general formulation of a linear dynamic hypernetwork applied to RNNs. However, we found that in practice, Equation 5 is often not practical because the memory usage becomes too large for real problems. The amount of memory required in the system described in Equation 5 will be N z times the memory of a Basic RNN, which limits the number of hidden units we can use in many practical applications.</p><p>We can modify the dynamic hypernetwork system described in Equation 5 so that it can be much more scalable and memory efficient. Our approach borrows from the static hypernetwork section and we will use an intermediate hidden vector d(z) ∈ R N h to parametrize a weight matrix, where d(z) will be a linear projection of z. To dynamically modify a weight matrix W , we will allow each row of this weight matrix to be scaled linearly by an element in vector d. We refer d as a weight scaling vector. Below is the modification to W (z):</p><formula xml:id="formula_11">W (z) = W d(z) =    d 0 (z)W 0 d 1 (z)W 1 ... d N h (z)W N h    (7)</formula><p>While we sacrifice the ability to construct an entire weight matrix from a linear combination of N z matrices of the same size, we are able to linearly scale the rows of a single matrix with N z degrees of freedom. We find this to be a good trade off, as this formulation of converting W (z) into W (d(z)) decreases the amount of memory required by the dynamic hypernetwork. Rather than requiring N z times the memory of a Basic RNN, we will only be using memory in the order N z times the number of hidden units, which is an acceptable amount of extra memory usage that is often available in many applications. In addition, the row-level operation in Equation 7 can be shown to be equivalent to an element-wise multiplication operator and hence computationally much more efficient in practice.</p><p>Below is the more memory efficient version of the setup of Equation 5:</p><formula xml:id="formula_12">h t = φ d h (z h ) W h h t−1 + d x (z x ) W x x t + b(z b )</formula><p>, where Since the HyperRNN cell can indirectly modify the rows of each weight matrix and also the bias of the main RNN, it is implicitly also performing a linear scaling to the inputs of the activation function.</p><formula xml:id="formula_13">d h (z h ) = W hz z h d x (z x ) = W xz z x b(z b ) = W bz z b + b 0<label>(8</label></formula><p>The difference here is that the linear scaling parameters can be different for each timestep and also for for each input sample. It will be interesting to compare the scaling policy that the HyperRNN cell comes up with, to the hand engineered statistical-moments based scaling approaches. In addition, we note that the existing normalization approaches can work together with the HyperRNN approach, where the HyperRNN cell will be tasked with discovering a better dynamical scaling policy to complement normalization. We will also explore this combination in our experiments.</p><p>The Long Short-Term Memory (LSTM) architecture <ref type="bibr" target="#b17">(Hochreiter &amp; Schmidhuber, 1997</ref>) is usually better than the Basic RNN at storing and retrieving information over longer time steps. In our experiments, we will focus on this LSTM version of the HyperRNN, called the HyperLSTM. The details of the HyperLSTM architecture is described in Appendix A.2.2, along with specific implementation details in Appendix A.2.3. We want to know whether the HyperLSTM cell can learn a weight adjustment policy that can rival statistical moments-based normalization methods, hence Layer Normalization will be one of our baseline methods. We will therefore conduct experiments on two versions of HyperLSTM, one with and one without the application of Layer Normalization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">EXPERIMENTS</head><p>In the following experiments, we will benchmark the performance of static hypernetworks on image recognition with MNIST and CIFAR-10, and the performance of dynamic hypernetworks on language modelling with Penn Treebank and Hutter Prize Wikipedia (enwik8) datasets and handwriting generation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">USING STATIC HYPERNETWORKS TO GENERATE FILTERS FOR CONVOLUTIONAL NETWORKS AND MNIST</head><p>We start by applying a hypernetwork to generate the filters for a convolutional network on MNIST.</p><p>Our main convolutional network is a small two layer network and the hypernetwork is used to generate the kernel for the second layer (7x7x16x16), which contains the bulk of the trainable parameters in the system. Our weight matrix will be summarized by an embedding of size N z = 4. See Appendix A.3.1 for further experimental setup details.</p><p>For this task, the hypernetwork achieved a test accuracy of 99.24%, comparable to the 99.28% for the conventional method. In this example, a kernel consisting of 12,544 weights is represented by an embedding vector of only 4 parameters, generated by a hypernetwork that has 4240 parameters. We can see the weight matrix this network produced by the hypernetwork in <ref type="figure" target="#fig_0">Figure 2</ref>. Now the question is whether we can also train a deep convolutional network, using a single hypernetwork generating a set of weights for each layer, on a dataset more challenging than MNIST.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">STATIC HYPERNETWORKS FOR RESIDUAL NETWORK ARCHITECTURE AND CIFAR-10</head><p>The residual network architectures ( <ref type="bibr" target="#b13">He et al., 2016a;</ref><ref type="bibr" target="#b47">Zagoruyko &amp; Komodakis, 2016)</ref> are popular for image recognition tasks, as they can accommodate very deep networks while maintaining effective gradient flow across layers using skip connections. The original resnet and subsequent derivatives ( <ref type="bibr" target="#b18">Huang et al., 2016a</ref>) achieved state-of-the-art image recognition performance on a variety of public datasets. While residual networks can be be very deep, and in some experiments as deep as 1001 layers <ref type="bibr" target="#b14">((He et al., 2016b)</ref>, it is important to understand whether some these layers share common properties and can be reduced effectively by introducing weight sharing. If we enforce weight-sharing across many layers of a deep feed forward network, the network may share many properties to that of a recurrent network. In this experiment, we want to explore this idea of enforcing relaxed weight sharing across all of the layers of a deep residual network. We will take a simple version of residual network, use a single hypernetwork to generate the weights of all of its layers for image classification task on the CIFAR-10 dataset.</p><p>group name output size block type conv1</p><p>32  <ref type="bibr" target="#b47">Zagoruyko &amp; Komodakis (2016)</ref>. N determines the number of residual blocks in each group. Network width is determined by factor k. Our experiment will use a version of the wide residual network <ref type="bibr" target="#b47">(Zagoruyko &amp; Komodakis, 2016)</ref>, described in <ref type="table" target="#tab_0">Table 1</ref>, a popular and simple variant of the family of residual network architectures, and we will focus configurations (N = 6, K = 1) and (N = 6, K = 2), referred to as WRN 40-1 and WRN 40-2 respectively. In this setup, we will use a hypernetwork to generate all of the kernels in conv2, conv3, and conv4, so we will generate 36 layers of kernels in total. The WRN architecture uses a filter size of 3 for every kernel. We use the method outlined in the Methods section to deal with kernels of varying sizes, and use the an embedding size of N z = 64 in our experiments. See Appendix A.3.2 for further experimental setup details.</p><formula xml:id="formula_14">× 32 [3×3, 16] conv2 32×32 3×3, 16×k 3×3, 16×k ×N conv3 16×16 3×3, 32×k 3×3, 32×k ×N conv4 8×8 3×3, 64×k 3×3, 64×k ×N avg-pool 1 × 1 [8 × 8]</formula><p>We obtained similar classification accuracy numbers as reported in <ref type="bibr" target="#b47">(Zagoruyko &amp; Komodakis, 2016)</ref> with our own implementation. We also note that the weights generated by the hypernetwork are used in a batch normalization setting without modification to the original model. In principle, hypernetworks can also be applied to the newer variants of residual networks with more skip connections, such as DenseNets and ResNets of Resnets.</p><p>From the results, we see that enforcing a relaxed weight sharing constraint to the deep residual network cost us ∼ 1.25-1.5% in classification accuracy, while drastically reducing the number of  parameters in the model as a trade off. One reason for this reduction in accuracy is because different layers of a deep network is trained to extract different levels of features, and require different kinds of filters to perform optimally. The hypernetwork enforces some commonality between every layer, but offers each layer 64 degrees of freedom to distinguish itself from the other layers. While the network is no longer able to learn the optimal set of filters for each layer, it will learn the best set of filters given the constraints, and the resulting number of model parameters is drastically reduced.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">HYPERLSTM FOR CHARACTER-LEVEL PENN TREEBANK LANGUAGE MODELLING</head><p>The HyperLSTM model is evaluated on character level prediction task on the Penn Treebank corpus ( <ref type="bibr" target="#b30">Marcus et al., 1993</ref>) using the train/validation/test split outlined in ( <ref type="bibr" target="#b31">Mikolov et al., 2012)</ref>. As the dataset is quite small is prone to over fitting, we apply dropout on both input and output layers with a keep probability of 0.90. Unlike previous approaches <ref type="bibr" target="#b12">(Graves, 2013;</ref><ref type="bibr" target="#b33">Ognawala &amp; Bayer, 2014</ref>) of applying weight noise during training, we instead also apply dropout to the recurrent layer ( <ref type="bibr" target="#b15">Henaff et al., 2016</ref>) with the same dropout probability.</p><p>We compare our model to the basic LSTM cell, stacked LSTM cells <ref type="bibr" target="#b12">(Graves, 2013)</ref>, and LSTM with layer normalization applied. In addition, we also experimented with applying layer normalization to HyperLSTM. Using the setup in <ref type="bibr" target="#b12">(Graves, 2013)</ref>, we use networks with 1000 units and train the network to predict the next character.    <ref type="figure" target="#fig_6">Figure 6</ref> for the loss graphs.  When we use this prediction model as a generative model to sample a text passage, we use main RNN to model a probability distribution over possible characters conditioned over the preceding characters. In the case of the HyperRNN, we allow the model parameters of this generative model to vary over time, so in effect the HyperRNN cell is choosing the best model at any given time to generate a probability distribution to sample from. We can demonstrate this by visualizing how the weight scaling vectors of the main RNN change during the character sampling process. In <ref type="figure" target="#fig_4">Figure 4</ref>, we examine a sample text passage generated by HyperLSTM after training on enwik8 along with the weight differences below the text. We see that in regions of low intensity, where the weights of the main RNN are relatively static, the types of phrases generated seem more deterministic. For example, the weights do not change much during the words Europeans, possessions and reservation. The regions of high intensity is when the HyperRNN cell is making relatively large changes to the weights of the main RNN. These tend to happen in the areas between words, or sometimes during brackets.</p><p>One might also wonder whether the HyperLSTM cell (without Layer Norm), via dynamically tuning the weight scaling vectors, has developed a policy that is similar to the statistics-based approach used by Layer Norm, given that both methods have similar performance. One way to see this effect is to look at the histogram of the hidden states in the network. In <ref type="figure" target="#fig_5">Figure 5</ref>, we examine the histograms of φ(c t ), the hidden state of the LSTM before applying the output gate. We see that the normalization process employed by Layer Norm reduces the saturation effects compared to the vanilla LSTM. However, for the case of the HyperLSTM, we notice that most of the time the cell is saturated. The HyperLSTM cell's dynamic weight adjustment policy appears to be doing something very different compared to statistical normalization, although the policy it came up with ended up providing similar performance as Layer Norm. It is interesting to see that when we combine both methods, the HyperLSTM cell will need to determine an adjustment policy in spite of the normalization forced upon it by Layer Norm. An interesting question is whether there are problems where statistical normalization may actually be a setback to the policy developed by the HyperLSTM, and the best strategy is to ignore it. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5">HYPERLSTM FOR HANDWRITING SEQUENCE GENERATION</head><p>In addition to modelling discrete sequential data, we want to see how the model performs when modelling sequences of real valued data. We will train our model on the IAM online handwriting database <ref type="bibr" target="#b29">(Liwicki &amp; Bunke, 2005</ref>) and have our model predict pen strokes as per Section 4.2 of (Graves, 2013). The dataset has contains 12179 handwritten lines from 221 writers, digitally recorded from a tablet. We will model the (x, y) coordinate of the pen location at each recorded time step, along with a binary indicator of pen-up/pen-down. The average sequence length is around 700 steps and the longest around 1900 steps, making the training task particularly challenging as the network needs to retain information about both the stroke history and also the handwriting style in order to predict plausible future handwriting strokes. For experimental setup details, please refer to Appendix A.3.5.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>Log  <ref type="table">Table 5</ref>: Log-Loss of IAM Online DB validation set.</p><p>In this task, we note that data augmentation and applying recurrent dropout improved the performance of all models, compared to the original setup by <ref type="bibr" target="#b12">(Graves, 2013)</ref>. In addition, for the LSTM model, increasing unit count per layer may not help the performance compared to increasing the layer depth. We notice that a 3-layer 400 unit LSTM outperforms a 1-layer 900 unit one, and we found that a 2-layer 650 unit LSTM outperforming most configurations. While layer norm helps with the performance, we found that in this task, layer norm does not combine well with HyperL-STM, and in this task the 900 unit HyperLSTM without layer norm achieved the best performance. Unlike the language modelling task, perhaps statistical normalization is far from the optimal approach for a weight adjustment policy. The policy learned by the HyperLSTM cell not only per-formed well against the baseline, its convergence rate is also as fast as the 2-layer LSTM model. Please refer to <ref type="figure" target="#fig_6">Figure 6</ref> for the loss graphs.</p><p>In Appendix A.5, we display three sets of handwriting samples generated from LSTM, Layer Norm LSTM, and HyperLSTM, corresponding to log-loss scores of -1055, -1096, and -1162 nats respectively in <ref type="table">Table 5</ref>. Qualitative assessments of handwriting quality is always subjective, and depends an individual's taste in calligraphy. From looking at the examples produced by the three models, our opinion is that the samples produced by LSTM is noisier than the other two models. We also find HyperLSTM's samples to be a bit more coherent than the samples produced by Layer Norm LSTM. We leave to the reader to judge which model produces handwriting samples of higher quality. We see that the regions of high intensity seem to be concentrated at many discrete instances, rather than slowly varying over time. This implies that the weights experience regime changes rather than gradual slow adjustments. We can see that many of these weight changes occur between the written words, and sometimes between written characters. While the LSTM model alone already does a formidable job of generating time-varying parameters of a Mixture Gaussian distribution used to generate realistic handwriting samples, the ability to go one level deeper, and to dynamically generate the generative model is one of the key advantages of HyperRNN over a normal RNN.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.6">HYPERLSTM FOR NEURAL MACHINE TRANSLATION</head><p>We experiment with the Neural Machine Translation task using the same experimental setup outlined in ( . Our model is the same wordpiece model architecture with a vocabulary size of 32k, but we replace the LSTM cells with HyperLSTM cells. We benchmark the modified model on WMT'14 En→Fr using the same test/validation set split described in the GNMT paper ( . Please refer to Appendix A.3.6 for experimental setup details.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>Test  The HyperLSTM cell improves the performance of the existing GNMT model, achieving stateof-the-art single model results for this dataset. In addition, we demonstrate the applicability of hypernetworks to large-scale models used in production systems. Please see Appendix A.6 for actual translation samples generated from both models for a qualitative comparison.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">CONCLUSION</head><p>In this paper, we presented a method to use a hypernetwork to generate weights for another neural network. Our hypernetworks are trained end-to-end with backpropagation and therefore are efficient and scalable. We focused on two use cases of hypernetworks: static hypernetworks to generate weights for a convolutional network, dynamic hypernetworks to generate weights for recurrent networks. We found that the method works well while using fewer parameters. On image recognition, language modelling and handwriting generation, hypernetworks are competitive to or sometimes better than state-of-the-art models. We ran an experiment where the hypernetwork receives the x, y locations of both the input pixel and the weight, and predicts the value of the hidden weight matrix in a fully connected network that learns to classify MNIST digits. In this experiment, the fully connected network (784-256-10) has one hidden layer of 16 × 16 units, where the hypernetwork is a pre-defined small feedforward network. The weights of the hidden layer has 784 × 256 = 200704 parameters, while the hypernetwork is a 801 parameter four layer feed forward relu network that would generate the 786 × 256 weight matrix. The result of this experiment is shown in <ref type="figure">Figure 8</ref>. We want to emphasize that even though the network can learn convolutional-like filters during end-to-end training, its performance is rather poor: the best accuracy is 93.5%, compared to 98.5% for the conventional fully connected network.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A APPENDIX</head><p>We find that the virtual coordinates-based approach to hypernetworks that is used by HyperNEAT and DPPN has its limitations in many practical tasks, such as image recognition and language modelling, and therefore developed our embedding vector approach in this work.   </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.2 CONCEPTUAL DIAGRAMS OF STATIC AND DYNAMIC HYPERNETWORKS</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.2.2 HYPERLSTM</head><p>In this section we will discuss extension of HyperRNN to LSTM. Our focus will be on the basic version of the LSTM architecture <ref type="bibr" target="#b17">Hochreiter &amp; Schmidhuber (1997)</ref>, given by:</p><formula xml:id="formula_15">i t = W i h h t−1 + W i x x t + b i g t = W g h h t−1 + W g x x t + b g f t = W f h h t−1 + W f x x t + b f o t = W o h h t−1 + W o x x t + b o c t = σ(f t ) c t−1 + σ(i t ) φ(g t ) h t = σ(o t ) φ(c t ) (9)</formula><p>where</p><formula xml:id="formula_16">W y h ∈ R N h ×N h , W y x ∈ R N h ×Nx , b y ∈ R N h , σ</formula><p>is the sigmoid operator, φ is the tanh operator. For brevity, y is one of {i, g, f, o}. 1 Similar to the previous section, we will make the weights and biases a function of an embedding, and the embedding for each {i, g, f, o} will be generated from a smaller HyperLSTM cell. As discussed earlier, we will also experiment with adding the option to use a Layer Normalization layer in the HyperLSTM. The HyperLSTM Cell is given by:</p><formula xml:id="formula_17">ˆ x t = h t−1 x t ˆ i t = LN (W ˆ i ˆ h ˆ h t−1 + W ˆ i ˆ x ˆ x t + ˆ b ˆ i ) ˆ g t = LN (W ˆ g ˆ h ˆ h t−1 + W ˆ g ˆ x ˆ x t + ˆ b ˆ g ) ˆ f t = LN (W ˆ f ˆ h ˆ h t−1 + W ˆ f ˆ x ˆ x t + ˆ b ˆ f ) ˆ o t = LN (W ˆ o ˆ h ˆ h t−1 + W ˆ o ˆ x ˆ x t + ˆ b ˆ o ) ˆ c t = σ( ˆ f t ) ˆ c t−1 + σ( ˆ i t ) φ(ˆ g t ) ˆ h t = σ(ˆ o t ) φ(LN (ˆ c t ))<label>(10)</label></formula><p>The weight matrices for each of the four {i, g, f, o} gates will be a function of a set of embeddings z x , z h , and z b unique to each gates, just like the HyperRNN. These embeddings are linear projections of the hidden states of the HyperLSTM Cell. For brevity, y is one of {i, g, f, o} to avoid writing four sets of identical equations:</p><formula xml:id="formula_18">z y h = W y ˆ hhˆh hhˆ hhˆh t−1 + b y ˆ hh z y x = W y ˆ hxˆh hxˆ hxˆh t−1 + b y ˆ hx z y b = W y ˆ hbˆh hbˆ hbˆh t−1<label>(11)</label></formula><p>As in the memory efficient version of the HyperRNN, we will focus on the efficient version of the HyperLSTM, where we use weight scaling vectors d to modify the rows of the weight matrices:</p><formula xml:id="formula_19">y t = LN d y h W y h h t−1 + d y x W y x x t + b y (z y b )</formula><p>, where</p><formula xml:id="formula_20">d y h (z h ) = W y hz z h d y x (z x ) = W y xz z x b y (z y b ) = W y bz z y b + b y 0<label>(12)</label></formula><p>In our implementation, the cell and hidden state update equations for the main LSTM will incorporate a single dropout ( <ref type="bibr" target="#b16">Hinton et al., 2012</ref>) gate, as developed in Recurrent Dropout without Memory Loss ( <ref type="bibr" target="#b39">Semeniuta et al., 2016</ref>), as we found this to help regularize the entire model during training:</p><formula xml:id="formula_21">c t = σ(f t ) c t−1 + σ(i t ) DropOut(φ(g t )) h t = σ(o t ) φ(LN (c t ))<label>(13)</label></formula><p>This dropout operation is generally only applied inside the main LSTM, not in the smaller HyperL-STM cell. For larger size systems we can apply dropout to both networks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.2.3 IMPLEMENTATION DETAILS AND WEIGHT INITIALIZATION FOR HYPERLSTM</head><p>This section may be useful to readers who may want to implement their own version of the Hyper-LSTM Cell, as we will discuss initialization of the parameters for Equations 10 to 13. We recommend implementing the HyperLSTM within the same interface as a normal recurrent network cell so that using the HyperLSTM will not be any different than using a normal RNN. These initialization parameters have been found to work well with our experiments, but they may be far from optimal depending on the task at hand. A reference implementation developed using the Tensor- The embedding vectors are produced by the HyperLSTM Cell at each timestep by linear projection described in Equation 11. The weights for the first two equations are initialized to be zero, and the biases are initialized to one. The weights for the third equation are initialized to be a small normal random variable with standard deviation of 0.01.</p><p>The weight scaling vectors that modify the weight matrices are generated from these embedding vectors, as per Equation 12. Orthogonal initialization is applied to the W h and W x , while b 0 is initialized to zero. W bz is also initialized to zero. For the weight scaling vectors, we used a method described in Recurrent Batch Normalization ( <ref type="bibr" target="#b7">Cooijmans et al., 2016</ref>) where the scaling vectors are initialized to 0.1 rather than 1.0 and this has shown to help gradient flow. Therefore, for weight matrices W hz and W xz , we initialize to a constant value of 0.1/N z to maintain this property.</p><p>The only place we use dropout is in the single location in Equation 13, developed in Recurrent Dropout without Memory Loss ( <ref type="bibr" target="#b39">Semeniuta et al., 2016</ref>). We can use this dropout gate like any other normal dropout gate in a feed-forward network.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.3 EXPERIMENT SETUP DETAILS AND HYPER PARAMETERS</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.3.1 USING STATIC HYPERNETWORKS TO GENERATE FILTERS FOR CONVOLUTIONAL NETWORKS AND MNIST</head><p>We train the network with a 55000 / 5000 / 10000 split for the training, validation and test sets and use the 5000 validation samples for early stopping, and train the network using Adam <ref type="bibr" target="#b23">(Kingma &amp; Ba, 2015</ref>) with a learning rate of 0.001 on mini-batches of size 1000. To decrease over fitting, we pad MNIST training images to 30x30 pixels and random crop to 28x28. 1</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model Test Error Params of 2 nd Kernel</head><p>Normal Convnet 0.72% 12,544 Hyper Convnet 0.76% 4,244 We train both the normal residual network and the hypernetwork version using a 45000 / 5000 / 10000 split for training, validation, and test set. The 5000 validation samples are randomly chosen and isolated from the original 50000 training samples. We train the entire setup with a mini-batch size of 128 using Nesterov Momentum SGD for the normal version and Adam for the hypernetwork version, both with a learning rate schedule. We apply L2 regularization on the kernel weights, and also on the hypernetwork-generated kernel weights of 0.0005%. To decrease over fitting, we apply light data augmentation pad training images to 36x36 pixels and random crop to 32x32, and perform random horizontal flips.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.3.3 CHARACTER-LEVEL PENN TREEBANK</head><p>The hyper-parameters of all the experiments were selected through non-extensive grid search on the validation set. Whenever possible, we used reported learning rates and batch sizes in the literature that had been used for similar experiments performed in the past.</p><p>For Character-level Penn Treebank, we use mini-batches of size 128, to train on sequences of length 100. We trained the model using Adam <ref type="bibr" target="#b23">(Kingma &amp; Ba, 2015</ref>) with a learning rate of 0.001 and gradient clipping of 1.0. During evaluation, we generate the entire sequence, and do not use information about previous test errors for prediction, e.g., dynamic evaluation <ref type="bibr" target="#b12">(Graves, 2013;</ref><ref type="bibr" target="#b35">Rocki, 2016b)</ref>. As mentioned earlier, we apply dropout to the input and output layers, and also apply recurrent dropout with a keep probability of 90%. For baseline models, Orthogonal Initialization ( <ref type="bibr" target="#b15">Henaff et al., 2016)</ref> is performed for all weights.</p><p>We also experimented with a version of the model using a larger embedding size of 16, and also with a lower dropout keep probability of 85%, and reported results with this "Large Embedding" model in <ref type="table" target="#tab_4">Table 3</ref>. Lastly, we stacked two layers of this "Large Embedding" model together to measure the benefits of a multi-layer version of HyperLSTM, with a dropout keep probability of 80%.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.3.4 HUTTER PRIZE WIKIPEDIA</head><p>As enwik8 is a bigger dataset compared to Penn Treebank, we will use 1800 units for our networks. In addition, we perform training on sequences of length 250. Our normal HyperLSTM Cell consists of 256 units, and we use an embedding size of 64.</p><p>Our setup is similar in the previous experiment, using the same mini-batch size, learning rate, weight initialization, gradient clipping parameters and optimizer. We do not use dropout for the input and output layers, but still apply recurrent dropout with a keep probability of 90%. For baseline models, Orthogonal Initialization ( <ref type="bibr" target="#b15">Henaff et al., 2016</ref>) is performed for all weights.</p><p>As in ( <ref type="bibr" target="#b4">Chung et al., 2015)</ref>, we train on the first 90M characters of the dataset, use the next 5M as a validation set for early stopping, and the last 5M characters as the test set.</p><p>In this experiment, we also experimented with a slightly larger version of HyperLSTM with 2048 hidden units. This version of of the model uses 2048 hidden units for the main network, inline with similar models for this experiment in other works. In addition, its HyperLSTM Cell consists of 512 units with an embedding size of 64. Given the larger number of nodes in both the main LSTM and HyperLSTM cell, recurrent dropout is also applied to the HyperLSTM Cell of this model, where we use a lower dropout keep probability of 85%, and train on an increased sequence length of 300.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.3.5 HANDWRITING SEQUENCE GENERATION</head><p>We will use the same model architecture described in <ref type="bibr" target="#b12">(Graves, 2013)</ref> and use a Mixture Density Network layer <ref type="bibr" target="#b3">(Bishop, 1994)</ref> to generate a mixture of bi-variate Gaussian distributions to model at each time step to model the pen location. We normalize the data and use the same train/validation split as per <ref type="bibr" target="#b12">(Graves, 2013</ref>) in this experiment. We remove samples less than length 300 as we found these samples contain a lot of recording errors and noise. After the pre-processing, as the dataset is small, we introduce data augmentation of chosen uniformly from +/-10% and apply a this random scaling a the samples used for training.</p><p>One concern we want to address is the lack of a test set in the data split methodology devised in <ref type="bibr" target="#b12">(Graves, 2013)</ref>. In this task, qualitative assessment of generated handwriting samples is arguably just as important as the quantitative log likelihood score of the results. Due to the small size of the dataset, we want to use as large as possible the portion of the dataset to train our models in order to generate better quality handwriting samples so we can also judge our models qualitatively in addition to just examining the log-loss numbers, so for this task we will use the same training / validation split as <ref type="bibr" target="#b12">(Graves, 2013)</ref>, with a caveat that we may be somewhat over fitting to the validation set in the quantitative results. In future works, we will explore using larger datasets to conduct a more rigorous quantitative analysis.</p><p>For model training, will apply recurrent dropout and also dropout to the output layer with a keep probability of 0.95. The model is trained on mini-batches of size 32 containing sequences of variable length. We trained the model using Adam <ref type="bibr" target="#b23">(Kingma &amp; Ba, 2015</ref>) with a learning rate of 0. The GNMT paper outlines several methods for the training procedure, and investigated several approaches including combining Adam and SGD optimization methods, in addition to weight quantization schemes. In our experiment, we used only the Adam <ref type="bibr" target="#b23">(Kingma &amp; Ba, 2015</ref>) optimizer with the same hyperparameters described in the GNMT paper. We did not employ any quantization schemes.</p><p>We replaced LSTM cells in the GNMT WPM-32K architecture, with LayerNorm HyperLSTM cells with the same number of hidden units. In this experiment, our HyperLSTM Cell consists of 128 units with an embedding size of 32.  ), but its claim is that it holds the size of the coci, but is historically important both for import: brewing and commercial use.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.4 EXAMPLES OF GENERATED WIKIPEDIA TEXT</head><p>A majority of cuisine specifically refers to this period, where the southern countries developed in the 19th century. Scotland had a cultural identity of or now a key church who worked between the 8th and 60th through 6 (so that there are small single authors of detailed recommendations for them and at first) rather than appearing , <ref type="bibr">[</ref>  We randomly selected translation samples generated from both LSTM baseline and HyperLSTM models from the WMT'14 En→Fr Test Set. Given an English phrase, we can compare between the correct French translation, the LSTM translation, and the HyperLSTM translation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>English Input</head><p>I was expecting to see gnashing of teeth and a fight breaking out at the gate .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>French (Ground Truth)</head><p>Je m' attendais à voir des grincements de dents et une bagarre éclater à la porte .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>LSTM Translation</head><p>Je m' attendais à voir des larmes de dents et un combat à la porte .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>HyperLSTM Translation</head><p>Je m' attendais à voir des dents grincer des dents et une bataille éclater à la porte .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>English Input</head><p>Prosecuting , Anne Whyte said : " If anyone should know not to the break the law , it is a criminal solicitor . " French (Ground Truth)</p><p>Le procureur Anne Whyte a déclaré : « Si quelqu' un doit savoir qu' il ne faut pas violer la loi , c' est bien un avocat pénaliste . »</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>LSTM Translation</head><p>Prosecuting , Anne Whyte a dit : « Si quelqu' un doit savoir qu' il ne faut pas enfreindre la loi , c' est un solicitor criminel .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>HyperLSTM Translation</head><p>En poursuivant , Anne Whyte a dit : « Si quelqu' un doit savoir ne pas enfreindre la loi , c' est un avocat criminel .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>English Input</head><p>According to her , the CSRS was invited to a mediation and she asked for an additional period for consideration . French (Ground Truth)</p><p>Selon elle , la CSRS a été invitée à une médiation et elle a demandé un délai supplémentaire pour y réfléchir .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>LSTM Translation</head><p>Selon elle , le SCRS a été invité à une médiation et elle a demandé un délai supplémentaire .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>HyperLSTM Translation</head><p>Selon elle , le SCRS a été invité à une médiation et elle a demandé une période de réflexion supplémentaire .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>English Input</head><p>Relations between the US and Germany have come under strain following claims that the NSA bugged Chancellor Angela 's Merkel 's phone .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>French (Ground Truth)</head><p>Les relations entre les États-Unis et l' Allemagne ont été mises à rude épreuve à la suite de plaintes selon lesquelles la NSA avait mis sur écoute le téléphone portable de la chancelière allemande Angela Merkel .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>LSTM Translation</head><p>Les relations entre les Etats-Unis et l' Allemagne ont été mises à rude épreuve suite aux affirmations selon lesquelles la NSA aurait pris le téléphone de Merkel de la chancelière Angela .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>HyperLSTM Translation</head><p>Les relations entre les États-Unis et l' Allemagne ont été mises à rude épreuve après que la NSA a attaqué le téléphone de la chancelière Angela Angela .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>English Input</head><p>Germany 's BfV advises executives to consider using simple prepaid mobiles when on foreign trips because of the risk that smart phones are compromised . </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>LSTM Translation</head><p>Le BfV allemand conseille aux dirigeants d' envisager l' utilisation de mobiles prépayés simples lors de voyages à l' étranger en raison du risque de compromission des téléphones intelligents .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>HyperLSTM Translation</head><p>Le BfV allemand conseille aux dirigeants d' envisager l' utilisation de téléphones mobiles prépayés simples lors de voyages à l' étranger en raison du risque que les téléphones intelligents soient compromis .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>English Input</head><p>I was on the mid-evening news that same evening , and on TV the following day as well . French (Ground Truth)</p><p>Le soir-même , je suis au 20h , le lendemain aussi je suis à la télé .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>LSTM Translation</head><p>J' étais au milieu de l' actualité le soir même , et à la télévision le lendemain également .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>HyperLSTM Translation</head><p>J' étais au milieu de la soirée ce soir-là et à la télévision le lendemain .</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Kernels learned by a ConvNet to classify MNIST digits (left). Kernels learned by a hypernetwork generating weights for the ConvNet (right).</figDesc><graphic url="image-1.png" coords="4,162.76,335.97,269.73,133.71" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: An overview of HyperRNNs. Black connections and parameters are associated basic RNNs. Orange connections and parameters are introduced in this work and associated with HyperRNNs. Dotted arrows are for parameter generation.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head></head><label></label><figDesc>) This formulation of the HyperRNN has some similarities to Recurrent Batch Normalization (Cooij- mans et al., 2016) and Layer Normalization (Ba et al., 2016). The central idea for the normalization techniques is to calculate the first two statistical moments of the inputs to the activation function, and to linearly scale the inputs to have zero mean and unit variance. An additional set of fixed parameters are learned to unscale the activations if required. This element-wise operation also has similarities to the Multiplicative RNN (Sutskever et al., 2011) and Multiplicative Integration RNN (Wu et al., 2016) where it was demonstrated that the multiplication-operation encouraged better gradient flow.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head></head><label></label><figDesc>In 1955-37 most American and Europeans signed into the sea. An absence of [[Japan (Korea city)|Japan]], the Mayotte like Constantino In 1955-37 most American and Europeans signed into the sea. An absence of [[Japan (Korea city)|Japan]], the Mayotte like Constantino ple (in its first week, in [[880]]) that served as the mother of emperors, as the Corinthians, Bernard on his continued sequel toget ple (in its first week, in [[880]]) that served as the mother of emperors, as the Corinthians, Bernard on his continued sequel toget her ordered [[Operation Moabili]]. The Gallup churches in the army promulgated the possessions sitting at the reservation, and [[Mel her ordered [[Operation Moabili]]. The Gallup churches in the army promulgated the possessions sitting at the reservation, and [[Mel ito de la Vegeta Provine|Felix]] had broken Diocletian desperate from the full victory of Augustus, cited by Stephen I. Alexander Se ito de la Vegeta Provine|Felix]] had broken Diocletian desperate from the full victory of Augustus, cited by Stephen I. Alexander Se nate became Princess Cartara, an annual ruler of war (777-184) and founded numerous extremiti of justice practitioners. nate became Princess Cartara, an annual ruler of war (777-184) and founded numerous extremiti of justice practitioners.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Example text generated from HyperLSTM model. We visualize how four of the main RNN's weight matrices (W i h , W g h , W f h , W o h ) effectively change over time by plotting the norm of the changes below each generated character. High intensity represent large changes being made to weights of main RNN.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: Normalized Histogram plots of φ(c t ) for different models during sampling.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 6 :</head><label>6</label><figDesc>Figure 6: Loss Graph for enwik8 (left). Loss Graph for Handwriting Generation (right)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 7 :</head><label>7</label><figDesc>Figure 7: Handwriting sample generated from HyperLSTM model. We visualize how four of the main RNN's weight matrices (W i h W g h , W f h , W o h ) effectively change over time, by plotting norm of changes made to them over time.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>A</head><label></label><figDesc>Figure 8: Filters learned to classify MNIST digits in a fully connected network (left). Filters learned by a hypernetwork (right).</figDesc><graphic url="image-2.png" coords="16,104.96,163.18,385.37,184.57" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Figure 9 :</head><label>9</label><figDesc>Figure 9: Feedforward Network (top) and Recurrent Network (bottom)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Figure 12 :</head><label>12</label><figDesc>Figure 12: Normal CIFAR-10 16x16x3x3 kernel (left). Normal CIFAR-10 32x32x3x3 kernel (right).</figDesc><graphic url="image-3.png" coords="18,114.59,178.67,366.09,180.62" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Figure 13 :</head><label>13</label><figDesc>Figure 13: Generated 16x16x3x3 kernel (left). Generated 32x32x3x3 kernel (right).</figDesc><graphic url="image-4.png" coords="18,114.59,388.39,366.09,180.43" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12"><head></head><label></label><figDesc>Flow (Abadi et al., 2016) framework can be found at http://blog.otoro.net/2016/09/ 28/hyper-networks/. The HyperLSTM Cell will be located inside the HyperLSTM, as described in Equation 10. It is a normal LSTM cell with Layer Normalization. The inputs to the HyperLSTM Cell will be the con- catenation of the input signal and the hidden units of the main LSTM cell. The biases in Equation 10 are initialized to zero and Orthogonal Initialization (Henaff et al., 2016) is performed for all weights.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_13"><head></head><label></label><figDesc>0001 and gradient clipping of 5.0. Our HyperLSTM Cell consists of 128 units and a signal size of 4. For baseline models, Orthogonal Initialization (Henaff et al., 2016) is performed for all weights. A.3.6 NEURAL MACHINE TRANSLATION Our experimental procedure follows the procedure outlined in Sections 8.1 to 8.4 of the GNMT paper (Wu et al., 2016). We only performed experiments with a single model and did not conduct experiments with Reinforcement Learning or Model Ensembles as described in Sections 8.5 and 8.6 of the GNMT paper.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_14"><head>Figure 14 :</head><label>14</label><figDesc>Figure 14: enwik8 sample generated from 2048-unit Layer Norm HyperLSTM</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_15"><head></head><label></label><figDesc>[Adoptionism|adoptionists]] often started inscribed with the words distinct from two types. On the group definition the adjective '' fighting'' is until Crown Violence Association]], in which the higher education [[motto]] (despite the resulting attack on [[medical treatment]]) peaked on [[15 December]], [[2005]]. At 30 percent, up to 50% of the electric music from the period was created by Voltaire, but Newton promoted the history of his life. Publications in the Greek movie ''[[The Great Theory of Bertrand Russell ]]'', also kept an important part into the inclusion of ''[[The Beast for the Passage of Study]]'', began in [[1869]], opposite the existence of racial matters. Many of Mary's religious faiths ( including the [[Mary Sue Literature]] in the United States) incorporated much of Christianity within Hispanic [[Sacred text]]s. But controversial belief must be traced back to the 1950s stated that their anticolonial forces required the challenge of even lingering wars tossing nomon before leaves the bomb in paint on the South Island, known as [[Quay]], facing [[Britain]], though he still holds to his ancestors a strong ancestor of Orthodoxy. Others explain that the process of reverence occurred from [[Common Hermitage]], when the [[Crusade|Speakers]] laid his lifespan in [[Islam]] into the north of Israel. At the end of the [[14th century BCE]], the citadel of [[ Israel]] set Eisenace itself in the [[Abyssinia]]n islands, which was Faroe's Dominican Republic claimed by the King.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_16"><head>Figure 15 :</head><label>15</label><figDesc>Figure 15: enwik8 sample generated from 2048-unit Layer Norm HyperLSTM</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_17"><head></head><label></label><figDesc>French (Ground Truth) Le BfV d' Allemagne conseille à ses dirigeants d' envisager d' utiliser de simples téléphones portables prépayés lors de leurs voyages à l' étranger en raison du risque d' atteinte à l' intégrité des smartphones .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head>Table 1 : Structure of Wide Residual Networks in</head><label>1</label><figDesc></figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 2 : CIFAR-10 Classification with hypernetwork generated weights.</head><label>2</label><figDesc></figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Bits-per-character on the Penn Treebank test set. 
+
+4.4 HYPERLSTM FOR HUTTER PRIZE WIKIPEDIA LANGUAGE MODELLING 
+
+We train our model on the larger and more challenging Hutter Prize Wikipedia dataset, also known 
+as enwik8 (Hutter, 2012) consisting of a sequence of 100M characters composed of 205 unique 
+characters. Unlike Penn Treebank, enwik8 contains some foreign words (Latin, Arabic, Chinese), 
+indented XML, metadata, and internet addresses, making it a more realistic and practical dataset 
+to test character language models. For more details regarding experimental setup, please refer to 
+Appendix A.3.4. Examples of these mixed variety of text samples that our HyperLSTM model can 
+generate is in Appendix A.4. 
+
+Model 1 
+enwik8 Param Count 
+
+Stacked LSTM (Graves, 2013) 
+1.67 
+27.0 M 
+MRNN (Sutskever et al., 2011) 
+1.60 
+GF-RNN (Chung et al., 2015) 
+1.58 
+20.0 M 
+Grid-LSTM (Kalchbrenner et al., 2016) 
+1.47 
+16.8 M 
+LSTM (Rocki, 2016b) 
+1.45 
+MI-LSTM (Wu et al., 2016) 
+1.44 
+Recurrent Highway Networks (Zilly et al., 2016) 
+1.42 
+8.0 M 
+Recurrent Memory Array Structures (Rocki, 2016a) 
+1.40 
+HM-LSTM 3 (Chung et al., 2016) 
+1.40 
+Surprisal Feedback LSTM 4 (Rocki, 2016b) 
+1.37 
+
+LSTM, 1800 units, no recurrent dropout 2 
+1.470 
+14.81 M 
+LSTM, 2000 units, no recurrent dropout 2 
+1.461 
+18.06 M 
+Layer Norm LSTM, 1800 units 2 
+1.402 
+14.82 M 
+HyperLSTM (ours), 1800 units 
+1.391 
+18.71 M 
+Layer Norm HyperLSTM, 1800 units (ours) 
+1.353 
+18.78 M 
+Layer Norm HyperLSTM, 2048 units (ours) 
+1.340 
+26.54 M 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Bits-per-character on the enwik8 test set. 
+
+We see that HyperLSTM is once again competitive to Layer Norm LSTM, and if we combine both 
+techniques, the Layer Norm HyperLSTM achieves respectable results. The version of HyperLSTM 
+that uses 2048 hidden units achieve near state-of-the-art performance for this task. In addition, 
+HyperLSTM converges quicker per training step compared to LSTM and Layer Norm LSTM. Please 
+refer to </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="false"><head>Table 6 : Single model results on WMT En→Fr (newstest2014)</head><label>6</label><figDesc></figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_9" validated="false"><head>Table 7 :</head><label>7</label><figDesc></figDesc><table>MNIST Classification with hypernetwork generated weights. 
+
+A.3.2 STATIC HYPERNETWORKS FOR RESIDUAL NETWORK ARCHITECTURE AND 
+CIFAR-10 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_10" validated="true"><head>Table 8 :</head><label>8</label><figDesc></figDesc><table>Learning Rate Schedule for Nesterov Momentum SGD 
+
+&lt;step 
+learning rate 
+
+28,000 
+0.10000 
+56,000 
+0.02000 
+84,000 
+0.00400 
+112,000 
+0.00080 
+140,000 
+0.00016 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_11" validated="true"><head>Table 9 :</head><label>9</label><figDesc></figDesc><table>Learning Rate Schedule for Hyper Network / Adam 
+
+&lt;step 
+learning rate 
+
+168,000 
+0.00200 
+336,000 
+0.00100 
+504,000 
+0.00020 
+672,000 
+0.00005 
+
+</table></figure>
+
+			<note place="foot" n="1"> Tensor dot product between W ∈ R m×n×d and a ∈ R d . Result W, a ∈ R m×n</note>
+
+			<note place="foot" n="1"> We do not compare against methods that use dynamic evaluation. 2 Our implementation. 3 Based on results of version 2 at the time of writing. http://arxiv.org/abs/1609.01704v2 4 This method uses information about test errors during inference for predicting the next characters, hence it is not directly comparable to other methods that do not use this information.</note>
+
+			<note place="foot" n="1"> Our implementation, to replicate setup of (Graves, 2013). 2 Our implementation, with data augmentation, dropout and recurrent dropout.</note>
+
+			<note place="foot" n="1"> In practice, all eight weight matrices are concatenated into one large matrix for computational efficiency.</note>
+
+			<note place="foot" n="1"> An IPython notebook demonstrating the MNIST Hypernetwork experiment is available at this website: http://blog.otoro.net/2016/09/28/hyper-networks/.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>We thank Jeff Dean, Geoffrey Hinton, Mike Schuster and the Google Brain team for their help with the project.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Tensorflow: Large-scale machine learning on heterogeneous distributed systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martín</forename><surname>Abadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Agarwal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Barham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Brevdo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhifeng</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Craig</forename><surname>Citro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gregory</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andy</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Dean</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthieu</forename><surname>Devin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sanjay</forename><surname>Ghemawat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ian</forename><forename type="middle">J</forename><surname>Goodfellow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Harp</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Irving</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Isard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yangqing</forename><surname>Jia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Józefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Manjunath</forename><surname>Kudlur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Josh</forename><surname>Levenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Mané</surname></persName>
+		</author>
+		<idno>abs/1603.04467</idno>
+		<ptr target="http://arxiv.org/abs/1603.04467" />
+	</analytic>
+	<monogr>
+		<title level="j">CoRR</title>
+		<editor>Kunal Talwar, Paul A. Tucker, Vincent Vanhoucke, Vijay Vasudevan, Fernanda B. Viégas, Oriol Vinyals, Pete Warden, Martin Wattenberg, Martin Wicke, Yuan Yu, and Xiaoqiang Zheng</editor>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Learning to learn by gradient descent by gradient descent</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Andrychowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Denil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Gomez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">W</forename><surname>Hoffman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Pfau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Schaul</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>De Freitas</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.04474</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Learning feed-forward one-shot learners</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><forename type="middle">L</forename><surname>Ba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jamie</forename><forename type="middle">R</forename><surname>Kiros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<editor>Luca Bertinetto, João F. Henriques, Jack Valmadre, Philip H. S. Torr, and Andrea Vedaldi</editor>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note>Layer normalization. NIPS</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Mixture density networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">M</forename><surname>Bishop</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junyoung</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caglar</forename><surname>Gülçehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1502.02367</idno>
+		<title level="m">Gated feedback recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junyoung</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sungjin</forename><surname>Ahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.01704</idno>
+		<title level="m">Hierarchical multiscale recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Fast and accurate deep network learning by exponential linear units (ELUs)</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Djork-Arné</forename><surname>Clevert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thomas</forename><surname>Unterthiner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.07289</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Cooijmans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cesar</forename><surname>Laurent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caglar</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.09025</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">Recurrent Batch Normalization</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Dynamic filter networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bert</forename><surname>De Brabandere</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xu</forename><surname>Jia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tinne</forename><surname>Tuytelaars</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luc</forename><surname>Van Gool</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Predicting Parameters in Deep Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Misha</forename><surname>Denil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Babak</forename><surname>Shakibi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Laurent</forename><surname>Dinh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nando De</forename><surname>Marc&amp;apos;aurelio Ranzato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Freitas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Convolution by evolution: Differentiable pattern producing networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chrisantha</forename><surname>Fernando</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dylan</forename><surname>Banarse</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Malcolm</forename><surname>Reynolds</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Frederic</forename><surname>Besse</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Pfau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Max</forename><surname>Jaderberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marc</forename><surname>Lanctot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daan</forename><surname>Wierstra</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">GECCO</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Evolving modular fast-weight networks for control</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Faustino</forename><surname>Gomez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICANN</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1308.0850</idno>
+		<title level="m">Generating sequences with recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Deep residual learning for image recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kaiming</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiangyu</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shaoqing</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Sun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CVPR</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kaiming</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiangyu</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shaoqing</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Sun</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.05027</idno>
+		<title level="m">Identity mappings in deep residual networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Orthogonal RNNs and long-memory tasks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mikael</forename><surname>Henaff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arthur</forename><surname>Szlam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yann</forename><surname>Lecun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICML</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Improving neural networks by preventing co-adaptation of feature detectors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Geoffrey E Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Salakhutdinov</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1207.0580</idno>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Juergen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gao</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhuang</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kilian</forename><forename type="middle">Q</forename><surname>Weinberger</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.06993</idno>
+		<title level="m">Densely connected convolutional networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gao</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yu</forename><surname>Sun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhuang</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Sedra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kilian</forename><surname>Weinberger</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.09382</idno>
+		<title level="m">Deep networks with stochastic depth</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">The human knowledge compression contest</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marcus</forename><surname>Hutter</surname></persName>
+		</author>
+		<ptr target="http://prize.hutter1.net/" />
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Max</forename><surname>Jaderberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wojciech</forename><forename type="middle">Marian</forename><surname>Czarnecki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Simon</forename><surname>Osindero</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.05343</idno>
+		<title level="m">Oriol Vinyals, Alex Graves, and Koray Kavukcuoglu. Decoupled Neural Interfaces using Synthetic Gradients</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Grid long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nal</forename><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ivo</forename><surname>Danihelka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diederik</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Ba</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Evolving neural networks in compressed weight space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Koutnik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Faustino</forename><surname>Gomez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">GECCO</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Krueger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tegan</forename><surname>Maharaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">János</forename><surname>Kramár</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohammad</forename><surname>Pezeshki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nan</forename><forename type="middle">Rosemary</forename><surname>Ke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anirudh</forename><surname>Goyal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hugo</forename><surname>Larochelle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Courville</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.01305</idno>
+		<title level="m">Regularizing RNNs by randomly preserving hidden activations</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Handwritten digit recognition with a back-propagation network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Lecun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Boser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">S</forename><surname>Denker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Henderson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">E</forename><surname>Howard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Hubbard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">D</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Deeplysupervised nets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chen-Yu</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Saining</forename><surname>Xie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Patrick</forename><surname>Gallagher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhengyou</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhuowen</forename><surname>Tu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AISTATS</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page">6</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Network in network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Min</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qiang</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shuicheng</forename><surname>Yan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">IAM-OnDB -an on-line English sentence database acquired from handwritten text on a whiteboard</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marcus</forename><surname>Liwicki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Horst</forename><surname>Bunke</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICDAR</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Building a large annotated corpus of english: The penn treebank</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell</forename><forename type="middle">P</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mary</forename><forename type="middle">Ann</forename><surname>Marcinkiewicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Beatrice</forename><surname>Santorini</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational linguistics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="313" to="330" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">Subword language modeling with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomáš</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anoop</forename><surname>Deoras</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hai-Son</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Kombrink</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Cernocky</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+<note type="report_type">preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marcin</forename><surname>Moczulski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Misha</forename><surname>Denil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeremy</forename><surname>Appleyard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nando De</forename><surname>Freitas</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.05946</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">ACDC: A Structured Efficient Linear Layer. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">Regularizing recurrent networks-on injected noise and normbased methods</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Saahil</forename><surname>Ognawala</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Justin</forename><surname>Bayer</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1410.5684</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kamil</forename><surname>Rocki</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.03085</idno>
+		<title level="m">Recurrent memory array structures</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title level="m" type="main">Surprisal-driven feedback in recurrent networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kamil</forename><surname>Rocki</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.06027</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adriana</forename><surname>Romero</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samira</forename><forename type="middle">Ebrahimi</forename><surname>Kahou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Chassang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carlo</forename><surname>Gatta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6550</idno>
+		<title level="m">Fitnets: Hints for thin deep nets</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Learning to control fast-weight memories: An alternative to dynamic recurrent networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="131" to="139" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">A &apos;self-referential&apos; weight matrix</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICANN</title>
+		<imprint>
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stanislaw</forename><surname>Semeniuta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aliases</forename><surname>Severyn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erhardt</forename><surname>Barth</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.05118</idno>
+		<title level="m">Recurrent dropout without memory loss</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Training very deep networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Greff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">A hypercube-based encoding for evolving large-scale neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenneth</forename><forename type="middle">O</forename><surname>Stanley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><forename type="middle">B</forename><surname>D&amp;apos;ambrosio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Gauci</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Artificial Life</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="185" to="212" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Generating text with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Martens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICML</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><forename type="middle">V</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Norouzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Macherey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Krikun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Cao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Macherey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Klingner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Shah</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Johnson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ł</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Gouws</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Kato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Kudo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Kazawa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Stevens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Kurian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Patil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Young</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Smith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Riesa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Rudnick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hughes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Dean</surname></persName>
+		</author>
+		<title level="m">Google&apos;s Neural Machine Translation System: Bridging the Gap between Human and Machine Translation</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">On multiplicative integration with recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuhuai</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Saizheng</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ying</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">NIPS</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<monogr>
+		<title level="m" type="main">Fast algorithms for hierarchically semiseparable matrices. Numerical Linear Algebra with Applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianlin</forename><surname>Xia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shivkumar</forename><surname>Chandrasekaran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Gu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaoye</forename><forename type="middle">S</forename><surname>Li</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Moczulski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Denil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>De Freitas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Smola</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Song</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Wang</surname></persName>
+		</author>
+		<title level="m">Deep Fried Convnets. In ICCV</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">Wide residual networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sergey</forename><surname>Zagoruyko</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nikos</forename><surname>Komodakis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">BMVC</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ke</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miao</forename><surname>Sun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tony</forename><forename type="middle">X</forename><surname>Han</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xingfang</forename><surname>Yuan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Liru</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tao</forename><surname>Liu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.02908</idno>
+		<title level="m">Residual networks of residual networks: Multilevel residual networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<monogr>
+		<title level="m" type="main">Deep recurrent models with fastforward connections for neural machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jie</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ying</forename><surname>Cao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuguang</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peng</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Xu</surname></persName>
+		</author>
+		<idno>abs/1606.04199</idno>
+		<ptr target="http://arxiv.org/abs/1606.04199" />
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julian</forename><surname>Zilly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh</forename><surname>Srivastava</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.03474</idno>
+		<title level="m">Koutník, and Jürgen Schmidhuber. Recurrent highway networks</title>
+		<imprint>
+			<date type="published" when="2016-01" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

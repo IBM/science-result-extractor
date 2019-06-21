@@ -1,0 +1,1135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:05+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">A DEEP REINFORCED MODEL FOR ABSTRACTIVE SUMMARIZATION</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Romain</forename><surname>Paulus</surname></persName>
+							<email>rpaulus@salesforce.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Salesforce Research</orgName>
+								<address>
+									<addrLine>575 High Street</addrLine>
+									<postCode>94301</postCode>
+									<settlement>Palo Alto</settlement>
+									<region>CA</region>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+							<email>cxiong@salesforce.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Salesforce Research</orgName>
+								<address>
+									<addrLine>575 High Street</addrLine>
+									<postCode>94301</postCode>
+									<settlement>Palo Alto</settlement>
+									<region>CA</region>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+							<email>rsocher@salesforce.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Salesforce Research</orgName>
+								<address>
+									<addrLine>575 High Street</addrLine>
+									<postCode>94301</postCode>
+									<settlement>Palo Alto</settlement>
+									<region>CA</region>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">A DEEP REINFORCED MODEL FOR ABSTRACTIVE SUMMARIZATION</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+					<note>Published as a conference paper at ICLR 2018</note>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Attentional, RNN-based encoder-decoder models for abstractive summarization have achieved good performance on short input and output sequences. For longer documents and summaries however these models often include repetitive and incoherent phrases. We introduce a neural network model with a novel intra-attention that attends over the input and continuously generated output separately, and a new training method that combines standard supervised word prediction and reinforcement learning (RL). Models trained only with supervised learning often exhibit &quot;exposure bias&quot;-they assume ground truth is provided at each step during training. However, when standard word prediction is combined with the global sequence prediction training of RL the resulting summaries become more readable. We evaluate this model on the CNN/Daily Mail and New York Times datasets. Our model obtains a 41.16 ROUGE-1 score on the CNN/Daily Mail dataset, an improvement over previous state-of-the-art models. Human evaluation also shows that our model produces higher quality summaries.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Text summarization is the process of automatically generating natural language summaries from an input document while retaining the important points. By condensing large quantities of information into short, informative summaries, summarization can aid many downstream applications such as creating news digests, search, and report generation.</p><p>There are two prominent types of summarization algorithms. First, extractive summarization systems form summaries by copying parts of the input ( <ref type="bibr" target="#b5">Dorr et al., 2003;</ref><ref type="bibr" target="#b22">Nallapati et al., 2017)</ref>. Second, abstractive summarization systems generate new phrases, possibly rephrasing or using words that were not in the original text ( <ref type="bibr" target="#b4">Chopra et al., 2016;</ref>.</p><p>Neural network models ( ) based on the attentional encoder-decoder model for machine translation ( <ref type="bibr" target="#b0">Bahdanau et al., 2015)</ref> were able to generate abstractive summaries with high ROUGE scores. However, these systems have typically been used for summarizing short input sequences (one or two sentences) to generate even shorter summaries. For example, the summaries on the DUC-2004 dataset generated by the state-of-the-art system by <ref type="bibr" target="#b40">Zeng et al. (2016)</ref> are limited to 75 characters.  also applied their abstractive summarization model on the CNN/Daily Mail dataset ( <ref type="bibr" target="#b8">Hermann et al., 2015)</ref>, which contains input sequences of up to 800 tokens and multisentence summaries of up to 100 tokens. But their analysis illustrates a key problem with attentional encoder-decoder models: they often generate unnatural summaries consisting of repeated phrases.</p><p>We present a new abstractive summarization model that achieves state-of-the-art results on the CNN/Daily Mail and similarly good results on the New York Times dataset (NYT) <ref type="bibr" target="#b30">(Sandhaus, 2008)</ref>. To our knowledge, this is the first end-to-end model for abstractive summarization on the NYT dataset. We introduce a key attention mechanism and a new learning objective to address the <ref type="figure">Figure 1</ref>: Illustration of the encoder and decoder attention functions combined. The two context vectors (marked "C") are computed from attending over the encoder hidden states and decoder hidden states. Using these two contexts and the current decoder hidden state ("H"), a new word is generated and added to the output sequence. repeating phrase problem: (i) we use an intra-temporal attention in the encoder that records previous attention weights for each of the input tokens while a sequential intra-attention model in the decoder takes into account which words have already been generated by the decoder. (ii) we propose a new objective function by combining the maximum-likelihood cross-entropy loss used in prior work with rewards from policy gradient reinforcement learning to reduce exposure bias.</p><p>Our model achieves 41.16 ROUGE-1 on the CNN/Daily Mail dataset. Moreover, we show, through human evaluation of generated outputs, that our model generates more readable summaries compared to other abstractive approaches.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">NEURAL INTRA-ATTENTION MODEL</head><p>In this section, we present our intra-attention model based on the encoder-decoder network <ref type="bibr" target="#b33">(Sutskever et al., 2014)</ref>. In all our equations, x = {x 1 , x 2 , . . . , x n } represents the sequence of input (article) tokens, y = {y 1 , y 2 , . . . , y n } the sequence of output (summary) tokens, and denotes the vector concatenation operator.</p><p>Our model reads the input sequence with a bi-directional LSTM encoder {RNN e fwd , RNN e bwd } computing hidden states</p><formula xml:id="formula_0">h e i = [h e fwd i h e bwd i</formula><p>] from the embedding vectors of x i . We use a single LSTM decoder RNN d , computing hidden states h d t from the embedding vectors of y t . Both input and output embeddings are taken from the same matrix W emb . We initialize the decoder hidden state with h d 0 = h e n .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">INTRA-TEMPORAL ATTENTION ON INPUT SEQUENCE</head><p>At each decoding step t, we use an intra-temporal attention function to attend over specific parts of the encoded input sequence in addition to the decoder's own hidden state and the previouslygenerated word <ref type="bibr" target="#b31">(Sankaran et al., 2016)</ref>. This kind of attention prevents the model from attending over the sames parts of the input on different decoding steps.  have shown that such an intra-temporal attention can reduce the amount of repetitions when attending over long documents.</p><p>We define e ti as the attention score of the hidden input state h e i at decoding time step t:</p><formula xml:id="formula_1">e ti = f (h d t , h e i ),<label>(1)</label></formula><p>where f can be any function returning a scalar e ti from the h d t and h e i vectors. While some attention models use functions as simple as the dot-product between the two vectors, we choose to use a bilinear function:</p><formula xml:id="formula_2">f (h d t , h e i ) = h d t T W e attn h e i .<label>(2)</label></formula><p>We normalize the attention weights with the following temporal attention function, penalizing input tokens that have obtained high attention scores in past decoding steps. We define new temporal scores e ti :</p><formula xml:id="formula_3">e ti = exp(e ti ) if t = 1 exp(eti) t−1 j=1 exp(eji) otherwise.<label>(3)</label></formula><p>Finally, we compute the normalized attention scores α e ti across the inputs and use these weights to obtain the input context vector c e t :</p><formula xml:id="formula_4">α e ti = e ti n j=1 e tj (4) c e t = n i=1 α e ti h e i .<label>(5)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">INTRA-DECODER ATTENTION</head><p>While this intra-temporal attention function ensures that different parts of the encoded input sequence are used, our decoder can still generate repeated phrases based on its own hidden states, especially when generating long sequences. To prevent that, we can incorporate more information about the previously decoded sequence into the decoder. Looking back at previous decoding steps will allow our model to make more structured predictions and avoid repeating the same information, even if that information was generated many steps away. To achieve this, we introduce an intradecoder attention mechanism. This mechanism is not present in existing encoder-decoder models for abstractive summarization.</p><p>For each decoding step t, our model computes a new decoder context vector c d t . We set c d 1 to a vector of zeros since the generated sequence is empty on the first decoding step. For t &gt; 1, we use the following equations: <ref type="figure">Figure 1</ref> illustrates the intra-attention context vector computation c d t , in addition to the encoder temporal attention, and their use in the decoder.</p><formula xml:id="formula_5">e d tt = h d t T W d attn h d t (6) α d tt = exp(e d tt ) t−1 j=1 exp(e d tj ) (7) c d t = t−1 j=1 α d tj h d j (8)</formula><p>A closely-related intra-RNN attention function has been introduced by <ref type="bibr" target="#b3">Cheng et al. (2016)</ref> but their implementation works by modifying the underlying LSTM function, and they do not apply it to long sequence generation problems. This is a major difference with our method, which makes no assumptions about the type of decoder RNN, thus is more simple and widely applicable to other types of recurrent networks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">TOKEN GENERATION AND POINTER</head><p>To generate a token, our decoder uses either a token-generation softmax layer or a pointer mechanism to copy rare or unseen from the input sequence. We use a switch function that decides at each decoding step whether to use the token generation or the pointer ( <ref type="bibr" target="#b7">Gulcehre et al., 2016;</ref>. We define u t as a binary value, equal to 1 if the pointer mechanism is used to output y t , and 0 otherwise. In the following equations, all probabilities are conditioned on y 1 , . . . , y t−1 , x, even when not explicitly stated.</p><p>Our token-generation layer generates the following probability distribution:</p><formula xml:id="formula_6">p(y t |u t = 0) = softmax(W out [h d t c e t c d t ] + b out )<label>(9)</label></formula><p>On the other hand, the pointer mechanism uses the temporal attention weights α e ti as the probability distribution to copy the input token x i .</p><formula xml:id="formula_7">p(y t = x i |u t = 1) = α e ti (10)</formula><p>We also compute the probability of using the copy mechanism for the decoding step t:</p><formula xml:id="formula_8">p(u t = 1) = σ(W u [h d t c e t c d t ] + b u ),<label>(11)</label></formula><p>where σ is the sigmoid activation function.</p><p>Putting Equations 9 , 10 and 11 together, we obtain our final probability distribution for the output token y t : p(y t ) = p(u t = 1)p(y t |u t = 1) + p(u t = 0)p(y t |u t = 0).</p><p>The ground-truth value for u t and the corresponding i index of the target input token when u t = 1 are provided at every decoding step during training. We set u t = 1 either when y t is an out-ofvocabulary token or when it is a pre-defined named entity (see Section 5).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.4">SHARING DECODER WEIGHTS</head><p>In addition to using the same embedding matrix W emb for the encoder and the decoder sequences, we introduce some weight-sharing between this embedding matrix and the W out matrix of the tokengeneration layer, similarly to Inan et al. <ref type="formula" target="#formula_1">(2017)</ref> and <ref type="bibr" target="#b26">Press &amp; Wolf (2016)</ref>. This allows the tokengeneration function to use syntactic and semantic information contained in the embedding matrix.</p><formula xml:id="formula_10">W out = tanh(W emb W proj )<label>(13)</label></formula><p>2.5 REPETITION AVOIDANCE AT TEST TIME Another way to avoid repetitions comes from our observation that in both the CNN/Daily Mail and NYT datasets, ground-truth summaries almost never contain the same trigram twice. Based on this observation, we force our decoder to never output the same trigram more than once during testing. We do this by setting p(y t ) = 0 during beam search, when outputting y t would create a trigram that already exists in the previously decoded sequence of the current beam.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">HYBRID LEARNING OBJECTIVE</head><p>In this section, we explore different ways of training our encoder-decoder model. In particular, we propose reinforcement learning-based algorithms and their application to our summarization task.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">SUPERVISED LEARNING WITH TEACHER FORCING</head><p>The most widely used method to train a decoder RNN for sequence generation, called the teacher forcing" algorithm <ref type="bibr" target="#b37">(Williams &amp; Zipser, 1989)</ref>, minimizes a maximum-likelihood loss at each decoding step. We define y * = {y * 1 , y * 2 , . . . , y * n } as the ground-truth output sequence for a given input sequence x. The maximum-likelihood training objective is the minimization of the following loss:</p><formula xml:id="formula_11">L ml = − n t=1 log p(y * t |y * 1 , . . . , y * t−1 , x)<label>(14)</label></formula><p>However, minimizing L ml does not always produce the best results on discrete evaluation metrics such as ROUGE <ref type="bibr" target="#b15">(Lin, 2004</ref>). This phenomenon has been observed with similar sequence generation tasks like image captioning with CIDEr (Rennie et al., 2016) and machine translation with BLEU ( . There are two main reasons for this discrepancy. The first one, called exposure bias ( <ref type="bibr" target="#b27">Ranzato et al., 2015)</ref>, comes from the fact that the network has knowledge of the ground truth sequence up to the next token during training but does not have such supervision when testing, hence accumulating errors as it predicts the sequence. The second reason is due to the large number of potentially valid summaries, since there are more ways to arrange tokens to produce paraphrases or different sentence orders. The ROUGE metrics take some of this flexibility into account, but the maximum-likelihood objective does not.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">POLICY LEARNING</head><p>One way to remedy this is to learn a policy that maximizes a specific discrete metric instead of minimizing the maximum-likelihood loss, which is made possible with reinforcement learning. In our model, we use the self-critical policy gradient training algorithm ( <ref type="bibr" target="#b28">Rennie et al., 2016</ref>).</p><p>For this training algorithm, we produce two separate output sequences at each training iteration: y s , which is obtained by sampling from the p(y s t |y s 1 , . . . , y s t−1 , x) probability distribution at each decoding time step, andˆyandˆ andˆy, the baseline output, obtained by maximizing the output probability distribution at each time step, essentially performing a greedy search. We define r(y) as the reward function for an output sequence y, comparing it with the ground truth sequence y * with the evaluation metric of our choice.</p><formula xml:id="formula_12">L rl = (r(ˆ y) − r(y s )) n t=1 log p(y s t |y s 1 , . . . , y s t−1 , x)<label>(15)</label></formula><p>We can see that minimizing L rl is equivalent to maximizing the conditional likelihood of the sampled sequence y s if it obtains a higher reward than the baselinê y, thus increasing the reward expectation of our model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">MIXED TRAINING OBJECTIVE FUNCTION</head><p>One potential issue of this reinforcement training objective is that optimizing for a specific discrete metric like ROUGE does not guarantee an increase in quality and readability of the output. It is possible to game such discrete metrics and increase their score without an actual increase in readability or relevance ( <ref type="bibr" target="#b16">Liu et al., 2016)</ref>. While ROUGE measures the n-gram overlap between our generated summary and a reference sequence, human-readability is better captured by a language model, which is usually measured by perplexity.</p><p>Since our maximum-likelihood training objective <ref type="formula" target="#formula_1">(Equation 14)</ref> is essentially a conditional language model, calculating the probability of a token y t based on the previously predicted sequence {y 1 , . . . , y t−1 } and the input sequence x, we hypothesize that it can assist our policy learning algorithm to generate more natural summaries. This motivates us to define a mixed learning objective function that combines equations 14 and 15:</p><formula xml:id="formula_13">L mixed = γL rl + (1 − γ)L ml ,<label>(16)</label></formula><p>where γ is a scaling factor accounting for the difference in magnitude between L rl and L ml . A similar mixed-objective learning function has been used by  for machine translation on short sequences, but this is its first use in combination with self-critical policy learning for long summarization to explicitly improve readability in addition to evaluation metrics.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">RELATED WORK</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">NEURAL ENCODER-DECODER SEQUENCE MODELS</head><p>Neural encoder-decoder models are widely used in NLP applications such as machine translation <ref type="bibr" target="#b33">(Sutskever et al., 2014</ref>), summarization ( <ref type="bibr" target="#b4">Chopra et al., 2016;</ref>, and question answering ( <ref type="bibr" target="#b8">Hermann et al., 2015</ref>). These models use recurrent neural networks (RNN), such as long-short term memory network (LSTM) <ref type="bibr" target="#b9">(Hochreiter &amp; Schmidhuber, 1997)</ref> to encode an input sentence into a fixed vector, and create a new output sequence from that vector using another RNN.</p><p>To apply this sequence-to-sequence approach to natural language, word embeddings ( <ref type="bibr" target="#b20">Mikolov et al., 2013;</ref><ref type="bibr" target="#b25">Pennington et al., 2014</ref>) are used to convert language tokens to vectors that can be used as inputs for these networks. Attention mechanisms (Bahdanau et al., 2015) make these models more performant and scalable, allowing them to look back at parts of the encoded input sequence while the output is generated. These models often use a fixed input and output vocabulary, which prevents them from learning representations for new words. One way to fix this is to allow the decoder network to point back to some specific words or sub-sequences of the input and copy them onto the output sequence ( <ref type="bibr" target="#b35">Vinyals et al., 2015)</ref>. <ref type="bibr" target="#b7">Gulcehre et al. (2016)</ref> and <ref type="bibr" target="#b18">Merity et al. (2017)</ref> combine this pointer mechanism with the original word generation layer in the decoder to allow the model to use either method at each decoding step.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">REINFORCEMENT LEARNING FOR SEQUENCE GENERATION</head><p>Reinforcement learning (RL) is a way of training an agent to interact with a given environment in order to maximize a reward. RL has been used to solve a wide variety of problems, usually when an agent has to perform discrete actions before obtaining a reward, or when the metric to optimize is not differentiable and traditional supervised learning methods cannot be used. This is applicable to sequence generation tasks, because many of the metrics used to evaluate these tasks (like BLEU, ROUGE or METEOR) are not differentiable.</p><p>In order to optimize that metric directly, <ref type="bibr" target="#b27">Ranzato et al. (2015)</ref> have applied the REINFORCE algorithm <ref type="bibr" target="#b36">(Williams, 1992)</ref>  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">TEXT SUMMARIZATION</head><p>Most summarization models studied in the past are extractive in nature ( <ref type="bibr" target="#b5">Dorr et al., 2003;</ref><ref type="bibr" target="#b22">Nallapati et al., 2017;</ref><ref type="bibr" target="#b6">Durrett et al., 2016</ref>), which usually work by identifying the most important phrases of an input document and re-arranging them into a new summary sequence. The more recent abstractive summarization models have more degrees of freedom and can create more novel sequences. A well-studied set of summarization tasks is the Document Understanding Conference (DUC) 1 . These summarization tasks are varied, including short summaries of a single document and long summaries of multiple documents categorized by subject. Most abstractive summarization models have been evaluated on the DUC-2004 dataset, and outperform extractive models on that task ( <ref type="bibr" target="#b5">Dorr et al., 2003)</ref>. However, models trained on the DUC-2004 task can only generate very short summaries up to 75 characters, and are usually used with one or two input sentences. <ref type="bibr">Chen</ref>   <ref type="bibr" target="#b39">(Yang &amp; Nenkova, 2014;</ref><ref type="bibr" target="#b24">Nye &amp; Nenkova, 2015;</ref><ref type="bibr" target="#b11">Hong et al., 2015)</ref>, we are the first group to run an end-to-end abstractive summarization model on the article-abstract pairs of this dataset. While CNN/Daily Mail summaries have a similar wording to their corresponding articles, NYT abstracts are more varied, are shorter and can use a higher level of abstraction and paraphrase. Because of these differences, these two formats are a good complement to each other for abstractive summarization models. We describe the dataset preprocessing and pointer supervision in Section A of the Appendix.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">RESULTS</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">EXPERIMENTS</head><p>Setup: We evaluate the intra-decoder attention mechanism and the mixed-objective learning by running the following experiments on both datasets. We first run maximum-likelihood (ML) training with and without intra-decoder attention (removing c d t from Equations 9 and 11 to disable intraattention) and select the best performing architecture. Next, we initialize our model with the best ML parameters and we compare reinforcement learning (RL) with our mixed-objective learning (ML+RL), following our objective functions in Equation 15 and 16. The hyperparameters and other implementation details are described in the Appendix.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ROUGE metrics and options:</head><p>We report the full-length F-1 score of the ROUGE-1, ROUGE-2 and ROUGE-L metrics with the Porter stemmer option. For RL and ML+RL training, we use the ROUGE-L score as a reinforcement reward. We also tried ROUGE-2 but we found that it created summaries that almost always reached the maximum length, often ending sentences abruptly. Our results for the CNN/Daily Mail dataset are shown in <ref type="table">Table 1</ref>, and for the NYT dataset in <ref type="table" target="#tab_3">Table  2</ref>. We observe that the intra-decoder attention function helps our model achieve better ROUGE scores on the CNN/Daily Mail but not on the NYT dataset.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">QUANTITATIVE ANALYSIS</head><p>Further analysis on the CNN/Daily Mail test set shows that intra-attention increases the ROUGE-1 score of examples with a long ground truth summary, while decreasing the score of shorter summaries, as illustrated in <ref type="figure">Figure 2</ref>. This confirms our assumption that intra-attention improves performance on longer output sequences, and explains why intra-attention doesnt improve performance on the NYT dataset, which has shorter summaries on average.</p><p>In addition, we can see that on all datasets, both the RL and ML+RL models obtain much higher scores than the ML model. However, their best model has lower ROUGE scores than their lead-3 baseline, while our ML+RL model beats the lead-3 baseline as shown in <ref type="table">Table 1</ref>. Thus, we conclude that our mixedobjective model obtains a higher ROUGE performance than theirs.</p><p>We also compare our model against extractive baselines (either lead sentences or lead words) and the extractive summarization model built by <ref type="bibr" target="#b6">Durrett et al. (2016)</ref>, which was trained using a smaller version of the NYT dataset that is 6 times smaller than ours but contains longer summaries. We trained our ML+RL model on their dataset and show the results on      each example, we limit the generated summary length or the baseline length to the ground truth summary length. Our results show that our mixed-objective model has higher ROUGE scores than their extractive model and the extractive baselines.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">QUALITATIVE ANALYSIS</head><p>We perform human evaluation to ensure that our increase in ROUGE scores is also followed by an increase in human readability and quality. In particular, we want to know whether the ML+RL training objective did improve readability compared to RL.</p><p>Evaluation setup: To perform this evaluation, we randomly select 100 test examples from the CNN/Daily Mail dataset. For each example, we show the original article, the ground truth summary as well as summaries generated by different models side by side to a human evaluator. The human evaluator does not know which summaries come from which model or which one is the ground truth. Two scores from 1 to 10 are then assigned to each summary, one for relevance (how well does the summary capture the important parts of the article) and one for readability (how well-written the summary is). Each summary is rated by 5 different human evaluators on Amazon Mechanical Turk and the results are averaged across all examples and evaluators.</p><p>Results: Our human evaluation results are shown in <ref type="table" target="#tab_6">Table 5</ref>. Even though RL has the highest ROUGE-1 and ROUGE-L scores, it produces the least readable summaries among our experiments. The most common readability issue observed in our RL results, as shown in the example of <ref type="table" target="#tab_4">Table  3</ref>, is the presence of short and truncated sentences towards the end of sequences. This confirms that optimizing for single discrete evaluation metric such as ROUGE with RL can be detrimental to the model quality. On the other hand, our RL+ML summaries obtain the highest readability and relevance scores among our models, hence solving the readability issues of the RL model while also having a higher ROUGE score than ML. This shows the value of the RL+ML training method.</p><p>We also report perplexity scores in <ref type="table" target="#tab_6">Table 5</ref>. Even though the ML model has the lowest perplexity, it doesn't have the highest readability. This indicate that perplexity measurements cannot replace human judgment for readability evaluation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSION</head><p>We presented a new model and training procedure that obtains state-of-the-art results in text summarization for the CNN/Daily Mail, improves the readability of the generated summaries and is better suited to long output sequences. We also run our abstractive model on the NYT dataset for the first time. We saw that despite their common use for evaluation, ROUGE scores have their shortcomings and should not be the only metric to optimize on summarization model for long sequences. Our intra-attention decoder and combined training objective could be applied to other sequence-tosequence tasks with long inputs and outputs, which is an interesting direction for further research.</p><p>A NYT DATASET</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.1 PREPROCESSING</head><p>We remove all documents that do not have a full article text, abstract or headline. We concatenate the headline, byline and full article text, separated by special tokens, to produce a single input sequence for each example. We tokenize the input and abstract pairs with the Stanford tokenizer ( ). We convert all tokens to lower-case and replace all numbers with "0", remove "(s)" and "(m)" marks in the abstracts and all occurrences of the following words, singular or plural, if they are surrounded by semicolons or at the end of the abstract: "photo", "graph", "chart", "map", "table" and "drawing". Since the NYT abstracts almost never contain periods, we consider them multisentence summaries if we split sentences based on semicolons. This allows us to make the summary format and evaluation procedure similar to the CNN/Daily Mail dataset. These pre-processing steps give us an average of 549 input tokens and 40 output tokens per example, after limiting the input and output lengths to 800 and 100 tokens.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.2 DATASET SPLITS</head><p>We created our own training, validation, and testing splits for this dataset. Instead of producing random splits, we sorted the documents by their publication date in chronological order and used the first 90% (589,284 examples) for training, the next 5% (32,736) for validation, and the remaining 5% (32,739) for testing. This makes our dataset splits easily reproducible and follows the intuition that if used in a production environment, such a summarization model would be used on recent articles rather than random ones.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.3 POINTER SUPERVISION</head><p>We run each input and abstract sequence through the Stanford named entity recognizer (NER) <ref type="bibr">(Man- ning et al., 2014</ref>). For all named entity tokens in the abstract if the type "PERSON", "LOCATION", "ORGANIZATION" or "MISC", we find their first occurrence in the input sequence. We use this information to supervise p(u t ) (Equation 11) and α e ti (Equation 4) during training. Note that the NER tagger is only used to create the dataset and is no longer needed during testing, thus we're not adding any dependencies to our model. We also add pointer supervision for out-of-vocabulary output tokens if they are present in the input.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>B HYPERPARAMETERS AND IMPLEMENTATION DETAILS</head><p>For ML training, we use the teacher forcing algorithm with the only difference that at each decoding step, we choose with a 25% probability the previously generated token instead of the ground-truth token as the decoder input token y t−1 , which reduces exposure bias ( <ref type="bibr" target="#b34">Venkatraman et al., 2015</ref>). We use a γ = 0.9984 for the ML+RL loss function.</p><p>We use two 200-dimensional LSTMs for the bidirectional encoder and one 400-dimensional LSTM for the decoder. We limit the input vocabulary size to 150,000 tokens, and the output vocabulary to 50,000 tokens by selecting the most frequent tokens in the training set. Input word embeddings are 100-dimensional and are initialized with GloVe ( <ref type="bibr" target="#b25">Pennington et al., 2014</ref>). Based on these dimensions and sizes, our final model has 16.9M trainable parameters, 15M of which are word embeddings.</p><p>We train all our models with Adam <ref type="bibr" target="#b13">(Kingma &amp; Ba, 2014</ref>) with a batch size of 50 and a learning rate α of 0.001 for ML training and 0.0001 for RL and ML+RL training. At test time, we use beam search of width 5 on all our models to generate our final predictions.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Many abstractive models such as Rush et al. ( 2015 )</head><label>2015</label><figDesc>, Chopra et al. (2016) and Nallapati et al. (2016) are all based on the neural encoder-decoder architecture (Section 4.1). Miao &amp; Blunsom (2016) extend the encoder-decoder architecture with a variational auto-encoder, and use REINFORCE to train it as well.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>0Cumulated</head><label></label><figDesc>Figure 2: Cumulated ROUGE-1 relative improvement obtained by adding intra-attention to the ML model on the CNN/Daily Mail dataset.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head></head><label></label><figDesc>In particular, these methods clearly surpass the state-of-the-art model from Nallapati et al. (2016) on the CNN/Daily Mail dataset, as well as the lead-3 extractive baseline (taking the first 3 sentences of the article as the summary) and the SummaRuNNer extractive model (Nallapati et al., 2017). See et al. (2017) also reported their results on a closely-related abstractive model the CNN/DailyMail but used a different dataset preprocessing pipeline, which makes direct comparison with our numbers difficult.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head></head><label></label><figDesc>Source document Jenson Button was denied his 100th race for McLaren after an ERS prevented him from making it to the start- line. It capped a miserable weekend for the Briton; his time in Bahrain plagued by reliability issues. Button spent much of the race on Twitter delivering his verdict as the action unfolded. 'Kimi is the man to watch,' and 'loving the sparks', were among his pearls of wisdom, but the tweet which courted the most attention was a rather mischievous one: 'Ooh is Lewis backing his team mate into Vettel?' he quizzed after Rosberg accused Hamilton of pulling off such a manoeuvre in China. Jenson Button waves to the crowd ahead of the Bahrain Grand Prix which he failed to start Perhaps a career in the media beckons... Lewis Hamilton has out-qualified and finished ahead of Nico Rosberg at every race this season. Indeed Rosberg has now beaten his Mercedes team-mate only once in the 11 races since the pair infamously collided in Belgium last year. Hamilton secured the 36th win of his career in Bahrain and his 21st from pole position. Only Michael Schumacher (40), Ayrton Senna (29) and Sebastian Vettel (27) have more. (...) Ground truth summary Button denied 100th race start for McLaren after ERS failure. Button then spent much of the Bahrain Grand Prix on Twitter delivering his verdict on the action as it unfolded. Lewis Hamilton has out-qualified and finished ahead of Mercedes team-mate Nico Rosberg at every race this season. Bernie Ecclestone confirms F1 will make its bow in Azerbaijan next season. ML, with intra-attention (ROUGE-1 41.58) Button was denied his 100th race for McLaren. ERS prevented him from making it to the start-line. The Briton. He quizzed after Nico Rosberg accused Lewis Hamilton of pulling off such a manoeuvre in China. Button has been in Azerbaijan for the first time since 2013. RL, with intra-attention (ROUGE-1 50.00) Button was denied his 100th race for McLaren after an ERS prevented him from making it to the start-line. It capped a miserable weekend for the Briton. Button has out-qualified. Finished ahead of Nico Rosberg at Bahrain. Lewis Hamilton has. In 11 races. . The race. To lead 2,000 laps. . In. . . And. . ML+RL, with intra-attention (ROUGE-1 44.00) Button was denied his 100th race for McLaren. The ERS prevented him from making it to the start-line. Button was his team mate in the 11 races in Bahrain. He quizzed after Nico Rosberg accused Lewis Hamilton of pulling off such a manoeuvre in China.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 4 .</head><label>4</label><figDesc></figDesc><table>Similarly to Durrett 
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 :</head><label>2</label><figDesc>Quantitative results for various models on the New York Times test dataset</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Example from the CNN/Daily Mail test dataset showing the outputs of our three best models 
+after de-tokenization, re-capitalization, replacing anonymized entities, and replacing numbers. The 
+ROUGE score corresponds to the specific example. </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Comparison of ROUGE recall scores for lead baselines, the extractive model of Durrett 
+et al. (2016) and our model on their NYT dataset splits. 
+
+Model 
+Readability Relevance Perplexity 
+ML 
+6.76 
+7.14 
+84.46 
+RL 
+4.18 
+6.32 
+16417.68 
+ML+RL 7.04 
+7.45 
+121.07 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Comparison of human readability scores on a random subset of the CNN/Daily Mail test 
+dataset. All models are with intra-decoder attention. 
+
+</table></figure>
+
+			<note place="foot" n="1"> http://duc.nist.gov/</note>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Neural machine translation by jointly learning to align and translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference on Learning Representations</title>
+		<meeting>the International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">An actor-critic algorithm for sequence prediction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philemon</forename><surname>Brakel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kelvin</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anirudh</forename><surname>Goyal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Lowe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joelle</forename><surname>Pineau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference on Learning Representations</title>
+		<meeting>the International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Distraction-based neural networks for modeling documents</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qian</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodan</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhenhua</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Si</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hui</forename><surname>Jiang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Twenty-Fifth International Joint Conference on Artificial Intelligence (IJCAI-16)</title>
+		<meeting>the Twenty-Fifth International Joint Conference on Artificial Intelligence (IJCAI-16)</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2754" to="2760" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Long short-term memory-networks for machine reading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianpeng</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Dong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mirella</forename><surname>Lapata</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1601.06733</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Abstractive sentence summarization with attentive recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Auli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><forename type="middle">M</forename><surname>Rush</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NAACL-HLT16</title>
+		<meeting>NAACL-HLT16</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="93" to="98" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Hedge trimmer: A parse-and-trim approach to headline generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bonnie</forename><surname>Dorr</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Zajic</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Schwartz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the HLT-NAACL 03 on Text summarization workshop</title>
+		<meeting>the HLT-NAACL 03 on Text summarization workshop</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="page" from="1" to="8" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Learning-based single-document summarization with compression and anaphoricity constraints</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Durrett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Taylor</forename><surname>Berg-Kirkpatrick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Pointing the unknown words</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caglar</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sungjin</forename><surname>Ahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ramesh</forename><surname>Nallapati</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.08148</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Teaching machines to read and comprehend</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karl</forename><surname>Moritz Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Kocisky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lasse</forename><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Will</forename><surname>Kay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mustafa</forename><surname>Suleyman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1693" to="1701" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Improving the estimation of word importance for news multi-document summarization-extended technical report</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Hong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ani</forename><surname>Nenkova</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">System combination for multi-document summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Hong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ani</forename><surname>Nenkova</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="107" to="117" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Tying word vectors and word classifiers: A loss framework for language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Khashayar</forename><surname>Hakan Inan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Khosravi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference on Learning Representations</title>
+		<meeting>the International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diederik</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Ba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6980</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">The role of discourse units in near-extractive summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junyi Jessy</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kapil</forename><surname>Thadani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Amanda</forename><surname>Stent</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">17th Annual Meeting of the Special Interest Group on Discourse and Dialogue</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page">137</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Rouge: A package for automatic evaluation of summaries</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chin-Yew</forename><surname>Lin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Text summarization branches out: Proceedings of the ACL-04 workshop</title>
+		<meeting><address><addrLine>Barcelona, Spain</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="volume">8</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">How not to evaluate your dialogue system: An empirical study of unsupervised evaluation metrics for dialogue response generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chia-Wei</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Lowe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Iulian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Serban</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Laurent</forename><surname>Noseworthy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joelle</forename><surname>Charlin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Pineau</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.08023</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">The stanford corenlp natural language processing toolkit</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mihai</forename><surname>Christopher D Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Surdeanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jenny</forename><forename type="middle">Rose</forename><surname>Bauer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Finkel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Bethard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mcclosky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL (System Demonstrations)</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="55" to="60" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Pointer sentinel mixture models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference on Learning Representations</title>
+		<meeting>the International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Language as a latent variable: Discrete generative models for sentence compression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yishu</forename><surname>Miao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Distributed representations of words and phrases and their compositionality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="3111" to="3119" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Abstractive text summarization using sequence-to-sequence rnns and beyond</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ramesh</forename><surname>Nallapati</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bing</forename><surname>Glar Gülçehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Xiang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of SIGNLL Conference on Computational Natural Language Learning</title>
+		<meeting>SIGNLL Conference on Computational Natural Language Learning</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Summarunner: A recurrent neural network based sequence model for extractive summarization of documents</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ramesh</forename><surname>Nallapati</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Feifei</forename><surname>Zhai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Zhou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 31st AAAI</title>
+		<meeting>the 31st AAAI</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Reward augmented maximum likelihood for neural structured prediction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohammad</forename><surname>Norouzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samy</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Navdeep</forename><surname>Jaitly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dale</forename><surname>Schuurmans</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances In Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1723" to="1731" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Identification and characterization of newsworthy verbs in world news</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Benjamin</forename><surname>Nye</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ani</forename><surname>Nenkova</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">HLT-NAACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1440" to="1445" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="page" from="1532" to="1543" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Using the output embedding to improve language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ofir</forename><surname>Press</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lior</forename><surname>Wolf</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.05859</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Marc&amp;apos;aurelio Ranzato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wojciech</forename><surname>Auli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zaremba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.06732</idno>
+		<title level="m">Sequence level training with recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">Self-critical sequence training for image captioning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Etienne</forename><surname>Steven J Rennie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Youssef</forename><surname>Marcheret</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jarret</forename><surname>Mroueh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vaibhava</forename><surname>Ross</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Goel</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1612.00563</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">A neural attention model for abstractive sentence summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Alexander M Rush</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Weston</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Evan</forename><surname>Sandhaus</surname></persName>
+		</author>
+		<title level="m">The new york times annotated corpus. Linguistic Data Consortium</title>
+		<meeting><address><addrLine>Philadelphia</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="page">26752</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">Temporal attention model for neural machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Haitao</forename><surname>Baskaran Sankaran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yaser</forename><surname>Mi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abe</forename><surname>Al-Onaizan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ittycheriah</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.02927</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Get to the point: Summarization with pointer-generator networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abigail</forename><surname>See</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><forename type="middle">J</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Long Papers</publisher>
+			<date type="published" when="2017-07" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1073" to="1083" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Sequence to sequence learning with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quoc V</forename><surname>Le</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="3104" to="3112" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Improving multi-step prediction of learned time series models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arun</forename><surname>Venkatraman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J Andrew</forename><surname>Hebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bagnell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="3024" to="3030" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Pointer networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Meire</forename><surname>Fortunato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Navdeep</forename><surname>Jaitly</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="2692" to="2700" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Simple statistical gradient-following algorithms for connectionist reinforcement learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ronald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Machine learning</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">3-4</biblScope>
+			<biblScope unit="page" from="229" to="256" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">A learning algorithm for continually running fully recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ronald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Williams</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zipser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="270" to="280" />
+			<date type="published" when="1989" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Google&apos;s neural machine translation system</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhifeng</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Quoc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohammad</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wolfgang</forename><surname>Norouzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maxim</forename><surname>Macherey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuan</forename><surname>Krikun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qin</forename><surname>Cao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Macherey</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.08144</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Bridging the gap between human and machine translation</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Detecting information-dense texts in multiple news domains</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yinfei</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ani</forename><surname>Nenkova</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1650" to="1656" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<monogr>
+		<title level="m" type="main">Efficient summarization with readagain and copy mechanism</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenyuan</forename><surname>Zeng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenjie</forename><surname>Luo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sanja</forename><surname>Fidler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raquel</forename><surname>Urtasun</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.03382</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

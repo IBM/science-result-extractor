@@ -1,0 +1,927 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:55+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">A Question-Focused Multi-Factor Attention Network for Question Answering</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Souvik</forename><surname>Kundu</surname></persName>
+							<email>souvik@comp.nus.edu.sg</email>
+							<affiliation key="aff0">
+								<orgName type="department">Department of Computer Science</orgName>
+								<orgName type="institution">National University of Singapore</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hwee</forename><forename type="middle">Tou</forename><surname>Ng</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">Department of Computer Science</orgName>
+								<orgName type="institution">National University of Singapore</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">A Question-Focused Multi-Factor Attention Network for Question Answering</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Neural network models recently proposed for question answering (QA) primarily focus on capturing the passage-question relation. However, they have minimal capability to link relevant facts distributed across multiple sentences which is crucial in achieving deeper understanding, such as performing multi-sentence reasoning, co-reference resolution, etc. They also do not explicitly focus on the question and answer type which often plays a critical role in QA. In this paper, we propose a novel end-to-end question-focused multi-factor attention network for answer extraction. Multi-factor attentive encoding using tensor-based transformation aggregates meaningful facts even when they are located in multiple sentences. To implicitly infer the answer type, we also propose a max-attentional question aggregation mechanism to encode a question vector based on the important words in a question. During prediction, we incorporate sequence-level encoding of the first wh-word and its immediately following word as an additional source of question type information. Our proposed model achieves significant improvements over the best prior state-of-the-art results on three large-scale challenging QA datasets, namely NewsQA, TriviaQA, and SearchQA.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Introduction</head><p>In machine comprehension-based (MC) question answering (QA), a machine is expected to provide an answer for a given question by understanding texts. In recent years, several MC datasets have been released. <ref type="bibr" target="#b16">Richardson, Burges, and Renshaw (2013)</ref> released a multiple-choice question answering dataset. <ref type="bibr" target="#b4">Hermann et al. (2015)</ref> created a large cloze-style dataset using CNN and Daily Mail news articles. Several models ( <ref type="bibr" target="#b4">Hermann et al. 2015;</ref><ref type="bibr" target="#b0">Chen, Bolton, and Manning 2016;</ref><ref type="bibr" target="#b7">Kadlec et al. 2016;</ref><ref type="bibr" target="#b10">Kobayashi et al. 2016;</ref><ref type="bibr" target="#b1">Cui et al. 2017;</ref><ref type="bibr" target="#b2">Dhingra et al. 2017</ref>) based on neural attentional and pointer networks (Vinyals, Fortunato, and Jaitly 2015) have been proposed since then. <ref type="bibr" target="#b15">Rajpurkar et al. (2016)</ref> released the SQuAD dataset where the answers are freeform unlike in the previous MC datasets.</p><p>Most of the previously released datasets are closed-world, i.e., the questions and answers are formulated given the text passages. As such, the answer spans can often be extracted by simple word and context matching. <ref type="bibr" target="#b19">Trischler et al. (2016)</ref> Copyright c 2018, Association for the Advancement of Artificial Intelligence (www.aaai.org). All rights reserved.</p><p>attempted to alleviate this issue by proposing the NewsQA dataset where the questions are formed only using the CNN article summaries without accessing the full text. As a result, a significant proportion of questions require reasoning beyond simple word matching. Two even more challenging open-world QA datasets, <ref type="bibr">TriviaQA (Joshi et al. 2017</ref>) and SearchQA ( <ref type="bibr" target="#b3">Dunn et al. 2017)</ref>, have recently been released. TriviaQA consists of question-answer pairs authored by trivia enthusiasts and independently gathered evidence documents from Wikipedia as well as Bing Web search. In SearchQA, the question-answer pairs are crawled from the Jeopardy archive and are augmented with text snippets retrieved from Google search.</p><p>Recently, many neural models have been proposed ( <ref type="bibr" target="#b21">Wang et al. 2016;</ref><ref type="bibr" target="#b12">Pan et al. 2017;</ref><ref type="bibr" target="#b17">Seo et al. 2017</ref>; <ref type="bibr" target="#b20">Wang and Jiang 2017;</ref><ref type="bibr" target="#b23">Weissenborn, Wiese, and Seiffe 2017;</ref><ref type="bibr" target="#b25">Xiong, Zhong, and Socher 2017;</ref><ref type="bibr" target="#b26">Yang et al. 2017)</ref>, which mostly focus on passage-question interaction to capture the context similarity for extracting a text span as the answer. However, most of the models do not focus on synthesizing evidence from multiple sentences and fail to perform well on challenging open-world QA tasks such as NewsQA and TriviaQA. Moreover, none of the models explicitly focus on question/answer type information for predicting the answer. In practice, fine-grained understanding of question/answer type plays an important role in QA.</p><p>In this work, we propose an end-to-end question-focused multi-factor attention network for document-based question answering (AMANDA), which learns to aggregate evidence distributed across multiple sentences and identifies the important question words to help extract the answer. Intuitively, AMANDA extracts the answer not only by synthesizing relevant facts from the passage but also by implicitly determining the suitable answer type during prediction. The key contributions of this paper are:</p><p>• We propose a multi-factor attentive encoding approach based on tensor transformation to synthesize meaningful evidence across multiple sentences. It is particularly effective when answering a question requires deeper understanding such as multi-sentence reasoning, co-reference resolution, etc.</p><p>• To subsume fine-grained answer type information, we propose a max-attentional question aggregation mecha- nism which learns to identify the meaningful portions of a question. We also incorporate sequence-level representations of the first wh-word and its immediately following word in a question as an additional source of question type information.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Problem Definition</head><p>Given a pair of passage and question, an MC system needs to extract a text span from the passage as the answer. We formulate the answer as two pointers in the passage, which represent the beginning and ending tokens of the answer. Let P be a passage with tokens (P 1 , P 2 , . . . , P T ) and Q be a question with tokens (Q 1 , Q 2 , . . . , Q U ), where T and U are the length of the passage and question respectively. To answer the question, a system needs to determine two pointers in the passage, b and e, such that 1 ≤ b ≤ e ≤ T . The resulting answer tokens will be (P b , P b+1 , . . . , P e ).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Network Architecture</head><p>The architecture of the proposed question-focused multifactor attention network 1 is given in <ref type="figure" target="#fig_0">Figure 1</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Word-level Embedding</head><p>Word-level embeddings are formed by two components: pre-trained word embedding vectors from GloVe (Pennington, Socher, and Manning 2014) and convolutional neural network-based (CNN) character embeddings <ref type="bibr" target="#b8">(Kim 2014</ref>).</p><p>Character embeddings have proven to be very useful for outof-vocabulary (OOV) words. We use a character-level CNN followed by max-pooling over an entire word to get the embedding vector for each word. Prior to that, a character-based lookup table is used to generate the embedding for every character and the lookup table weights are learned during training. We concatenate these two embedding vectors for every word to generate word-level embeddings.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Sequence-level Encoding</head><p>We apply sequence-level encoding to incorporate contextual information. Let e p t and e q t be the tth embedding vectors of the passage and the question respectively. The embedding vectors are fed to a bi-directional LSTM (BiLSTM) <ref type="bibr" target="#b5">(Hochreiter and Schmidhuber 1997)</ref>. Considering that the outputs of the BiLSTMs are unfolded across time, we represent the outputs as P ∈ R T ×H and Q ∈ R U ×H for passage and question respectively. H is the number of hidden units for the BiLSTMs. At every time step, the hidden unit representation of the BiLSTMs is obtained by concatenating the hidden unit representations of the corresponding forward and backward LSTMs. For the passage, at time step t, the forward and backward LSTM hidden unit representations can be written as:</p><formula xml:id="formula_0">− → h p t = − −−− → LSTM( − → h p t−1 , e p t ) ← − h p t = ← −−− − LSTM( ← − h p t+1 , e p t )<label>(1)</label></formula><p>The tth row of P is represented as</p><formula xml:id="formula_1">p t = − → h p t || ← − h p t ,</formula><p>where || represents the concatenation of two vectors. Similarly, the sequence level encoding for a question is</p><formula xml:id="formula_2">q t = − → h q t || ← − h q t</formula><p>, where q t is the tth row of Q.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Cartesian Similarity-based Attention Layer</head><p>The attention matrix is calculated by taking dot products between all possible combinations of sequence-level encoding vectors for a passage and a question. Note that for calculating the attention matrix, we do not introduce any additional learnable parameters. The attention matrix A ∈ R T ×U can be expressed as:</p><formula xml:id="formula_3">A = P Q<label>(2)</label></formula><p>Intuitively, A i,j is a measure of the similarity between the sequence-level encoding vectors of the ith passage word and the jth question word.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Question-dependent Passage Encoding</head><p>In this step, we jointly encode the passage and question. We apply a row-wise softmax function on the attention matrix:</p><formula xml:id="formula_4">R = row-wise softmax(A)<label>(3)</label></formula><p>If r t ∈ R U is the tth row of R ∈ R T ×U , then U j=1 r t,j = 1. Each row of R measures how relevant every question word is with respect to a given passage word. Next, an aggregated question vector is computed corresponding to each sequence-level passage word encoding vector. The aggregated question vector g t ∈ R H corresponding to the tth passage word is computed as g t = r t Q. The aggregated question vectors corresponding to all the passage words can be computed as G = R Q, where g t is the tth row of</p><formula xml:id="formula_5">G ∈ R T ×H .</formula><p>The aggregated question vectors corresponding to the passage words are then concatenated with the sequence-level passage word encoding vectors. If the question-dependent passage encoding is denoted as S ∈ R T ×2H and s t is the tth row of S, then s t = c t || g t , where c t is the sequencelevel encoding vector of the tth passage word (tth row of P). Then a BiLSTM is applied on S to obtain V ∈ R T ×H .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Multi-factor Attentive Encoding</head><p>Tensor-based neural network approaches have been used in a variety of natural language processing tasks <ref type="bibr" target="#b13">(Pei, Ge, and Chang 2014;</ref><ref type="bibr" target="#b12">Li, Li, and Chang 2016)</ref>. We propose a multi-factor attentive encoding approach using tensor-based transformation. In practice, recurrent neural networks fail to remember information when the context is long. Our proposed multi-factor attentive encoding approach helps to aggregate meaningful information from a long context with fine-grained inference due to the use of multiple factors while calculating attention.</p><p>Let v i ∈ R H and v j ∈ R H represent the questiondependent passage vectors of the ith and jth word, i.e., the ith and jth row of V. Tensor-based transformation for multifactor attention is formulated as follows:</p><formula xml:id="formula_6">f m i,j = v i W [1:m] f v j ,<label>(4)</label></formula><p>where</p><formula xml:id="formula_7">W [1:m] f</formula><p>∈ R H×m×H is a 3-way tensor and m is the number of factors. The output of the tensor product f m i,j ∈ R m is a vector where each element f m i,j,k is a result of the bilinear form defined by each tensor slice W <ref type="bibr">[k]</ref> f ∈ R H×H :</p><formula xml:id="formula_8">f m i,j,k = v i W [k] f v j = a,b v i,a W [k] f a,b v j,b<label>(5)</label></formula><p>∀i, j ∈ [1, T ], the multi-factor attention tensor can be given as F <ref type="bibr">[1:m]</ref> ∈ R m×T ×T . For every vector f m i,j of F <ref type="bibr">[1:m]</ref> , we perform a max pooling operation over all the elements to obtain the resulting attention value:</p><formula xml:id="formula_9">F i,j = max(f m i,j ) ,<label>(6)</label></formula><p>where F i,j represents the element in the ith row and jth column of F ∈ R T ×T . Each row of F measures how relevant every passage word is with respect to a given questiondependent passage encoding of a word. We apply a row-wise softmax function on F to normalize the attention weights, obtaining˜Fobtaining˜ obtaining˜F ∈ R T ×T . Next, an aggregated multi-factor attentive encoding vector is computed corresponding to each question-dependent passage word encoding vector. The aggregated vectors corresponding to all the passage words, M ∈ R T ×H , can be given as M = ˜ F V. The aggregated multi-factor attentive encoding vectors are concatenated with the question-dependent passage word encoding vectors to obtaiñ M ∈ R T ×2H . To control the impact of˜M of˜ of˜M, we apply a feed-forward neural network-based gating method to obtain Y ∈ R T ×2H . If the tth row of˜Mof˜ of˜M is˜mis˜ is˜m t , then the tth row of Y is:</p><formula xml:id="formula_10">y t = ˜ m t sigmoid( ˜ m t W g + b g ) ,<label>(7)</label></formula><p>where represents element-wise multiplication. W g ∈ R 2H×2H and b g ∈ R 2H are the transformation matrix and bias vector respectively. We use another pair of stacked BiLSTMs on top of Y to determine the beginning and ending pointers. Let the hidden unit representations of these two BiLSTMs be B ∈ R T ×H and E ∈ R T ×H . To incorporate the dependency of the ending pointer on the beginning pointer, the hidden unit representation of B is used as input to E.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Question-focused Attentional Pointing</head><p>Unlike previous approaches, our proposed model does not predict the answer pointers directly from contextual passage encoding or use another decoder for generating the pointers. We formulate a question representation based on two parts:</p><p>• max-attentional question aggregation (q ma )</p><p>• question type representation (q f ) q ma is formulated by using the attention matrix A and the sequence-level question encoding Q. We apply a maxcol operation on A which forms a row vector whose elements are the maximum of the corresponding columns of A. We define k ∈ R U as the normalized max-attentional weights:</p><formula xml:id="formula_11">k = softmax(maxcol(A))<label>(8)</label></formula><p>where softmax is used for normalization. The maxattentional question representation q ma ∈ R H is:</p><formula xml:id="formula_12">q ma = k Q<label>(9)</label></formula><p>Intuitively, q ma aggregates the most relevant parts of the question with respect to all the words in the passage. q f is the vector concatenation of the representations of the first wh-word and its following word from the sequencelevel question encoding Q. The set of wh-words we used is {what, who, how, when, which, where, why}. If q t wh and q t wh +1 represent the first wh-word and its following word (i.e., the t wh th and (t wh + 1)th rows of Q), q f ∈ R 2H is expressed as:</p><formula xml:id="formula_13">q f = q t wh || q t wh +1<label>(10)</label></formula><p>The final question representatioñ q ∈ R H is expressed as:</p><formula xml:id="formula_14">˜ q = tanh((q ma || q f )W q + b q )<label>(11)</label></formula><p>where W q ∈ R 3H×H and b q ∈ R H are the weight matrix and bias vector respectively. If no wh-word is present in a question, we use the first two sequence-level question word representations for calculating˜qcalculating˜ calculating˜q. We measure the similarity betweeñ q and the contextual encoding vectors in B and E to determine the beginning and ending answer pointers. Corresponding similarity vectors s b ∈ R T and s e ∈ R T are computed as:</p><formula xml:id="formula_15">s b = ˜ q B , s e = ˜ q E<label>(12)</label></formula><p>Passage: ... The family of a Korean-American missionary believed held in North Korea said Tuesday they are working with U.S. officials to get him returned home. Robert Park told relatives before Christmas that he was trying to sneak into the isolated communist state to bring a message of "Christ's love and forgiveness" to North Korean leader Kim ... Question: What is the name of the Korean-American missionary?</p><p>Reference Answer: Robert Park <ref type="table">Table 1</ref>: Example of a (passage, question, answer) <ref type="figure">Figure 2</ref>: Multi-factor attention weights (darker regions signify higher weights).</p><p>The probability distributions for the beginning pointer b and the ending pointer e for a given passage P and a question Q can be given as:</p><formula xml:id="formula_16">Pr(b | P, Q) = softmax(s b ) Pr(e | P, Q, b) = softmax(s e )<label>(13)</label></formula><p>The joint probability distribution for obtaining the answer a is given as:</p><formula xml:id="formula_17">Pr(a | P, Q) = Pr(b | P, Q) Pr(e | P, Q, b)<label>(14)</label></formula><p>To train our model, we minimize the cross entropy loss:</p><formula xml:id="formula_18">loss = − log Pr(a | P, Q)<label>(15)</label></formula><p>summing over all training instances. During prediction, we select the locations in the passage for which the product of Pr(b) and Pr(e) is maximum keeping the constraint</p><formula xml:id="formula_19">1 ≤ b ≤ e ≤ T .</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Visualization</head><p>To understand how the proposed model works, for the example given in <ref type="table">Table 1</ref>, we visualize the normalized multifactor attention weights˜Fweights˜ weights˜F and the attention weights k which are used for max-attentional question aggregation. In <ref type="figure">Figure 2</ref>, a small portion of˜Fof˜ of˜F has been shown, in which the answer words Robert and Park are both assigned higher weights when paired with the context word KoreanAmerican. Due to the use of multi-factor attention, the answer segment pays more attention to the important keyword   although it is quite far in the context passage and thus effectively infers the correct answer by deeper understanding. In <ref type="figure" target="#fig_1">Figure 3</ref>, it is clear that the important question word name is getting a higher weight than the other question words. This helps to infer the fine-grained answer type during prediction, i.e., a person's name in this example.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Experiments</head><p>We evaluated AMANDA on three challenging QA datasets: NewsQA, TriviaQA, and SearchQA. Using the NewsQA development set as a benchmark, we perform rigorous analysis for better understanding of how our proposed model works.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Datasets</head><p>The   </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Experimental Settings</head><p>We tokenize the corpora with NLTK 2 . We use the 300-dimension pre-trained word vectors from GloVe (Pennington, Socher, and Manning 2014) and we do not update them during training. The out-of-vocabulary words are initialized with zero vectors. We use 50-dimension character-level embedding vectors. The number of hidden units in all the LSTMs is 150. We use dropout ( <ref type="bibr" target="#b18">Srivastava et al. 2014</ref>) with probability 0.3 for every learnable layer. For multi-factor attentive encoding, we choose 4 factors (m) based on our experimental findings (refer to <ref type="table" target="#tab_6">Table 7</ref>). During training, the minibatch size is fixed at 60. We use the Adam optimizer (Kingma and Ba 2015) with learning rate of 0.001 and clipnorm of 5. During testing, we enforce the constraint that the ending pointer will always be equal to or greater than the beginning pointer. We use exact match (EM) and F1 scores as the evaluation metrics. <ref type="table" target="#tab_1">Table 2</ref> shows that AMANDA outperforms all the stateof-the-art models by a significant margin on the NewsQA dataset. <ref type="table" target="#tab_3">Table 3</ref> shows the results on the TriviaQA dataset. In <ref type="table" target="#tab_3">Table 3</ref>, the model named Classifier based on feature engineering was proposed by <ref type="bibr" target="#b6">Joshi et al. (2017)</ref>. They also reported the performance of BiDAF ( <ref type="bibr" target="#b17">Seo et al. 2017)</ref>. A memory network-based approach, MEMEN, was recently proposed by <ref type="bibr" target="#b12">(Pan et al. 2017</ref>). Note that in the Wikipedia domain, we choose the answer which provides the highest maximum joint probability (according to <ref type="bibr">Eq. (14)</ref>) for any document. <ref type="table" target="#tab_3">Table 3</ref> shows that AMANDA achieves state-ofthe-art results in both Wikipedia and Web domain on distantly supervised and verified data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Results</head><p>Results on the SearchQA dataset are shown in <ref type="table" target="#tab_4">Table 4</ref>. In addition to a TF-IDF approach, <ref type="bibr" target="#b3">Dunn et al. (2017)</ref> modified and reported the performance of attention sum reader (ASR) which was originally proposed by <ref type="bibr" target="#b7">Kadlec et al. (2016)</ref>. We consider a maximum of 150 words surrounding the answer from the concatenated ranked list of snippets as a passage to more quickly train the model and to reduce the amount of noisy information. During prediction, we choose the first Model EM F1 minus multi factor attn. 46.4 61.2 minus q ma and q f 46.2 60.5 minus q ma 46.6 61.3 minus q f 46.8 61.8 AMANDA 48.4 63.3  <ref type="table">Table 6</ref>: Ablation of other components on the NewsQA development set 200 words (about 5 snippets) from the concatenated ranked list of snippets as an evidence passage. These are chosen based on performance on the development set. Based on question patterns, question types are always represented by the first two sequence-level representations of question words. To make the results comparable, we also report accuracy for single-word-answer (unigram) questions and F1 score for multi-word-answer (n-gram) questions. AMANDA outperforms both systems, especially for multi-word-answer questions by a huge margin. This indicates that AMANDA can learn to make inference reasonably well even if the evidence passages are noisy. <ref type="table" target="#tab_5">Table 5</ref> shows that AMANDA performs better than any of the ablated models which include the ablation of multifactor attentive encoding, max-attentional question aggregation (q ma ), and question type representation (q f ). We also perform statistical significance test using paired t-test and bootstrap resampling. Performance of AMANDA (both in terms of EM and F1) is significantly better (p &lt; 0.01) than the ablated models.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Effectiveness of the Model Components</head><p>One of the key contributions of this paper is multi-factor attentive encoding which aggregates information from the relevant passage words by using a tensor-based attention mechanism. The use of multiple factors helps to fine-tune answer inference by synthesizing information distributed across multiple sentences. The number of factors is the granularity to which the model is allowed to refine the evidence. The effect of multi-factor attentive encoding is illustrated by the following example taken from the NewsQA development set: What will allow storage on remote servers? ...The iCloud service will now be integrated into the iOS 5 operating system. It will work with apps and allow content to be stored on remote servers instead of the users' iPod, iPhone or other device... When multi-factor attentive encoding is ablated, the model</p><note type="other">Value of m 1 2 3 4 5 EM 45.8 47.4 48.7 48.4 48.0 F1</note><p>61.2 61.9 62.9 63.3 62.5  could not figure out the cross-sentence co-reference and wrongly predicted the answer as apps. On the contrary, with multi-factor attentive encoding, AMANDA could correctly infer the answer as iCloud service.</p><p>Another contribution of this work is to include the question focus during prediction. It is performed by adding two components: q ma (max-attentional question aggregation) and q f (question type representation). q ma and q f implicitly infer the answer type during prediction by focusing on the important question words. Impact of the question focus components is illustrated by the following example taken from the NewsQA development set: who speaks on Holocaust remembrance day? ... Israel's vice prime minister Silvan Shalom said Tuesday "Israel can never ... people just 65 years ago" ... He was speaking as Israel observes its Holocaust memorial day, remembering the roughly... Without the q ma and q f components, the answer was wrongly predicted as Israel, whereas with q ma and q f , AMANDA could correctly infer the answer type (i.e., a person's name) and predict Silvan Shalom as the answer.</p><p>Ablation studies of other components such as character embedding, question-dependent passage encoding, and the second LSTM during prediction are given in <ref type="table">Table 6</ref>. When the second LSTM (E) is ablated, a feed-forward layer is used instead. <ref type="table">Table 6</ref> shows that question-dependent passage encoding has the highest impact on performance.</p><p>Variation on the number of factors (m) and q ma <ref type="table" target="#tab_6">Table 7</ref> shows the performance of AMANDA for different values of m. We use 4 factors for all the experiments as it gives the highest F1 score. Note that m = 1 is equivalent to standard bilinear attention. <ref type="table" target="#tab_7">Table 8</ref> shows the variation of question aggregation formulation. For mean aggregation, the attentional weight vector k is formulated by applying column-wise averaging on the attention matrix A. Intuitively, it is giving equal priority to all the passage words to determine a particular question word attention. Similarly, in the case of sum aggregation, we apply a column-wise sum operation. <ref type="table" target="#tab_7">Table 8</ref> shows that the best performance is obtained when q ma is obtained with a column-wise maximum operation on A. Effectively, it is helping to give higher weights to the more important question words based on the most relevant passage words.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Quantitative Error Analysis</head><p>We analyzed the performance of AMANDA across different question types and different predicted answer lengths. <ref type="figure" target="#fig_2">Figure 4</ref>(a) shows that it performs poorly on why and other questions whose answers are usually longer. <ref type="figure" target="#fig_2">Figure 4</ref>(b) supports this fact as well. When the predicted answer length increases, both F1 and EM start to degrade. The gap between F1 and EM also increases for longer answers. This is because for longer answers, the model is not able to decide the exact boundaries (low EM score) but manages to predict some correct words which partially overlap with the reference answer (relatively higher F1 score).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Qualitative Error Analysis</head><p>On the NewsQA development set, AMANDA predicted completely wrong answers on 25.1% of the questions. We randomly picked 50 such questions for analysis. The observed types of errors are given in <ref type="table" target="#tab_8">Table 9</ref> with examples. 42% of the errors are due to answer ambiguities, i.e., no unique answer is present. 22% of the errors are due to mismatch between question and context words. 10% of the errors are due to the need for highly complex inference. 6% of the errors occur due to paraphrasing, i.e., the question is posed with different words which do not appear in the passage context. The remaining 20% of the errors are due to insufficient evidence, incorrect tokenization, wrong coreference resolution, etc.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Related Work</head><p>Recently, several neural network-based models have been proposed for QA. Models based on the idea of chunking and ranking include <ref type="bibr" target="#b26">Yu et al. (2016)</ref> and <ref type="bibr" target="#b11">Lee et al. (2016)</ref>. <ref type="bibr" target="#b26">Yang et al. (2017)</ref> used a fine-grained gating mechanism to capture the correlation between a passage and a question. <ref type="bibr" target="#b20">Wang and Jiang (2017)</ref> used a Match-LSTM to encode the question and passage together and a boundary model determined the beginning and ending boundary of an answer. <ref type="bibr" target="#b19">Trischler et al. (2016)</ref> reimplemented Match-LSTM for the NewsQA dataset and proposed a faster version of it. <ref type="bibr" target="#b25">Xiong, Zhong, and Socher (2017)</ref> used a co-attentive encoder followed by a dynamic decoder for iteratively estimating the boundary pointers. <ref type="bibr" target="#b17">Seo et al. (2017)</ref> proposed a bi-directional attention flow approach to capture the interactions between passages and questions. <ref type="bibr" target="#b23">Weissenborn, Wiese, and Seiffe (2017)</ref> proposed a simple context matching-based neural encoder and incorporated word overlap and term frequency features to estimate the start and end pointers.  proposed a gated self-matching approach which encodes the passage and question together using a self-matching attention mechanism. <ref type="bibr" target="#b12">Pan et al. (2017)</ref> proposed a memory network-based multi-layer embedding model and reported results on the TriviaQA dataset.</p><p>Different from all prior approaches, our proposed multifactor attentive encoding helps to aggregate relevant evidence by using a tensor-based multi-factor attention mechanism. This in turn helps to infer the answer by synthesizing information from multiple sentences. AMANDA also learns to focus on the important question words to encode the aggregated question vector for predicting the answer with suitable answer type.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Conclusion</head><p>In this paper, we have proposed a question-focused multifactor attention network (AMANDA), which learns to aggregate meaningful evidence from multiple sentences with deeper understanding and to focus on the important words in a question for extracting an answer span from the passage with suitable answer type. AMANDA achieves state-ofthe-art performance on NewsQA, TriviaQA, and SearchQA datasets, outperforming all prior published models by significant margins. Ablation results show the importance of the proposed components.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Architecture of the proposed model. Hidden unit representations of Bi-LSTMs, B and E, are shown to illustrate the answer pointers. Blue and red arrows represent the start and end answer pointers respectively.</figDesc><graphic url="image-1.png" coords="2,59.85,54.00,226.79,227.16" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Max-attentional weights for question (the origin is set to −0.1 for clarity).</figDesc><graphic url="image-3.png" coords="4,367.88,54.00,141.73,85.04" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: (a) Results for different question types. (b) Results for different predicted answer lengths. Answer ambiguity (42%) Q: What happens to the power supply? ... customers possible." The outages were due mostly to power lines downed by Saturday's hurricane-force winds, which knocked over trees and utility poles. At ... Context mismatch (22%) Q: Who was Kandi Burrus's fiance? Kandi Burruss, the newest cast member of the reality show "The Real Housewives of Atlanta" ... fiance, who died ... fiance, 34-year-old Ashley "A.J." Jewell, also... Complex inference (10%) Q: When did the Delta Queen first serve? ... the Delta Queen steamboat, a floating National ... scheduled voyage this week ... The Delta Queen will go ... Supporters of the boat, which has roamed the nation's waterways since 1927 and helped the Navy ... Paraphrasing issues (6%) Q: What was Ralph Lauren's first job? Ralph Lauren has ... Japan. For four ... than the former tie salesman from the Bronx. "Those ties ... Lauren originally named his company Polo because ...</figDesc><graphic url="image-4.png" coords="7,54.00,63.97,107.72,56.69" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Results on the NewsQA dataset.  † denotes the mod-
+els of (Weissenborn, Wiese, and Seiffe 2017). 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Results on the TriviaQA dataset.  ‡ (Joshi et al. 2017), (Pan et al. 2017) 
+
+Model 
+Set 
+Unigram N-gram 
+Accuracy 
+F1 
+(Dunn et al. 2017) 
+
+TF-IDF Max 
+Dev 
+13.0 
+-
+Test 
+12.7 
+-
+
+ASR 
+Dev 
+43.9 
+24.2 
+Test 
+41.3 
+22.8 
+
+AMANDA 
+Dev 
+48.6 
+57.7 
+Test 
+46.8 
+56.6 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 4 :</head><label>4</label><figDesc>SearchQA (Dunn et al. 2017) is also constructed to more closely reflect IR-style QA. They first collected existing question-answer pairs from a Jeopardy archive and aug- mented them with text snippets retrieved by Google. One difference with TriviaQA is that the evidence passages in SearchQA are Google snippets instead of Wikipedia or Web search documents. This makes reasoning more challenging as the snippets are often very noisy. SearchQA consists of 140,461 question-answer pairs, where each pair has 49.6 snippets on average and each snippet has 37.3 tokens on av- erage.</figDesc><table>Results on the SearchQA dataset. 
+
+ered evidence documents from Wikipedia and Bing Web 
+search. This makes the task more similar to real-life IR-style 
+QA. In total, the dataset consists of over 650K question-
+answer-evidence triples. Due to the high redundancy in 
+Web search results (around 6 documents per question), each 
+question-answer-evidence triple is treated as a separate sam-
+ple and evaluation is performed at document level. How-
+ever, in Wikipedia, questions are not repeated (each ques-
+tion has 1.8 evidence documents) and evaluation is per-
+formed over questions. In addition to distant supervision, 
+TriviaQA also has a verified human-annotated question-
+evidence collection. Compared to previous datasets, Trivi-
+aQA has more complex compositional questions which re-
+quire greater multi-sentence reasoning. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Ablation of proposed components on the NewsQA 
+development set. 
+
+Model 
+EM 
+F1 
+minus char embedding 
+47.5 61.4 
+minus question-dependent passage enc. 32.1 45.0 
+minus 2nd LSTM during prediction 
+46.5 61.6 
+AMANDA 
+48.4 63.3 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="true"><head>Table 7 : Variation of m on the NewsQA development set.</head><label>7</label><figDesc></figDesc><table>Aggregation 
+EM 
+F1 
+Mean 
+46.6 61.3 
+Sum 
+47.9 62.2 
+Max (AMANDA) 48.4 63.3 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head>Table 8 :</head><label>8</label><figDesc></figDesc><table>Variation of question aggregation formulation on 
+the NewsQA development set. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="false"><head>Table 9 :</head><label>9</label><figDesc></figDesc><table>Examples of different error types and their percent-
+ages. Ground truth answers are bold-faced and predicted an-
+swers are underlined. 
+
+</table></figure>
+
+			<note place="foot" n="1"> Our code is available at https://github.com/ nusnlp/amanda</note>
+
+			<note place="foot" n="2"> http://www.nltk.org/</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgement</head><p>This research was supported by research grant R-252-000-634-592.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">A thorough examination of the CNN / Daily Mail reading comprehension task</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bolton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Attention-over-attention neural networks for reading comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Cui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Hu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Gated-attention readers for text comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Dhingra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">SearchQA: A new Q&amp;A dataset augmented with context from a search engine</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Dunn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Sagun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Higgins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><forename type="middle">U</forename><surname>Güney</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Cirik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Golub</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P.-S</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Deng</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.05179</idno>
+		<idno>arXiv:1706.09789</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Twostage synthesis networks for transfer learning in machine comprehension</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Teaching machines to read and comprehend</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">M</forename><surname>Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Kocisk´ykocisk´y</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Kay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Suleyman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in NIPS</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">TriviaQA: A large scale distantly supervised challenge dataset for reading comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Joshi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Choi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Zettlemoyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Text understanding with the attention sum reader network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Kadlec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schmid</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Bajgar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kleindienst</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Convolutional neural networks for sentence classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Kim</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">P</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">L</forename><surname>Ba</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICLR</title>
+		<meeting>ICLR</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Dynamic entity representation with max-pooling improves machine reading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kobayashi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Tian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Okazaki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Inui</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NAACL</title>
+		<meeting>NAACL</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Learning recurrent span representations for extractive question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Kwiatkowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Parikh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Das</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01436</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">MEMEN: Multi-layer embedding with memory networks for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chang</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Pan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Zhao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Cao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Cai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.09098</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+	<note>Discourse parsing with attention-based hierarchical neural networks</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Max-margin tensor neural network for Chinese word segmentation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Pei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chang</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">GloVe: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">SQuAD: 100,000+ questions for machine comprehension of text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Rajpurkar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Lopyrev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">MCTest: A challenge dataset for the open-domain machine comprehension of text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Richardson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">J C</forename><surname>Burges</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Renshaw</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Bidirectional attention flow for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Seo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kembhavi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Farhadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hajishirzi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICLR</title>
+		<meeting>ICLR</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Dropout: A simple way to prevent neural networks from overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">JMLR</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">NewsQA: A machine comprehension dataset</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Trischler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Yuan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Harris</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Sordoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Bachman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Suleman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Fortunato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Jaitly</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.09830</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in NIPS</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+	<note>Pointer networks</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Machine comprehension using Match-LSTM and answer pointer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiang</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICLR</title>
+		<meeting>ICLR</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Multiperspective context matching for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Mi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Hamza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Florian</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename></persName>
+		</author>
+		<idno type="arXiv">arXiv:1612.04211</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Gated self-matching networks for reading comprehension and question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zhou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACL</title>
+		<meeting>ACL</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Making neural QA as simple as possible but not simpler</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weissenborn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Wiese</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Seiffe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of CoNLL</title>
+		<meeting>CoNLL</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">Reading twice for natural language understanding</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weissenborn</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1706.02596</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Dynamic coattention networks for question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Zhong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICLR</title>
+		<meeting>ICLR</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">End-to-end answer chunk extraction and ranking for reading comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Dhingra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Yuan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">W</forename><surname>Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Hasan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Xiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Zhou</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1610.09996</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICLR</title>
+		<meeting>ICLR</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+	<note>Words or characters? Fine-grained gating for reading comprehension</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

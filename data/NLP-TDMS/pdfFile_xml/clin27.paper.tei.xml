@@ -1,0 +1,914 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:08+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">MoNoise: Modeling Noise Using a Modular Normalization System. Gertjan van Noord</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rob</forename><surname>Van Der Goot</surname></persName>
+							<email>r.van.der.goot@rug.nl</email>
+							<affiliation key="aff0">
+								<orgName type="institution">University of Groningen</orgName>
+								<address>
+									<addrLine>Broerstraat 5</addrLine>
+									<postCode>9712CP</postCode>
+									<settlement>Groningen</settlement>
+									<country key="NL">Netherlands</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">MoNoise: Modeling Noise Using a Modular Normalization System. Gertjan van Noord</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We propose MoNoise: a normalization model focused on generalizability and efficiency, it aims at being easily reusable and adaptable. Normalization is the task of translating texts from a non-canonical domain to a more canonical domain, in our case: from social media data to standard language. Our proposed model is based on a modular candidate generation in which each module is responsible for a different type of normalization action. The most important generation modules are a spelling correction system and a word embeddings module. Depending on the definition of the normalization task, a static lookup list can be crucial for performance. We train a random forest classifier to rank the candidates, which generalizes well to all different types of normaliza-tion actions. Most features for the ranking originate from the generation modules; besides these features, N-gram features prove to be an important source of information. We show that MoNoise beats the state-of-the-art on different normalization benchmarks for English and Dutch, which all define the task of normalization slightly different.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.">Introduction</head><p>The spontaneous and diverse nature of language use on social media leads to many problems for existing natural language processing models. Most existing models are developed with a focus on more canonical language. These models do not cope with the disfluencies and unknown phenomena occurring in social media data. This is also known as the problem of domain adaptation: in which we try to adapt a model trained on a source domain to another target domain. Solutions for this problem can be broadly divided in two strategies: adapting the model to the target domain, or adapting the data to the source domain <ref type="bibr" target="#b6">(Eisenstein 2013)</ref>.</p><p>Domain adaptation by adapting the model to the target domain can be done in different ways. The most straightforward method is to train the model on annotated data from the target domain. Newly annotated data can be obtained by hiring human annotators. However, it is cheaper to annotate data automatically using an existing model. This is called self-training, or up-training if the data is annotated by an external model. The effect of adding this newly annotated data depends on the nature of the new data compared to the data of the target and source domain. The added data should be annotated with a high accuracy, so it can not be too distant from the source domain. However, it should add some information inherent to the target domain. There is ample previous work in this direction in which different strategies of up-training are used ( <ref type="bibr" target="#b7">Foster et al. 2011</ref><ref type="bibr" target="#b11">, Khan et al. 2013</ref><ref type="bibr" target="#b18">, Petrov and McDonald 2012</ref>.</p><p>The other strategy for domain adaptation is to convert the data to the source domain; this is the strategy explored in this work. This task is often referred to as normalization, because we aim to convert data from the target domain to the more 'normal' source domain, for which a model is already available. The main advantage of this approach is that we only need one normalization model, which we can use as preprocessing step for multiple natural language processing systems. Normalization is a subjective task; the goal is to convert to 'normal' language. At the same time, we must preserve the meaning of the original utterance. This task comprises the correction of unintentional anomalies (spell correction) as well as intentional anomalies (domain specific language phenomena). Annotator disagreement can thus have two sources, the decision whether a word should be normalized, and the choice of the correct normalization candidate. We discuss these problems in more depth in Section 3.1. In the rest of this paper we will use the term 'anomaly' for words in need of normalization according to the annotators. Example 1 shows that the normalization task comprises of different types of transformations. Replacements like 'bein' → 'being' are quite similar on the surface, whereas 'tmr' → tomorrow shows that we need more than edit distances on the character level. This example includes a 1-N replacement (Ima → 'I'm going to', meaning that a single token is mapped to multiple tokens. Not all the annotated corpora we use include annotation for these cases (see Section 3.1). 1-N replacements show a strong Zipfian distribution in the corpora that include them in the annotation, because of the expansion of phrasal abbreviations like 'lol' and 'idk' which are very common. Some of the corpora also include N-1 replacements, meaning the merging of two consecutive words; however, this is a very rare phenomenon.</p><p>Because the normalization problem comprises of a variety of different normalization actions required for different types of anomalies, we propose to tackle this problem in a modular way. Different modules can then be designed for different types of anomalies. Our most important modules are: a spell correction module, a word embeddings module, and a static lookup list generated from the training data. We use features from the generation modules as well as additional features in a random forest classifier, which decides which candidate is the correct normalization. We experiment with a variety of additional features, of which the N-gram features are by far the best predictor.</p><p>The rest of this paper is structured as follows: We first discuss related work (Section 2), after which we shortly describe the used data (Section 3). Next follows the methodology section (4) and the evaluation section (5), which are both splitted by the two different parts of our system; candidate generation and candidate ranking. Finally, we conclude in Section 6.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">Related Work</head><p>The first attempts at normalizing user generated content were focused on SMS data; <ref type="bibr" target="#b3">Choudhury et al. (2007)</ref> annotated a dataset for this domain, and reported the first results. They use a Hidden Markov Model encoding based on characters and phonemic transcriptions to model the word variation in SMS data. The Viterbi algorithm is then used to find the most likely replacement for each position.</p><p>Later, focus shifted towards normalization for social media, more specifically: the Twitter domain. The first work on normalization for this domain was from Han and Baldwin (2011). They released the LexNorm corpus, consisting of 549 Tweets annotated with their normalization on the word level. Annotation is restricted to word to word replacements, so words like 'gonna' are kept untouched. <ref type="bibr" target="#b8">Han and Baldwin (2011)</ref> also reported the first results on this dataset. They train a support vector machine which predicts if a word needs normalization based on dependency tree context; the length of the arcs and the head words are used as predictors. After this, they generate candidates using a combination of lexical and phonetic edit distances. Candidates are ranked using a combination of dictionary lookup, word similarity and N-gram probabilities. Note that on this corpus, gold error detection is usually assumed, accuracy is reported on only the words that need normalization.</p><p>Over the years, many different approaches have been benchmarked on this dataset; Li and Liu (2012) experiment with character based machine translation. <ref type="bibr" target="#b9">Hassan and Menezes (2013)</ref> use random walks in a bipartite graph based on words and their contexts to generate normalization candidates, which they rank using the Viterbi algorithm. A log-linear model was explored by <ref type="bibr" target="#b29">Yang and Eisenstein (2013)</ref>, they use sequential Monte Carlo to approximate feature expectation, and rank them using a Viterbi-encoding. Whereas most previous work normalizes on the word level or character level, <ref type="bibr" target="#b28">Xu et al. (2015)</ref> attempt to normalize on the syllable level. They translate noisy words to sequences of syllables, which can then be normalized to canonical syllables, which can in turn be merged back to form normalization candidates.</p><p>To the best of our knowledge, <ref type="bibr" target="#b14">Li and Liu (2015)</ref> reported the highest accuracy on the LexNorm dataset. They rerank the results of six different normalization systems, including machine translation systems, a character sequence labeling model and a spell checker. Each normalization system suggests one candidate. A Viterbi decoding based on the candidates and their possible POS tags is then used to rank the candidates. This joint approach is beneficial for both tasks.</p><p>More recently, the 2015 Workshop on Noisy User-generated Text hosted a shared task on lexical normalization ( <ref type="bibr" target="#b1">Baldwin et al. 2015b</ref>). They defined the task slightly different compared to the annotation of the LexNorm corpus. Annotation included 1-N and N-1 replacements. N-1 replacements indicate merging, which occurs very rarely. For the shared task, gold error detection was not assumed, and was part of the task. A total of 10 teams participated in this shared task, using a wide variety of approaches. For generation of candidates the most commonly used methods include: character N-grams, edit-distances and lookup lists. Ranking was most often done by conditional random fields, recurrent neural networks or the Viterbi algorithm.</p><p>The best results on this new benchmark were obtained by <ref type="bibr" target="#b10">Jin (2015)</ref>. This model generates candidates based on a lookup list, all possible splits and a novel similarity index: the Jaccard index based on character N-grams and character skip-grams. This novel similarity index is used to find the most similar candidates from a dictionary compiled from the golden training data. <ref type="bibr" target="#b10">Jin (2015)</ref> also tests if it is beneficial to find similar candidates in the Aspell dictionary 1 , but concludes that this leads to over-normalization. The candidates are ranked using a random forest classifier, using a variety of features: frequency counts in training data, a novel similarity index and POS tagging confidence.</p><p>Most of the previous work has been on the English language, although there has been some work on other languages. We will consider normalization for Dutch to test if our proposed model can be effective for other languages. There has already been some previous work on normalization for the Dutch language. De Clercq et al. (2014b) annotated a normalization corpus consisting of three user generated domains. They experiment on this data with machine translation on the word and character level, and report a 20% gain in BLEU score, including tokenization corrections. Building on this work, <ref type="bibr" target="#b23">Schulz et al. (2016)</ref> built a multi-modular model, in which each module accounts for different normalization problems, including: machine translation modules, a lookup list and a spell checker. They also report improved results for extrinsic evaluations on three tasks: POS tagging, lemmatization and named entity recognition.</p><p>Our proposed system is the most similar to Jin (2015); however, there are many differences. The main differences are that we use word-embeddings for generation and include N-grams features for ranking, which can easily be obtained from raw text. This makes the system more general and easier adaptable to new data. The system from Jin (2015) is more focused towards the given corpus, and might have more difficulties on data from another time span or another social media domain.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.">Data</head><p>The data we use can be divided in two parts: data annotated for normalization, and other data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Normalization Corpora</head><p>The normalization task can be seen as a rather subjective task; the annotators are asked to convert noisy texts to 'normal' language. The annotation guidelines are usually quite limited <ref type="bibr" target="#b4">(De Clercq et al. 2014a</ref><ref type="bibr" target="#b0">, Baldwin et al. 2015a</ref>), leaving space for interpretation; which might lead to inconsistent annotation. Pennell and Liu <ref type="formula">(2014)</ref>  need of normalization. They also shared the annotation efforts of each annotator, we used this data to calculate the pairwise human performance on the choice of the correct normalization candidate. This revealed that the annotators agree on the choice of the normalized word in 98.73% of the cases.</p><p>Note that this percentage is calculated assuming gold error detection. <ref type="bibr" target="#b1">Baldwin et al. (2015b)</ref> report a Cohen's κ of 0.5854 on the complete normalization task, a lot lower compared to <ref type="bibr" target="#b16">Pennell and Liu (2014)</ref>. Hence, we can conclude that the inter-annotator agreement is quite dependent on the annotation guidelines. After the decision whether to normalize, annotator agreement is quite high on the choice of the correct candidate. The main differences between the different normalization corpora are shown in <ref type="table">Table 1</ref>. Note that we use the LexNorm1.2 corpus, which contains some annotation improvements compared to the original LexNorm corpus. The GhentNorm corpus is the only corpus fully annotated with capitals, even though the capital-use is not corrected; it is preserved from the original utterance <ref type="bibr" target="#b5">(De Clercq et al. 2014b</ref>). The multiword column represents whether 1-N and N-1 replacements are included in the annotation guidelines; the corpora which do include this, also include expansions of commonly used phrasal abbreviations as 'lol' and 'lmao', and N-1 replacements are extremely rare. There is some difference in the percentage of tokens that are normalized, probably due to differences in filtering and annotation.</p><p>To give a better idea of the nature of the data and annotation, we will discuss some example sentences below. Example 2 comes from the LiLiu corpus, this example contains two replacements. The replacements are subsequent words, which is not uncommon; this leads to problems for using context directly. The replacement 'b' → 'be' is grammatically close, whereas the replacement of 'sumthn' → 'something' is more distant, and would be harder to solve with traditional spelling correction algorithms. Example 3 is taken from the LexNorm2015 corpus. This annotation also include 1-N replacements; 'no1s' and 'lol' are expanded. the word 'no1s' is not only splitted, but also contains a substitution of of a number to it's written form; two actions are necessary. In contrast to the previous example, here the token 'lol' is expanded; this is a matter of differences in annotation guidelines. The annotator decided to leave the word 'wifey' as is, whereas it could have been normalized to wife, this reflects the suggested conservativity described in the annotation guidelines ( <ref type="bibr" target="#b0">Baldwin et al. 2015a</ref>). Example 4 comes from the GhentNorm corpus. The word 'ik' (I) is often abbreviated and merged with a verb in Dutch Tweets, leading to 'kzal' which is correctly splitted in the annotation to 'ik zal' (I will). 'no' is probably a typographical mistake, whereas 'es' is a shortening based on pronunciation. Similar to the LexNorm 2015 annotation, the phrasal abbreviation 'lol' is expanded.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Other Data</head><p>In addition to the training data, we also use some external data for our features. The Aspell dictionaries for Dutch and English are used as-is, including the expansions of words 2 . Furthermore, we use two large raw text databases; one with social media data, and one from a more canonical domain.</p><p>For Dutch we used a collection of 1,545,871,819 unique Tweets collected between 2010 and 2016, they were collected based on a list of frequent Dutch tokens which are infrequent in other languages (Tjong Kim Sang and van den Bosch 2013). For English we collected Tweets throughout 2016, based on the 100 most frequent words of the Oxford English Corpus 3 , resulting in a dataset of 760,744,676 Tweets. We used some preprocessing to reduce the number of types, this leads to smaller models, and thus faster processing. We replace usernames and urls by &lt;USERNAME&gt; and &lt;URL&gt; respectively. As canonical raw data, we used Wikipedia dumps 4 for both Dutch and English.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.">Method</head><p>The normalization task can be split into two sub-tasks:</p><p>• Candidate generation: generate possible normalization candidates based on the original word.</p><p>This step is responsible for an uppperbound on recall; but care should also be taken to not generate too many candidates, since this could complicate the next sub-task.</p><p>• Candidate ranking: takes the generated candidate list from the previous sub-tasks as input, and tries to extract the correct candidate by ranking the candidates. In our setup we score all the candidates, so that a list of top-N candidates can be outputted.</p><p>Most previous work includes error detection as first step, and only explores the possibilities for normalization of words detected as anomaly. However, we postpone this decision by adding the original word as a candidate. This results in a more informed decision whether to normalize or not at ranking time. We will discuss the methods used for each of the two tasks separately in the next subsections.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Candidate Generation</head><p>We use different modules for candidate generation. Each module is focused on a different type of anomaly.</p><p>Original token Because we do not include an error detection step, we need to include the original token in the candidate list. This module should provide the correct candidate in 90% of the cases in our corpora <ref type="table">(Table 1)</ref>.</p><p>Word embeddings We use a word embeddings model trained on the social media domain using the Tweets described in Section 3.2. For each word we find the top 40 closest candidates in the vector space based on the cosine distance. We train a skip-gram model ( <ref type="bibr" target="#b15">Mikolov et al. 2013</ref>) for 5 iterations with a vector size of 400 and a window of 1.</p><p>Aspell We use the Aspell spell checker to repair typographical errors. Aspell uses a combination of character edit distance, and a phonetic distance to generate similar looking and similar sounding words. We will use the 'normal' mode as default, but also experiment with the 'bad-spellers' mode, in which the algorithm allows for candidates with a larger distance to the original word, resulting in much bigger candidate lists.  Lookup-list We generate a list of all replacement pairs occurring in the training data. When we encounter a word that occurs in this list, every normalization replacement occurring in the training data is added as candidate.</p><p>Word.* As a result of space restrictions and input devices native to this domain, users often use abbreviated versions of words. To capture this phenomenon, we include a generation module that simply searches for all words in the Aspell dictionary which start with the character sequence of our original word. To avoid large candidate lists, we only activate this module for words longer than two characters.</p><p>Split We generate word splits by splitting a word on every possible position and checking if both resulting words are canonical according to the Aspell dictionary. To avoid over-generation, this is only considered for input words larger than three characters.</p><p>To illustrate the effect of these generation modules, the top 3 candidates each of these modules generate for our example sentence are shown in <ref type="figure" target="#fig_4">Figure 1</ref>. This examples shows that the multiple modules complement each other rather well, they all handle different types of anomalies. The modules are evaluated separately in Section 5.1</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Candidate Ranking</head><p>In this section we will first describe the features used for ranking, starting with the features which originate from the generation step. After this, we discuss the used classifier.</p><p>Original A binary feature which indicates if a candidate is the original token.</p><p>Word embeddings We use the cosine distance between the candidate and the original word in the vector space as a feature. Additionally, the rank of the candidate in the returned list is used as feature.</p><p>Aspell Aspell returns a ranked list of correction candidates, we use the rank in this list as a feature. Additionally, we use the internal calculated distance between the candidate and the original word; this distance is based on lexical and phonetical edit distances. The internal edit distance can be obtained from the Aspell library using C++ function calls. Note that both of these features are only used for candidates generated by the Aspell module.</p><p>Lookup-list In our training data we count the occurrences of every correction pair, this count is used as feature. Note that we also include counts for unchanged pairs in the training data; this strengthens the decision whether to keep the original word.</p><p>Word.* We use a binary feature to indicate if a candidate is generated by this module.</p><p>N-grams We use two different N-gram models from which we calculate the unigram probability, the bigram probability with the previous word, and the bigram probability with the next word. The first N-gram model is trained on the same Twitter data as the word embeddings, the second N-gram model is based on more canonical Wikipedia data (Section 3.2).</p><p>Dictionary lookup A binary feature indicating if the candidate can be found in the Aspell dictionary.</p><p>Character order We also include a binary feature indicating if the characters of the original token occur in the same order in the candidate.</p><p>Length One feature indicates the length of the original word, and one for the length of the candidate.</p><p>ContainsAlpha A binary feature indicating whether a token contains any alphabetical characters; in some annotation guidelines tokens which do not fit this restriction are kept untouched.</p><p>The task of picking the correct candidate can be seen as a binary classification task; a candidate is either the correct candidate or not. However, we can not use a binary classifier directly; because we need exactly one instance for the 'correct' class. Whereas the classifier might classify multiple or zero candidates per position as correct. Instead, we use the confidence of the classifier that a candidate belongs to the 'correct' class to rank the candidates. This has the additional advantage that it enables the system to output lists of top-N candidates for use in a pipeline. We choose to use a random forest classifier <ref type="bibr" target="#b2">(Breiman 2001)</ref> for the ranking of candidates. We choose this classifier because the problem of normalization can be divided in multiple normalization actions which behave differently feature wise, however in our setup they are all classified as the same class. A random forest classifier makes decisions based on multiple trees, which might take into account different features. Our hypothesis is that it builds different types of trees for different normalization actions. More concretely: if a candidate scores high on the Aspell feature (it has a low edit distance), this can be an indicator for a specific set of trees to give this candidate a high score. At the same time the model can still give very high scores to candidates with low values for the Aspell features. We use the implementation of Ranger ( <ref type="bibr" target="#b27">Wright and Ziegler 2017)</ref>, with the default parameters. <ref type="bibr" target="#b10">Jin (2015)</ref> showed that it might have a negative effect on performance to generate candidates that do not occur in the training data. For this reason we add an option to MoNoise to filter candidates based on a word list generated from the training data. Additionally we add an option to filter based on all words occurring in the training data complemented by the Aspell dictionary; these settings are evaluated in more detail in Section 5.3.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.">Evaluation</head><p>In this section, we will evaluate different aspects of the normalization systems. We evaluate on three benchmarks:</p><p>• LexNorm1.2: for testing on the LexNorm corpus, we use 2,000 Tweets from LiLiu (see Section 3.1) as training and the other 577 Tweets as development data.    • LexNorm2015: Consisting of 2,950 Tweets for training and 1,967 for testing. We use 950 Tweets from the training set as development data.</p><p>• GhentNorm: similar to previous work, we split the data in 60% training data, and both 20% development and test data.</p><p>For all these three datasets we evaluate the different modules of the candidate generation and the ranking. All evaluation in this section is done with all words lowercased, because it is in line with previous work and capitalization is not consistently annotated in the available datasets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Candidate Generation</head><p>In this section we will first compare each of the modules in isolation. Next, we test how many unique correct normalization candidates each module contributes in an ablation experiment. The recall of the generation modules in isolation are plotted in <ref type="figure" target="#fig_5">Figure 2</ref>; the number of candidates each module generates on average over all datasets is shown in <ref type="table" target="#tab_3">Table 2</ref>. The best performing modules in isolation are Aspell, word embeddings and the lookup module. The lookup module performs especially well on the LexNorm2015 corpus. This is due to a couple of correction pairs which occur very frequently (u, lol, idk, bro). The word.* module does not perform very well, it over-generates mainly on the GhentNorm corpus (average of 48 candidates). The split module can only generate correct candidates for corpora that contain 1-n word replacements. For these corpora, it generates a few correct candidates.</p><p>The performances of the ablation experiments are shown in <ref type="figure" target="#fig_6">Figure 3</ref>. Similar to the previous experiment, the most important modules are Aspell, word embeddings and the lookup module. However, the word embeddings contribute less unique candidates; presumably because it has overlap    <ref type="table">Table 3</ref>: Recall achieved by the top-N candidates for our different development data sets. Note that this is over all words, also words not needing normalization.</p><p>with both of the other modules. The differences between corpora are also similar to the previous experiment; the lookup list is also generating the most unique correct candidates for the LexNorm2015 corpus. Furthermore, this graph shows that word.* still generates some unique candidates, especially for the GhentNorm corpus. This suggests that this way of abbreviating is more common in Dutch.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Candidate Ranking</head><p>Since candidate ranking is the final step, this section discusses the performance of the whole system. We compare the performance of our system with different benchmarks. First we consider the LexNorm corpus, for which most previous work assumed gold error detection. In order to be able to compare our results, we will assume the same. Additionally, we test our performance on LexNorm2015, which was used in the shared task of the 2015 workshop on Noisy User-generated Text ( <ref type="bibr" target="#b1">Baldwin et al. 2015b</ref>). Here, error detection was included in the task, hence we will also use automatic error detection by including the original token as a candidate. <ref type="figure" target="#fig_7">Figure 4</ref> shows the importance of the different feature groups in the final model for the LiLiu development set. Aspell is the most important feature for this dataset. Except for the split module (which is not included in the annotation) all the features contribute to obtaining the highest score. <ref type="figure" target="#fig_8">Figure 5</ref> shows the F1 scores of the ablation experiments on the LexNorm2015 corpus. In this setup, the differences are smaller, except for the lookup module, which generates many unique phrasal abbreviations (lol, idk, smh). Perhaps surprisingly, word embeddings show a relatively small effect on the final performance. On both datasets, the N-gram module proves to be very valuable for this task. To evaluate the performance of the ranking beyond the top-1 candidate, <ref type="table">Table 3</ref> shows the recall of the top-N candidates on the different datasets. This table shows that most of the mistakes the classifier makes are between the first and the second candidate. Manual inspection revealed that many of these are confusions with the original token; thus the decision whether normalization is necessary at all. Beyond the second candidate, there are only a few correct candidates to be found.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Additional Experiments</head><p>We test the effect of the size of the training data for the two largest datasets: LiLiu and LexNorm2015. The results are plotted in <ref type="figure" target="#fig_9">Figure 6</ref>. The higher F1 scores on the LexNorm2015 dataset are probably due to the common phrasal abbreviations. Based on these graphs, we can conclude that a reasonable performance can be achieved by using around 500 Tweets. However, the performance still improves at a training size of 2,000 Tweets.</p><p>As explained in Section 4 we included two options to tune the speed-performance ratio. Firstly, we can allow Aspell to generate larger lists of candidates by using the 'bad-spellers' mode. Secondly, we can filter the generated candidates, keeping only candidates which occur in the training data or in the Aspell dictionary. <ref type="table" target="#tab_6">Table 4</ref> shows the times the different combinations of parameters take to train and run on the LexNorm2015 dataset, as well as the performance and the number of candidates generated. The best performance is achieved by filtering based on words occurring in the training data combined with the Aspell dictionary and using the 'normal' mode. However, the 'bad-spellers' mode without filtering reaches on par performance and might be the preferable option, since it can be more robust to data from a different time period or different domain.   <ref type="table" target="#tab_7">Table 5</ref>: Results on test data compared to the state-of-the-art.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Aspell mode Filter</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Test Data</head><p>The performance of our system on the test data sets is compared with existing state-of-the-art systems in <ref type="table" target="#tab_7">Table 5</ref>. Note that different evaluation metrics are used to be able to compare the results with previous work. For the LexNorm1.2 corpus we assume gold error detection, in line with previous work; for more details on the metrics we refer to the original papers. We use the best settings; meaning the 'bad-spellers' mode, no filtering and including all feature groups. MoNoise reaches a new state-of-the-art for all benchmarks. The difference on the LexNorm dataset is rather small; however, our model is much simpler compared to the ensemble system used by <ref type="bibr" target="#b14">Li and Liu (2015)</ref>. The performance gap on the LexNorm2015 dataset is a bit bigger, showing that MoNoise is also doing well for the error detection task. Finally, the Word Error Rate (WER) on the Dutch dataset is lower compared to the previous work. Note that the evaluation is not directly comparable on this dataset, since we used different random splits.</p><p>Additionally, we report the recall, precision and F1 score for all the different datasets. We use these evaluation metrics because it allows for a direct interpretation of the results <ref type="bibr" target="#b21">(Reynaert 2008)</ref> and it is in line with the default benchmark of the most recent dataset ( <ref type="bibr" target="#b1">Baldwin et al. 2015b</ref>). We first categorize each word as follows:</p><p>T P = annotators normalized, systems ranks the correct candidate highest F P = annotators did not normalize, system normalized T N = annotators did not normalize, system did not normalize F N = annotators normalized, but system did not normalize Then we calculate recall, precision and F1 score <ref type="bibr" target="#b22">(Rijsbergen 1979)</ref>:</p><formula xml:id="formula_0">Recall = T P T P +F N P recision = T P T P +F P F 1 = 2 * Recall * P recision</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Recall+P recision</head><p>The results are shown in <ref type="table">Table 6</ref>; our system scores better on precision compared to recall. Arguably, this is a desirable result, since we want to avoid over-normalization. For cases where high recall is more important, we introduce a weight parameter for the ranking of the original token; in this way we can control the aggressiveness of the model. However, tuning this weight did not result in a higher F1 score. Our model scores lower for the GhentNorm corpus, this is partly an effect of having less training data. However does not explain the complete performance difference (see <ref type="figure" target="#fig_9">Figure 6</ref>), other explaining factors include differences in language and annotation.  <ref type="table">Table 6</ref>: Recall, Precision and F1 score for each of our test sets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.5">Extrinsic Evaluation</head><p>To test if this normalization model can be useful in a domain adaptation setup we used it as a preprocessing step for the Berkeley parser ( <ref type="bibr" target="#b17">Petrov and Klein 2007)</ref>. We used the resulting best normalization sequence, but also experimented with using the top-n candidates from the ranking.</p><p>We observed an improvement in F1 score of 0.68% on a Twitter treebank ( <ref type="bibr" target="#b7">Foster et al. 2011</ref>) when using only the best normalization sequence and a grammar trained on more canonical data. Whereas, giving the parser access to more candidates lead to an improvement of 1.26%. Note that the Twitter treebank is less noisy compared to our normalization corpora, which makes the effects of normalization smaller. For more details on this experiment we refer to the original paper (van der <ref type="bibr" target="#b25">Goot and van Noord 2017</ref>).</p><p>Additionally, we tested the performance of the bidirectional LSTM POS tagger <ref type="bibr">Bilty (Plank et al. 2016</ref>), which we train and test on the datasets from from <ref type="bibr" target="#b14">Li and Liu (2015)</ref>. We use the word embeddings model described in Section 3.2 to initialize Bilty, as well as character level embeddings. This results in a POS tagging model that is already adapted to the domain to some extent. However, using MoNoise as preprocessing still leads to an improvement in accuracy from 88.53 to 89.63 and 90.02 to 90.25 on the different test sets. More details can be found in the original paper (van der ).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.">Conclusion</head><p>We have proposed MoNoise; a universal, modular normalization model, which beats the state-ofthe-art on different normalization benchmarks. The model is easily extendable with new modules, although the existing modules should cover most cases for the normalization task. MoNoise reaches a new state-of-the-art on three different benchmarks, proving that it can generalize over different annotation efforts. A more detailed evaluation showed that traditional spelling correction complemented with word embeddings combine to provide robust candidate generation for the normalization task. If the expansion of common phrasal abbreviations like 'lol' and 'lmao' is included in the task, a lookup list is necessary to obtain competitive performance. For the ranking we can conclude that a random forest classifier can learn to generalize over the different normalization actions quite well. Besides the features from the generation, N-gram features prove to be an important predictor for the classifier.</p><p>Future work includes more exploration concerning multi-word normalizations, evaluation on different domains and languages, a more in-depth evaluation for different types of replacements, and the usefulness of using normalization as preprocessing. Furthermore, it would be interesting to explore how well an unsupervised ranking method would compete with the random forest classifier.</p><p>The code of MoNoise is publicly available 6 .</p><p>6. https://bitbucket.org/robvanderg/monoise ; all results reported in this paper can be reproduced with the command ./scripts/clin/all.sh</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: The top 3 generated candidates for each of the generation modules.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Recall of generation modules in isolation on the development corpora.</figDesc><graphic url="image-1.png" coords="8,95.77,90.86,194.40,145.80" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Ablation experiments for generation modules on the development corpora.</figDesc><graphic url="image-2.png" coords="8,321.83,90.86,194.40,145.80" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Accuracy only on words needing normalization when excluding feature groups on LiLiu development data.</figDesc><graphic url="image-3.png" coords="9,95.77,90.86,194.40,145.80" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: F1 scores when excluding feature groups on the LexNorm2015 development data.</figDesc><graphic url="image-4.png" coords="9,321.83,90.86,194.40,145.80" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Figure 6 :</head><label>6</label><figDesc>Figure 6: The effect of the size of training data on the LexNorm2015 and LiLiu dataset</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head></head><label></label><figDesc>report a Fleiss κ of 0.891 on the detection of words in the</figDesc><table>Corpus 
+
+Source 
+Words Lang. Caps Multiword %normalized 
+LexNorm1.2 
+Yang and Eisenstein (2013) 10,564 
+en 
+no 
+no 
+11.6 
+LiLiu 
+Li and Liu (2014) 
+40,560 
+en some 
+no 
+10.5 
+LexNorm2015 Baldwin et al. (2015b) 
+44,385 
+en 
+no 
+yes 
+8.9 
+GhentNorm 
+De Clercq et al. (2014b) 
+12,901 
+nl 
+yes 
+yes 
+4.8 
+
+Table 1: Comparison of the different corpora used in this work. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head></head><label></label><figDesc>The effect of this setting is evaluated in more detail in Section 5.3.</figDesc><table>orig 
+
+w2v 
+
+aspell 
+
+lookup 
+
+word.* 
+
+split 
+
+most 
+social 
+pple 
+r 
+troublesome 
+
+best/most 
+mosy 
+MOST 
+
+soical 
+Social 
+socail 
+
+ppl 
+pipo 
+people 
+
+are 
+sre 
+rnt 
+
+bothersome 
+tricky 
+irksome 
+
+most 
+mist 
+moist 
+
+social 
+socially 
+socials 
+
+Pol 
+pol 
+Pl 
+
+R 
+r 
+RI 
+
+troublesome 
+trouble some 
+trouble-some 
+
+most 
+social 
+are 
+r 
+rest 
+
+mostly 
+most's 
+
+socially 
+social's 
+socials 
+
+troublesomely 
+
+mo st 
+trouble some 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 :</head><label>2</label><figDesc>The number of candidates generated by generation modules, averaged over the different development data sets.</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Effect of using different Aspell modes on the LexNorm2015 dataset, using our standard 
+splits (2,000 Tweets train/950 Tweets dev). Train times are in minutes:seconds and averaged over 
+5 runs; the time needed to load the models is neglected. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head>5 .</head><label>5</label><figDesc></figDesc><table>Li and Liu (2015) use a slightly adapted version of the lexnorm1.2 corpus, MoNoise reaches an accuracy of 88.26 
+on this data (http://www.hlt.utdallas.edu/ ~ chenli/normalization_pos/test_set_2.txt) 
+
+Recall Precision F1 score 
+LexNorm1.2 
+74.45 
+77.56 
+75.97 
+LexNorm2015 
+80.26 
+93.53 
+86.39 
+GhentNorm 
+28.81 
+80.95 
+42.50 
+
+</table></figure>
+
+			<note place="foot" n="2">. Obtained by using -dump 3. https://en.wikipedia.org/wiki/Most_common_words_in_English 4. cleaned with WikiExtractor (http://medialab.di.unipi.it/wiki/Wikipedia_Extractor)</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgements</head><p>We would like to thank all our colleagues and the anonymous reviewers for their valuable feedback and Orphée De Clercq for sharing the Dutch dataset. This work is part of the Parsing Algorithms for Uncertain Input project, funded by the Nuance Foundation.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Guidelines for English lexical normalisation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Baldwin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marie-Catherine</forename><surname>De Marneffe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bo</forename><surname>Han</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Young-Bum</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alan</forename><surname>Ritter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Xu</surname></persName>
+		</author>
+		<ptr target="https://github.com/noisy-text/noisy-text.github.io/blob/master/2015/files/annotation_guideline_v1.1.pdf" />
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Shared tasks of the 2015 workshop on noisy user-generated text: Twitter lexical normalization and named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Baldwin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marie-Catherine</forename><surname>De Marneffe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bo</forename><surname>Han</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Young-Bum</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alan</forename><surname>Ritter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Xu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Workshop on Noisy Usergenerated Text</title>
+		<meeting>the Workshop on Noisy Usergenerated Text<address><addrLine>Beijing, China</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="126" to="135" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Random forests</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Leo</forename><surname>Breiman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Machine learning</title>
+		<imprint>
+			<biblScope unit="volume">45</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="5" to="32" />
+			<date type="published" when="2001" />
+			<publisher>Springer</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Investigation and modeling of the structure of texting language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Monojit</forename><surname>Choudhury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rahul</forename><surname>Saraf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vijit</forename><surname>Jain</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Animesh</forename><surname>Mukherjee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sudeshna</forename><surname>Sarkar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anupam</forename><surname>Basu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">International Journal on Document Analysis and Recognition</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="157" to="174" />
+			<date type="published" when="2007" />
+			<publisher>Springer</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Guidelines for normalizing Dutch and English user generated content</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">De</forename><surname>Clercq</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bart</forename><surname>Orphée</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Véronique</forename><surname>Desmet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hoste</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+		<respStmt>
+			<orgName>Ghent University</orgName>
+		</respStmt>
+	</monogr>
+<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Towards shared datasets for normalization research</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">De</forename><surname>Clercq</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sarah</forename><surname>Orphée</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bart</forename><surname>Schulz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Véronique</forename><surname>Desmet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hoste</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Ninth International Conference on Language Resources and Evaluation (LREC&apos;14)</title>
+		<meeting>the Ninth International Conference on Language Resources and Evaluation (LREC&apos;14)<address><addrLine>Reykjavik, Iceland</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">What to do about bad language on the internet</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Eisenstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2013 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 2013 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies<address><addrLine>Atlanta, Georgia</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="359" to="369" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jennifer</forename><surname>Foster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joachim</forename><surname>Ozlem C ¸ Etinoglu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joseph</forename><forename type="middle">Le</forename><surname>Wagner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Roux</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joakim</forename><surname>Hogan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Deirdre</forename><surname>Nivre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Josef</forename><surname>Hogan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Van Genabith</surname></persName>
+		</author>
+		<title level="m"># hardtoparse: POS tagging and parsing the twitterverse, Workshop on Analyzing Microtext 2011 (AAAI)</title>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="20" to="25" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Lexical normalisation of short text messages: Makn sens a #twitter</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bo</forename><surname>Han</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Baldwin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 49th Annual Meeting of the Association for Computational Linguistics: Human Language Technologies</title>
+		<meeting>the 49th Annual Meeting of the Association for Computational Linguistics: Human Language Technologies<address><addrLine>Portland, Oregon, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="368" to="378" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Social text normalization using contextual graph random walks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hany</forename><surname>Hassan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arul</forename><surname>Menezes</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 51st Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 51st Annual Meeting of the Association for Computational Linguistics<address><addrLine>Sofia, Bulgaria</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2013" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1577" to="1586" />
+		</imprint>
+	</monogr>
+	<note>Long Papers)</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">NCSU-SAS-Ning: Candidate generation and feature engineering for supervised lexical normalization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ning</forename><surname>Jin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Workshop on Noisy User-generated Text</title>
+		<meeting>the Workshop on Noisy User-generated Text<address><addrLine>Beijing, China</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="87" to="92" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Towards domain adaptation for parsing web data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohammad</forename><surname>Khan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Markus</forename><surname>Dickinson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sandra</forename><surname>Kübler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference Recent Advances in Natural Language Processing RANLP 2013</title>
+		<meeting>the International Conference Recent Advances in Natural Language Processing RANLP 2013<address><addrLine>Bulgaria, Hissar, Bulgaria</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="357" to="364" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Improving text normalization using character-blocks based models and system combination</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chen</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yang</forename><surname>Liu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The COLING 2012 Organizing Committee</title>
+		<meeting><address><addrLine>Mumbai, India</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="1587" to="1602" />
+		</imprint>
+	</monogr>
+	<note>Proceedings of COLING 2012</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Improving text normalization via unsupervised model and discriminative reranking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chen</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yang</forename><surname>Liu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL 2014 Student Research Workshop</title>
+		<meeting>the ACL 2014 Student Research Workshop<address><addrLine>Baltimore, Maryland, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="86" to="93" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Joint POS tagging and text normalization for informal text, Proceedings of IJCAI</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chen</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yang</forename><surname>Liu</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Efficient estimation of word representations in vector space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Workshop at ICLR</title>
+		<meeting>Workshop at ICLR</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Normalization of informal text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Deana</forename><forename type="middle">L</forename><surname>Pennell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yang</forename><surname>Liu</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+			<publisher>Academic Press Inc</publisher>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="page" from="256" to="277" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Improved inference for unlexicalized parsing, Human Language Technologies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The Conference of the North American Chapter of the Association for Computational Linguistics; Proceedings of the Main Conference</title>
+		<meeting><address><addrLine>Rochester, New York</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="404" to="411" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Mcdonald</surname></persName>
+		</author>
+		<title level="m">Overview of the 2012 shared task on parsing the web, Notes of the First Workshop on Syntactic Analysis of Non-Canonical Language (SANCL)</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="volume">59</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Multilingual part-of-speech tagging with bidirectional long short-term memory models and auxiliary loss</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barbara</forename><surname>Plank</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th</title>
+		<meeting>the 54th</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+				<title level="m">Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting><address><addrLine>Berlin, Germany</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="412" to="418" />
+		</imprint>
+	</monogr>
+	<note>Short Papers)</note>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">All, and only, the errors: more complete and consistent spelling and ocr-error correction evaluation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Reynaert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Sixth International Conference on Language Resources and Evaluation (LREC&apos;08)</title>
+		<meeting>the Sixth International Conference on Language Resources and Evaluation (LREC&apos;08)<address><addrLine>Marrakech, Morocco</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">J</forename><surname>Rijsbergen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Information Retrieval</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<date type="published" when="1979" />
+		</imprint>
+		<respStmt>
+			<orgName>University of Glasgow</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Multimodular text normalization of Dutch user-generated content</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sarah</forename><surname>Schulz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guy</forename><forename type="middle">De</forename><surname>Pauw</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Orphée</forename><surname>De Clercq</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bart</forename><surname>Desmet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Véronique</forename><surname>Hoste</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Walter</forename><surname>Daelemans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lieve</forename><surname>Macken</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Intelligent Systems Technology</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="61" to="62" />
+			<date type="published" when="2016" />
+			<publisher>ACM</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Dealing with big data: The case of twitter</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kim</forename><surname>Tjong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erik</forename><surname>Sang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antal</forename><surname>Van Den</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bosch</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics in the Netherlands Journal</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="121" to="134" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Parser adaptation for social media by integrating normalization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rob</forename><surname>Van Der Goot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gertjan</forename><surname>Van Noord</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Vancouver, Canada</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">1</biblScope>
+		</imprint>
+	</monogr>
+	<note>Long Papers)</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">To normalize, or not to normalize: The impact of normalization on part-of-speech tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rob</forename><surname>Van Der Goot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barbara</forename><surname>Plank</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Malvina</forename><surname>Nissim</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 3th Workshop on Noisy User-generated Text (WNUT), The EMNLP 2017 Organizing Committee</title>
+		<meeting>the 3th Workshop on Noisy User-generated Text (WNUT), The EMNLP 2017 Organizing Committee<address><addrLine>Copenhagen, Denmark</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Ranger: A fast implementation of Random Forests for high dimensional data in C++ and R</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marvin</forename><forename type="middle">N</forename><surname>Wright</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andreas</forename><surname>Ziegler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Statistical Software</title>
+		<imprint>
+			<biblScope unit="volume">77</biblScope>
+			<biblScope unit="page" from="1" to="17" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Tweet normalization with syllables</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ke</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yunqing</forename><surname>Xia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chin-Hui</forename><surname>Lee</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing</title>
+		<meeting>the 53rd Annual Meeting of the Association for Computational Linguistics and the 7th International Joint Conference on Natural Language Processing<address><addrLine>Beijing, China</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="920" to="928" />
+		</imprint>
+	</monogr>
+	<note>Long Papers)</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">A log-linear model for unsupervised text normalization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yi</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Eisenstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2013 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2013 Conference on Empirical Methods in Natural Language Processing<address><addrLine>Seattle, Washington, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="61" to="72" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

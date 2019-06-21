@@ -1,0 +1,1388 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:30+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Robust Multilingual Part-of-Speech Tagging via Adversarial Training</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michihiro</forename><surname>Yasunaga</surname></persName>
+							<email>michihiro.yasunaga@yale.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Department of Computer Science</orgName>
+								<orgName type="institution">Yale University</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jungo</forename><surname>Kasai</surname></persName>
+							<email>jungo.kasai@yale.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Department of Computer Science</orgName>
+								<orgName type="institution">Yale University</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dragomir</forename><surname>Radev</surname></persName>
+							<email>dragomir.radev@yale.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Department of Computer Science</orgName>
+								<orgName type="institution">Yale University</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Robust Multilingual Part-of-Speech Tagging via Adversarial Training</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Adversarial training (AT) 1 is a powerful reg-ularization method for neural networks, aiming to achieve robustness to input perturbations. Yet, the specific effects of the robust-ness obtained from AT are still unclear in the context of natural language processing. In this paper, we propose and analyze a neural POS tagging model that exploits AT. In our experiments on the Penn Treebank WSJ corpus and the Universal Dependencies (UD) dataset (27 languages), we find that AT not only improves the overall tagging accuracy, but also 1) prevents over-fitting well in low resource languages and 2) boosts tagging accuracy for rare / unseen words. We also demonstrate that 3) the improved tagging performance by AT contributes to the downstream task of dependency parsing, and that 4) AT helps the model to learn cleaner word representations. 5) The proposed AT model is generally effective in different sequence labeling tasks. These positive results motivate further use of AT for natural language tasks.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Recently, neural network-based approaches have become popular in many natural language processing (NLP) tasks including tagging, parsing, and translation <ref type="bibr" target="#b5">(Chen and Manning, 2014;</ref><ref type="bibr">Bah- danau et al., 2015;</ref><ref type="bibr" target="#b26">Ma and Hovy, 2016)</ref>. However, it has been shown that neural networks tend to be locally unstable and even tiny perturbations to the original inputs can mislead the models ( <ref type="bibr" target="#b44">Szegedy et al., 2014</ref>). Such maliciously perturbed inputs are called adversarial examples. Adversarial training ( <ref type="bibr" target="#b12">Goodfellow et al., 2015</ref>) aims to improve the robustness of a model to input perturbations by training on both unmodified examples and adversarial examples. Previous work (Goodfellow <ref type="bibr">1</ref> We distinguish AT from Generative Adversarial Networks (GANs).</p><p>Figure 1: Illustration of our architecture for adversarial POS tagging. Given a sentence, we input the normalized word embeddings (w 1 , w 2 , w 3 ) and character embeddings (showing c 1 , c 2 , c 3 for w 1 ). Each word is represented by concatenating its word embedding and its character-level BiLSTM output. They are fed into the main BiLSTM-CRF network for POS tagging. In adversarial training, we compute and add the worst-case perturbation η to all the input embeddings for regularization.</p><p>et al., <ref type="bibr" target="#b38">Shaham et al., 2015</ref>) on image recognition has demonstrated the enhanced robustness of their models to unseen images via adversarial training and has provided theoretical explanations of the regularization effects.</p><p>Despite its potential as a powerful regularizer, adversarial training (AT) has yet to be explored extensively in natural language tasks. Recently, <ref type="bibr">Miy- ato et al. (2017)</ref> applied AT on text classification, achieving state-of-the-art accuracy. Yet, the specific effects of the robustness obtained from AT are still unclear in the context of NLP. For example, research studies have yet to answer questions such as 1) how can we interpret perturbations or robustness on natural language inputs? 2) how are they related to linguistic factors like vocabulary statistics? 3) are the effects of AT language-dependent? Answering such questions is crucial to understand and motivate the application of adversarial training on natural language tasks.</p><p>In this paper, spotlighting a well-studied core problem of NLP, we propose and carefully analyze a neural part-of-speech (POS) tagging model that exploits adversarial training. With a BiLSTM-CRF model <ref type="bibr" target="#b26">Ma and Hovy, 2016)</ref> as our baseline POS tagger, we apply adversarial training by considering perturbations to input word/character embeddings. In order to demystify the effects of adversarial training in the context of NLP, we conduct POS tagging experiments on multiple languages using the Penn Treebank WSJ corpus (Englsih) and the Universal Dependencies dataset <ref type="bibr">(27 languages)</ref>, with thorough analyses of the following points:</p><p>•</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Effects on different target languages • Vocabulary statistics and tagging accuracy • Influence on downstream tasks • Representation learning of words</head><p>In our experiments, we find that our adversarial training model consistently outperforms the baseline POS tagger, and even achieves state-of-the-art results on 22 languages. Furthermore, our analyses reveal the following insights into adversarial training in the context of NLP:</p><p>• The regularization effects of adversarial training (AT) are general across different languages. AT can prevent overfitting especially well when training examples are scarce, providing an effective tool to process low resource languages.</p><p>• AT can boost the tagging performance for rare/ unseen words and increase the sentence-level accuracy. This positively affects the performance of down-stream tasks such as dependency parsing, where low sentence-level POS accuracy can be a bottleneck <ref type="bibr" target="#b28">(Manning, 2011</ref>).</p><p>• AT helps the network learn cleaner word embeddings, showing stronger correlations with their POS tags.</p><p>We argue that the effects of AT can be interpreted from the perspective of natural language. Finally, we demonstrate that the proposed AT model is generally effective across different sequence labeling tasks. This work therefore provides a strong motivation and basis for utilizing adversarial training in NLP tasks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">POS Tagging</head><p>Part-of-speech (POS) tagging is a fundamental NLP task that facilitates downstream tasks such as syntactic parsing. While current state-of-theart POS taggers ( <ref type="bibr" target="#b23">Ling et al., 2015;</ref><ref type="bibr" target="#b26">Ma and Hovy, 2016</ref>) yield accuracy over 97.5% on PTB-WSJ, there still remain issues. The per token accuracy metric is easy since taggers can easily assign correct POS tags to highly unambiguous tokens, such as punctuation <ref type="bibr" target="#b28">(Manning, 2011)</ref>. Sentence-level accuracy serves as a more realistic metric for POS taggers but it still remains low. Another problem with current POS taggers is that their accuracy deteriorates drastically on low resource languages and rare words <ref type="bibr" target="#b36">(Plank et al., 2016)</ref>. In this work, we demonstrate that adversarial training (AT) can mitigate these issues. It is empirically shown that POS tagging performance can greatly affect downstream tasks such as dependency parsing . In this work, we also demonstrate that the improvements obtained from our AT POS tagger actually contribute to dependency parsing. Nonetheless, parsing with gold POS tags still yields better results, bolstering the view that POS tagging is an essential task in NLP that needs further development.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Adversarial Training</head><p>The concept of adversarial training ( <ref type="bibr" target="#b44">Szegedy et al., 2014;</ref><ref type="bibr" target="#b12">Goodfellow et al., 2015</ref>) was originally introduced in the context of image classification to improve the robustness of a model by training on input images with malicious perturbations. Previous work ( <ref type="bibr" target="#b12">Goodfellow et al., 2015;</ref><ref type="bibr" target="#b38">Shaham et al., 2015;</ref>) has provided a theoretical framework to understand adversarial examples and the regularization effects of adversarial training (AT) in image recognition.</p><p>Recently, <ref type="bibr" target="#b31">Miyato et al. (2017)</ref> applied AT to a natural language task (text classification) by extending the concept of adversarial perturbations to word embeddings. <ref type="bibr" target="#b49">Wu et al. (2017)</ref> further explored the possibility of AT in relation extraction. Both report improved performance on their tasks via AT, but the specific effects of AT have yet to be analyzed. In our work, we aim to address this issue by providing detailed analyses on the effects of AT from the perspective of NLP, such as different languages, vocabulary statistics, word embedding distribution, and aim to motivate future research that exploits AT in NLP tasks.</p><p>AT is related to other regularization methods that add noise to data such as dropout ( <ref type="bibr" target="#b41">Srivastava et al., 2014</ref>) and its variant for NLP tasks, word dropout ( <ref type="bibr" target="#b17">Iyyer et al., 2015)</ref>. <ref type="bibr" target="#b50">Xie et al. (2017)</ref> discuss various data noising techniques for language modeling. While these methods produce random noise, AT generates perturbations that the current model is particularly vulnerable to, and thus is claimed to be effective ( <ref type="bibr" target="#b12">Goodfellow et al., 2015)</ref>.</p><p>It should be noted that while related in name, adversarial training (AT) differs from Generative Adversarial Networks (GANs) ( ). GANs have already been applied to NLP tasks such as dialogue generation (  and transfer learning ( <ref type="bibr" target="#b19">Kim et al., 2017;</ref><ref type="bibr" target="#b13">Gui et al., 2017)</ref>. Adversarial training also differs from adversarial evaluation, recently proposed for reading comprehension tasks (Jia and Liang, 2017).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Method</head><p>In this section, we introduce our baseline POS tagging model and explain how we implement adversarial training on top.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Baseline POS Tagging Model</head><p>Following the recent top-performing models for sequence labeling tasks <ref type="bibr" target="#b36">(Plank et al., 2016;</ref><ref type="bibr">Lam- ple et al., 2016;</ref><ref type="bibr" target="#b26">Ma and Hovy, 2016)</ref>, we employ a Bi-directional LSTM-CRF model as our baseline (see <ref type="figure">Figure 1</ref> for an illustration).</p><p>Character-level BiLSTM. Prior work has shown that incorporating character-level representations of words can boost POS tagging accuracy by capturing morphological information present in each language. Major neural character-level models include the character-level CNN <ref type="bibr" target="#b26">(Ma and Hovy, 2016)</ref> and (Bi)LSTM . A Bi-directional LSTM (BiLSTM) <ref type="bibr" target="#b15">(Hochreiter and Schmidhuber, 1997;</ref><ref type="bibr" target="#b37">Schuster and Paliwal, 1997</ref>) processes each sequence both forward and backward to capture sequential information, while preventing the vanishing / exploding gradient problem. We observed that the character-level BiLSTM outperformed the CNN by 0.1% on the PTB-WSJ development set, and hence in all of our experiments we use the character-level BiLSTM. Specifically, we generate a character-level representation for each word by feeding its character embeddings into the BiLSTM and obtaining the concatenated final states.</p><p>Word-level BiLSTM. Each word in a sentence is represented by concatenating its word embedding and its character-level representation. They are fed into another level of BiLSTM (word-level BiLSTM) to process the entire sentence.</p><p>CRF. In sequence labeling tasks it is beneficial to consider the correlations between neighboring labels and jointly decode the best chain of labels for a given sentence. With this motivation, we apply a conditional random field (CRF) ( <ref type="bibr" target="#b20">Lafferty et al., 2001</ref>) on top of the word-level BiLSTM to perform POS tag inference with global normalization, addressing the "label bias" problem. Specifically, given an input sentence, we pass the output sequence of the word-level BiLSTM to a firstorder chain CRF to compute the conditional probability of the target label sequence:</p><formula xml:id="formula_0">p(y | s; θ)</formula><p>where θ represents all of the model parameters (in the BiLSTMs and CRF), s and y denote the input embeddings and the target POS tag sequence, respectively, for the given sentence.</p><p>For training, we minimize the negative loglikelihood (loss function)</p><formula xml:id="formula_1">L(θ; s, y) = − log p(y | s; θ)<label>(1)</label></formula><p>with respect to the model parameters. Decoding searches for the POS tag sequence y * with the highest conditional probability using the Viterbi algorithm. For more detail about the BiLSTM-CRF formulation, refer to Ma and Hovy (2016).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Adversarial Training</head><p>Adversarial training ( <ref type="bibr" target="#b12">Goodfellow et al., 2015</ref>) is a powerful regularization method, primarily explored in image recognition to improve the robustness of classifiers to input perturbations. Given a classifier, we first generate input examples that are very close to original inputs (so should yield the same labels) yet are likely to be misclassified by the current model. Specifically, these adversarial examples are generated by adding small perturbations to the inputs in the direction that significantly increases the loss function of the classifier (worstcase perturbations). Then, the classifier is trained on the mixture of clean examples and adversarial examples to improve the stability to input perturbations. In this work, we incorporate adversarial training into our baseline POS tagger, aiming to achieve better regularization effects and to provide their interpretations in the context of NLP.</p><p>Generating adversarial examples. Adversarial training (AT) considers continuous perturbations to inputs, so we define perturbations at the level of dense word / character embeddings rather than one-hot vector representations, similarly to <ref type="bibr">Miy- ato et al. (2017)</ref>. Specifically, given an input sentence, we consider the concatenation of all the word / character embeddings in the sentence:</p><formula xml:id="formula_2">s = [w 1 , w 2 , . . . , c 1 , c 2 , . . . ].</formula><p>To prepare an adversarial example, we aim to generate the worst-case perturbation of a small bounded norm that maximizes the loss function L of the current model:</p><formula xml:id="formula_3">η = arg max η : η 2 ≤ L( ˆ θ; s + η , y)</formula><p>wherê θ is the current value of the model parameters, treated as a constant, and y denotes the target labels. Since the exact computation of such η is intractable in complex neural networks, we employ the Fast Gradient Method ( <ref type="bibr" target="#b24">Liu et al., 2017;</ref><ref type="bibr" target="#b31">Miyato et al., 2017)</ref> i.e. first order approximation to obtain an approximate worst-case perturbation of norm , by a single gradient computation:</p><formula xml:id="formula_4">η = g/g 2 , where g = s L( ˆ θ; s, y) (2)</formula><p>is a hyperparameter to be determined in the development dataset. Note that the perturbation η is generated in the direction that significantly increases the loss L. We find such η against the current model parameterized byˆθbyˆ byˆθ, at each training step, and construct an adversarial example by s adv = s + η However, if we do not restrict the norm of word / character embeddings, the model could trivially learn embeddings of large norms to make the perturbations insignificant. To prevent this issue, we normalize word/character embeddings so that they have mean 0 and variance 1 for every entry, as in <ref type="bibr" target="#b31">Miyato et al. (2017)</ref>. The normalization is performed every time we feed input embeddings into the LSTMs and generate adversarial examples. To ensure a fair comparison, we also normalize input embeddings in our baseline model.</p><p>While <ref type="bibr" target="#b31">Miyato et al. (2017)</ref> set the norm of a perturbation (Eq 2) to be a fixed value for all input sentences, to generate adversarial examples for an entire sentence of a variable length and to include character embeddings besides word embeddings, we make the perturbation size adaptive to the dimension of the concatenated input embedding s ∈ R D . We set to be α</p><formula xml:id="formula_5">√ D (i.e., propor- tional to √ D)</formula><p>, as the expected squared norm of s after the embedding normalization is D. The scaling factor α is selected from {0.001, 0.005, 0.01, 0.05, 0.1} based on the development performance in each treebank. We used 0.01 for PTB-WSJ and UD-Spanish, and 0.05 for the rest. Note that α = 0 would generate no noise (identical to the baseline); if α = 1, the generated adversarial perturbation would have a norm comparable to the original embedding, which could change the semantics of the input sentence ( <ref type="bibr" target="#b49">Wu et al., 2017)</ref>. Hence, the optimal perturbation scale α should lie in between and be small enough to preserve the semantics of the original input.</p><p>Adversarial training. At each training step, we generate adversarial examples against the current model, and train on the mixture of clean examples and adversarial examples to achieve robustness to input perturbations. To this end, we define the loss function for adversarial training as:</p><formula xml:id="formula_6">˜ L = γL(θ; s, y) + (1 − γ)L(θ; s adv , y)</formula><p>where L(θ; s, y), L(θ; s adv , y) represent the loss from a clean example and the loss from its adversarial example, respectively, and γ determines the weighting between them. We used γ = 0.5 in all our experiments. This objective function can be optimized with respect to the model parameters θ, in the same manner as the baseline model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Experiments</head><p>To fully analyze the effects of adversarial training, we train and evaluate our baseline/adversarial POS tagging models on both a standard English dataset and a multilingual dataset.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Datasets</head><p>As a standard English dataset, we use the Wall Street Journal (WSJ) portion of the Penn Treebank (PTB) ( <ref type="bibr" target="#b29">Marcus et al., 1993)</ref>, containing 45 different POS tags. We adopt the standard split: sections 0-18 for training, 19-21 for development and 22-24 for testing <ref type="bibr" target="#b7">(Collins, 2002;</ref><ref type="bibr" target="#b28">Manning, 2011</ref>  <ref type="formula" target="#formula_1">(2011)</ref> 97.29 <ref type="bibr">Søgaard (2011)</ref> 97.50 <ref type="bibr" target="#b23">Ling et al. (2015)</ref> 97.78 <ref type="bibr" target="#b26">Ma and Hovy (2016)</ref> 97.55 <ref type="bibr" target="#b51">Yang et al. (2017)</ref> 97.55 <ref type="bibr" target="#b14">Hashimoto et al. (2017)</ref> 97.55 Ours -Baseline <ref type="bibr">(BiLSTM-CRF)</ref> 97.54 Ours -Adversarial 97.58 Optimization. We train the model parameters and word/character embeddings by the mini-batch stochastic gradient descent (SGD) with batch size 10, momentum 0.9, initial learning rate 0.01 and decay rate 0.05. We also use a gradient clipping of 5.0 ( <ref type="bibr" target="#b33">Pascanu et al., 2012</ref>). The models are trained with early stopping ( <ref type="bibr" target="#b4">Caruana et al., 2001</ref>) based on the development performance.</p><p>Evaluation. We evaluate per token tagging accuracy on test sets. We repeat the experiment three times and report the statistical significance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Results</head><p>PTB-WSJ dataset. <ref type="table" target="#tab_1">Table 1</ref> shows the POS tagging results. As expected, our baseline (BiLSTM-CRF) model (accuracy 97.54%) performs on par with other state-of-the-art systems. Built upon this baseline, our adversarial training (AT) model reaches accuracy 97.58% thanks to its regularization power, outperforming recent POS taggers except <ref type="bibr" target="#b23">Ling et al. (2015)</ref>. The improvement over the baseline is statistically significant, with p-value &lt; 0.05 on the t-test. We provide additional analysis on this result in later sections.      training of word rarity may be of particular help in processing morphologically complex words. Additionally, we see that our AT model achieves notably large improvements over the baseline in resource-poor languages (the bottom of <ref type="table" target="#tab_4">Table 2)</ref>, with average improvement 0.35%, as compared to that for resource-rich languages, 0.20%. To further visualize the regularization effects, we present the learning curves for three representative languages, English (WSJ), French (UD-fr) and Romanian (UD-ro, low-resource), based on the development loss (see <ref type="figure" target="#fig_0">Figure 2)</ref>. For all the three languages, we can observe that the AT model (red solid line) prevents overfitting better than the baseline (black dotted line), and this advantage is more significant in low resource languages. For example, in Romanian, the baseline model starts to increase development loss after 1,000 iterations even with dropout, whereas the AT model keeps improving until 2,500 iterations, achieving notably lower development loss (0.4 down). These results illustrate that AT can prevent overfitting especially well on small datasets and can augment the regularization power beyond dropout. AT can also be viewed as an effective means of data augmenta-  tion, where we generate and train with new examples the current model is particularly vulnerable to at every time step, enhancing the robustness of the model. AT can therefore be a promising tool to process low resource languages.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Our Models</head><note type="other">Plank et al. (2016) Berend Nguyen et Baseline Adversarial</note><note type="other">94.55 94.71 95.51 93.35 91.63 90.63 93.7 fa 97.38 97.51 97.49 95.98 95.65 96.11 96.8 fi • 94.54 95.40 95.85 93.59 90.32 89.19 94.6 fr 96.48 96.63 96.11 94.51 95.14 94.96 96.0 he 97.34 97.43 96.96 93.71 93.63 95.28 -hi 97.12 97.21 97.10 94.53 96.00 96.09 96.4 hr • 96.12 96.32 96.82 94.06 93.16 93.53 -id 93.95 94.03 93.41 93.16 92.96 92.02 93.1 it 98.04 98.08 97.95 96.16 96.43 96.28 97.5 nl 92.64 93.09 93.30 88.54 90.03 85.10 91.4 no 97.88 98.08 98.03 96.31 96.21 95.67 97.4 pl • 97.34 97.57 97.62 95.57 93.96 93.95 96.3 pt 97.94 98.07 97.90 96.27 96.32 95.50 97.5 sl • 97.81 98.11 96.84 94.92 94.77 92.70 97.1 sv 96.39 96.70 96.</note></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Analysis</head><p>In the previous sections, we demonstrated the regularization power of adversarial training (AT) on different languages, based on the overall POS tagging performance and learning curves. In this section, we conduct further analyses on the robustness of AT from NLP specific aspects such as word statistics, sequence modeling, downstream tasks, and word representation learning. We find that AT can boost tagging accuracy on rare words and neighbors of unseen words ( §5.1). Furthermore, this robustness against rare / unseen words leads to better sentence-level accuracy and downstream dependency parsing ( §5.2). We illustrate these findings using two major languages, English (WSJ) and French (UD), which have substantially large training and testing data to discuss vocabulary statistics and sentence-level performance. Finally, we study the effects of AT on word representation learning ( §5.3), and the applicability of AT to different sequential tasks ( §5.4).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Word-level Analysis</head><p>Poor tagging accuracy on rare/unseen words is one of the bottlenecks in current POS taggers <ref type="bibr">(Man- ning, 2011;</ref><ref type="bibr" target="#b36">Plank et al., 2016)</ref>. Aiming to reveal the effects of AT on rare / unseen words, we analyze tagging performance at the word level, considering vocabulary statistics.</p><p>Word frequency. To define rare / unseen words, we consider each word's frequency of occurrence in the training set. We categorize all words in the test set based on this frequency and study the test tagging accuracy for each group (see <ref type="table" target="#tab_6">Table 3</ref>). <ref type="bibr">3</ref> In both languages, the AT model achieves large improvements over the baseline on rare words (e.g., frequency 1-10 in training), as opposed to more frequent words. This result again corroborates the data augmentation power of AT under small training examples. On the other hand, we did not observe meaningful improvements on unseen words (frequency 0 in training). A possible explanation is that AT can facilitate the learning of words with at least a few occurrences in training (rare words), but is not particularly effective in inferring the POS tags of words for which no training examples are given (unseen words).</p><p>Neighboring words. One important characteristic of natural language tasks is the sequential nature of inputs (i.e., sequence of words), where each word influences the function of its neighboring words. Since our model uses BiLSTM-CRF for that reason, we also study the tagging performance on the neighbors of rare/unseen words, and analyze the effects of AT with the sequence model in mind. In <ref type="table" target="#tab_8">Table 4</ref>, we cluster all words in the test set based on their frequency in training again, and consider the tagging accuracy on the neighbors (left and right) of these words in the test text. We observe that AT tends to achieve large improvements over the baseline on the neighbors of unseen words (training frequency 0), while the improvements on the neighbors of more frequent words remain moderate. Our AT model thus exhibits strong stability to uncertain neighbors, as compared to the baseline. We suspect that because we generate adversarial examples against entire input sentences, training with adversarial examples makes the model more robust not only to perturbations in each word but also to perturbations in its neighbor-  ing words, leading to greater stability to uncertain neighbors.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Sentence-level &amp; Downstream Analysis</head><p>In the word-level analysis, we showed that AT can boost tagging accuracy on rare words and the neighbors of unseen words, enhancing overall robustness on rare/unseen words. In this section, we discuss the benefit of our improved POS tagger in a major downstream task, dependency parsing. Most of the recent state-of-the-art dependency parsers take predicted POS tags as input (e.g. <ref type="bibr" target="#b5">Chen and Manning (2014)</ref>; <ref type="bibr" target="#b1">Andor et al. (2016)</ref>; ).  empirically show that their dependency parser gains significant improvements by using POS tags predicted by a Bi-LSTM POS tagger, while POS tags predicted by the UDPipe tagger ( <ref type="bibr" target="#b42">Straka et al., 2016)</ref> do not contribute to parsing performance as much. This observation illustrates that POS tagging performance has a great influence on dependency parsing, motivating the hypothesis that the POS tagging improvements gained from our adversarial training help dependency parsing.</p><p>To test the hypothesis, we consider three settings in dependency parsing of English and French: using POS tags predicted by the baseline model, using POS tags predicted by the AT model, and using gold POS tags. For English (PTB-WSJ), we first convert the treebank into Stanford Dependencies (SD) using Stanford CoreNLP (ver 3.8.0) ( , and then apply two wellknown dependency parsers: Stanford Parser (ver 3.5.0) <ref type="bibr" target="#b5">(Chen and Manning, 2014</ref>) and Parsey McParseface (SyntaxNet) ( <ref type="bibr" target="#b1">Andor et al., 2016</ref>   and pre-trained on corresponding treebanks. <ref type="table" target="#tab_10">Table 5</ref> shows the results of the experiments. We can observe improvements in both languages by using the POS tags predicted by our AT POS tagger. As Manning (2011) points out, when predicted POS tags are used for downstream dependency parsing, a single bad mistake in a sentence can greatly damage the usefulness of the POS tagger. The robustness of our AT POS tagger against rare/unseen words helps to mitigate such an issue. This advantage can also be observed from the AT POS tagger's notably higher sentence-level accuracy than the baseline (see <ref type="table" target="#tab_10">Table 5</ref> left). Nonetheless, gold POS tags still yield better parsing results as compared to the baseline/AT POS taggers, supporting the claim that POS tagging needs further improvement for downstream tasks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Effects on Representation Learning</head><p>Next, we perform an analysis on representation learning of words (word embeddings) for the English (PTB-WSJ) and French (UD) experiments. We hypothesize that adversarial training (AT) helps to learn better word embeddings so that the POS tag prediction of a word cannot be influenced by a small perturbation in the input embedding.</p><p>To verify this hypothesis, we cluster all words in the test set based on their correct POS tags 4 and evaluate the tightness of the word vector distribution within each cluster. We compare this clustering quality among the three settings: 1) beginning (initialized with GloVe or Polyglot), 2) after baseline training (50 epochs), and 3) after adversarial training (50 epochs), to study the effects of AT on word representation learning. For evaluating the tightness of word vector distribution, we employ the cosine similarity metric, which is widely used as a measure of the closeness between two word vectors (e.g., <ref type="bibr" target="#b30">Mikolov et al. (2013)</ref>; <ref type="bibr" target="#b34">Pennington et al. (2014)</ref>). To measure the tightness of each cluster, we compute the cosine similarity for every pair of words within, and then take the average. We also report the average tightness across all the clusters.</p><p>The evaluation results are summarized in Table 6. We report the tightness scores for the four major clusters: noun, verb, adjective, and adverb (from left to right). As can be seen from the table, for both languages, adversarial training (AT) results in cleaner word embedding distributions than the baseline, with a higher cosine similarity within each POS cluster, and with a clear advantage in the average tightness across all the clusters. In other words, the learned word vectors show stronger correlations with their POS tags. This result confirms that training with adversarial examples can help to learn cleaner word embeddings so that the meaning / grammatical function of a word cannot be altered by a small perturbation in its embedding. This analysis provides a means to interpret the robustness to input perturbations, from the perspective of NLP.</p><p>Relation with perturbation size . We also study how the size of added perturbations influences word representation learning in adversarial training. Recall that we set the norm of a perturbation to be α √ D, where D is the dimension of the concatenated input embeddings (see §3.2). For instance, α = 0 would produce no noise; α = 1 would generate a perturbation of a norm equivalent to the original word embeddings. We hypothesize that AT facilitates word representation learning when α is small enough to preserve the semantics of input words, but can hinder the learning when α is too large. To test the hypothesis, we repeat the clustering evaluation for word embeddings trained with varied perturbation scale α: <ref type="formula" target="#formula_1">(2011)</ref> 93.81 <ref type="bibr" target="#b8">Collobert et al. (2011)</ref> 94.32 <ref type="bibr" target="#b51">Yang et al. (2017)</ref> 94.66 <ref type="bibr" target="#b43">Suzuki and Isozaki (2008)</ref> 95.15  95.56 <ref type="bibr" target="#b14">Hashimoto et al. (2017)</ref> 95.77 <ref type="bibr" target="#b35">Peters et al. (2017)</ref> 96.37</p><formula xml:id="formula_7">Model F1 Tsuruoka et al.</formula><p>Ours -Baseline <ref type="bibr">(BiLSTM-CRF)</ref> 95.18 Ours -Adversarial 95.25   <ref type="table" target="#tab_13">Table 7</ref>). We observe that the quality of learned word embedding distribution keeps improving as α goes up from 0 to 0.1, but starts to drop around α = 0.5. We also find that this optimal α in word embedding learning (i.e., 0.1) is larger than the α which yielded the best tagging performance on development sets (i.e., 0.01 or 0.05). A possible explanation is that while word embeddings can adapt to relatively large α (e.g., 0.1) during training, as adversarial perturbations are generated at the embedding level, such α could change the semantics of the input from the current tagging model's perspective and hinder the training of tagging.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Other Sequence Labeling Tasks</head><p>Finally, to further confirm the applicability of AT, we experiment with our BiLSTM-CRF AT model in different sequence labeling tasks: chunking and named entity recognition (NER).</p><p>Chunking can be performed as a sequence labeling task that assigns a chunking tag (B-NP, I-VP, etc.) to each word. We conduct experiments on the CoNLL 2000 shared task with the standard data split: PTB-WSJ Sections 15-18 for training and 20 for testing. We use Section 19 as the development set and employ the IOBES tagging scheme, following <ref type="bibr" target="#b14">Hashimoto et al. (2017)</ref>. NER aims to assign an entity type to each word, such as person, location, organization, and misc.</p><p>We conduct experiments on the CoNLL-2003 (English) shared task <ref type="bibr">(Tjong Kim Sang and De Meul- der, 2003)</ref>, adopting the IOBES tagging scheme as in ( <ref type="bibr" target="#b21">Lample et al., 2016;</ref><ref type="bibr" target="#b26">Ma and Hovy, 2016)</ref>.</p><p>The results are summarized in <ref type="table" target="#tab_14">Table 8</ref> and 9. AT enhanced F1 score from the baseline BiLSTM-CRF model's 95.18 to 95.25 for chunking, and from 91.22 to 91.56 for NER, also significantly outperforming <ref type="bibr" target="#b26">Ma and Hovy (2016)</ref>. These improvements made by AT are bigger than that for English POS tagging, most likely due to the larger room for improvement in chunking and NER. The improvements are again statistically significant, with p-value &lt; 0.05 on the t-test. The experimental results suggest that the proposed adversarial training scheme is generally effective across different sequence labeling tasks.</p><p>Our BiLSTM-CRF AT model did not reach the performance by <ref type="bibr" target="#b14">Hashimoto et al. (2017)</ref>'s multitask model and <ref type="bibr" target="#b35">Peters et al. (2017)</ref>'s state-of-theart system that incorporates pretrained language models. It would be interesting future work to combine the strengths of these joint models (e.g., syntactic and semantic aids) and adversarial training (e.g., robustness).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Conclusion</head><p>We proposed and carefully analyzed a POS tagging model that exploits adversarial training (AT). In our multilingual experiments, we find that AT achieves substantial improvements on all the languages tested, especially on low resource ones. AT also enhances the robustness to rare/unseen words and sentence-level accuracy, alleviating the major issues of current POS taggers, and contributing to the downstream task, dependency parsing. Furthermore, our analyses on different languages, word / neighbor statistics and word representation learning reveal the effects of AT from the perspective of NLP. The proposed AT model is applicable to general sequence labeling tasks. This work therefore provides a strong basis and motivation for utilizing AT in natural language tasks.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 2 :</head><label>2</label><figDesc>Figure 1: 3</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 1 :</head><label>1</label><figDesc></figDesc><table>POS tagging accuracy on the PTB-WSJ 
+test set, with other top-performing systems. 
+
+4.2 Training &amp; Evaluation Details 
+
+Model settings. We initialize word embeddings 
+with 100-dimensional GloVe (Pennington et al., 
+2014) for English, and with 64-dimensional Poly-
+glot (Al-Rfou et al., 2013) for other languages. We 
+use 30-dimensional character embeddings, and set 
+the state sizes of character/word-level BiLSTM to 
+be 50, 200 for English, 50, 100 for low resource 
+languages, and 50, 150 for other languages. The 
+model parameters and character embeddings are 
+randomly initialized, as in Ma and Hovy (2016). 
+We apply dropout (Srivastava et al., 2014) to input 
+embeddings and BiLSTM outputs for both base-
+line and adversarial training, with dropout rate 0.5. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>POS tagging accuracy (test) for 27 UD 
+v1.2 treebanks, with other recent works, Plank 
+et al. (2016), Berend (2017) and Nguyen et al. 
+(2017). For Plank et al. (2016), we include the tra-
+ditional baselines TNT and CRF, and their state-
+of-the-art model that employs a multi-task BiL-
+STM. Languages with • are morphologically rich, 
+and those at the bottom ('el' to 'ta') are low-
+resource, containing less than 60k tokens in their 
+training sets. 
+
+Multilingual dataset (UD). Experimental re-
+sults are summarized in Table 2. Our AT model 
+shows clear advantages over the baseline in all of 
+the 27 languages (average improvement ∼0.25%; 
+see the two shaded columns). Considering that 
+our baseline (BiLSTM-CRF) is already a top per-
+forming model for POS tagging, these improve-
+ments made by AT are substantial. The improve-
+ments are also statistically significant for all the 
+languages, with p-value &lt; 0.05 on the t-test, sug-
+gesting that the regularization by AT is generally 
+effective across different languages. Moreover, 
+our AT model achieves state-of-the-art on nearly 
+all of the languages, except the five where Plank 
+et al. (2016)'s multi-task BiLSTM yielded better 
+results. Among the five, most languages are mor-
+phologically rich ( • ). 2 We suspect that their joint </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 3 :</head><label>3</label><figDesc>POS tagging accuracy (test) on different subsets of words, categorized by their frequency of occurrence in training. The second row shows the number of tokens in the test set that are in each category. The third and fourth rows show the per- formance of our two models. Better scores are underlined. The biggest improvement is in bold.</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="false"><head>Table 4 :</head><label>4</label><figDesc>POS tagging accuracy (test) on neighbor- ing words. We cluster all words in the test set in the same way as Table 3 and consider the tagging performance on the neighbors (left and right) of these words in the test text.</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_10" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Sentence-level accuracy and downstream 
+dependency parsing performance by our baseline/ 
+adversarial POS taggers. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_12" validated="false"><head>Table 6 :</head><label>6</label><figDesc></figDesc><table>Cluster tightness evaluation for word em-
+beddings, based on the cosine similarity measure. 
+Higher scores indicate better clustering (cleaner 
+word vector distribution). Each row corresponds 
+to word vectors 1) at the beginning, 2) after base-
+line training, and 3) after adversarial training. 
+
+English (WSJ) 
+
+Perturbation scale α 
+0 
+0.001 0.01 
+0.05 
+0.1 
+0.5 
+
+Avg. cluster tightness 0.422 0.423 0.424 0.429 0.436 0.429 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_13" validated="false"><head>Table 7 :</head><label>7</label><figDesc></figDesc><table>Average cluster tightness for word embed-
+dings trained with varied perturbation scale α (0 
+indicates baseline training). 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_14" validated="false"><head>Table 8 :</head><label>8</label><figDesc></figDesc><table>Chunking F1 scores on the CoNLL-2000 
+task, with other top performing models. 
+
+Model 
+F1 
+Collobert et al. (2011) 
+89.59 
+Huang et al. (2015) 
+90.10 
+Chiu and Nichols (2016) 
+90.91 
+Lample et al. (2016) 
+90.94 
+Luo et al. (2015) 
+91.20 
+Ma and Hovy (2016) 
+91.21 
+Peters et al. (2017) 
+91.93 
+
+Ours -Baseline (BiLSTM-CRF) 
+91.22 
+Ours -Adversarial 
+91.56 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_15" validated="false"><head>Table 9 :</head><label>9</label><figDesc></figDesc><table>NER F1 scores on the CoNLL-2003 (En-
+glish) task, with other top performing models. 
+
+0, 0.001, 0.01, 0.05, 0.1, 0.5 (see </table></figure>
+
+			<note place="foot" n="2"> We followed the criteria of morphological richness used in Nguyen et al. (2017).</note>
+
+			<note place="foot" n="3"> To conduct the analysis, we picked the median result from the three repeated experiments.</note>
+
+			<note place="foot" n="4"> We excluded words with multiple tags in the test text.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgements</head><p>We would like to thank Rui Zhang, Jonathan Kummerfeld, Yutaro Yamada, as well as all the anonymous reviewers for their helpful feedback and suggestions on this work.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Polyglot: Distributed word representations for multilingual nlp</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rami</forename><surname>Al-Rfou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bryan</forename><surname>Perozzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Skiena</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+	<note>In CoNLL</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Globally normalized transition-based neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Andor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aliaksei</forename><surname>Severyn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Presta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kuzman</forename><surname>Ganchev</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<meeting><address><addrLine>Slav Petrov, and Michael Collins</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Neural machine translation by jointly learning to align and translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Sparse coding of neural word embeddings for multilingual sequence labeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gábor</forename><surname>Berend</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+			<publisher>TACL</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Overfitting in neural nets: Backpropagation, conjugate gradient, and early stopping</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rich</forename><surname>Caruana</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Lawrence</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C Lee</forename><surname>Giles</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">A fast and accurate dependency parser using neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Christopher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Manning</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+	<note>In EMNLP</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Named entity recognition with bidirectional lstm-cnns</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">C</forename><surname>Jason</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><surname>Chiu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nichols</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note>In TACL</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Discriminative training methods for hidden markov models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Natural language processing (almost) from scratch</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronan</forename><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Léon</forename><surname>Bottou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Karlen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pavel</forename><surname>Kuksa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="2493" to="2537" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Deep biaffine attention for neural dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Dozat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+	<note>In ICLR</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Stanford&apos;s graph-based neural dependency parser at the conll 2017 shared task</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Dozat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peng</forename><surname>Qi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CoNLL 2017 Shared Task: Multilingual Parsing from Raw Text to Universal Dependencies</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="20" to="30" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Generative adversarial nets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ian</forename><surname>Goodfellow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jean</forename><surname>Pouget-Abadie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mehdi</forename><surname>Mirza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bing</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Warde-Farley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sherjil</forename><surname>Ozair</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Explaining and harnessing adversarial examples</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathon</forename><surname>Goodfellow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Shlens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Szegedy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Part-of-speech tagging for twitter with adversarial neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tao</forename><surname>Gui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qi</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Haoran</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minlong</forename><surname>Peng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuanjing</forename><surname>Huang</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+	<note>In EMNLP</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">A joint many-task model: Growing a neural network for multiple NLP tasks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuma</forename><surname>Hashimoto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshimasa</forename><surname>Tsuruoka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Bidirectional lstm-crf models for sequence tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiheng</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Yu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1508.01991</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Deep unordered composition rivals syntactic methods for text classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohit</forename><surname>Iyyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Varun</forename><surname>Manjunatha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jordan</forename><surname>Boyd-Graber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hal</forename><surname>Daumé</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iii</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Adversarial examples for evaluating reading comprehension systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robin</forename><surname>Jia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In EMNLP</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Cross-lingual transfer learning for pos tagging without cross-lingual resources</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joo-Kyung</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Young-Bum</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruhi</forename><surname>Sarikaya</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><surname>Fosler-Lussier</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Conditional random fields: Probabilistic models for segmenting and labeling sequence data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Lafferty</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fernando Cn</forename><surname>Pereira</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICML</title>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Neural architectures for named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guillaume</forename><surname>Lample</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sandeep</forename><surname>Subramanian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuya</forename><surname>Kawakami</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Adversarial learning for neural dialogue generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiwei</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Will</forename><surname>Monroe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tianlin</forename><surname>Shi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alan</forename><surname>Ritter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Jurafsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Finding function in form: Compositional character models for open vocabulary word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tiago</forename><surname>Luís</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luís</forename><surname>Marujo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rámon</forename><surname>Fernandez Astudillo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Silvio</forename><surname>Amir</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alan</forename><forename type="middle">W</forename><surname>Black</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Isabel</forename><surname>Trancoso</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Delving into transferable adversarial examples and black-box attacks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yanpei</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xinyun</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chang</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dawn</forename><surname>Song</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Joint entity recognition and disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gang</forename><surname>Luo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaojiang</forename><surname>Huang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+	<note>Chin-Yew Lin, and Zaiqing Nie</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">End-to-end sequence labeling via bi-directional lstm-cnns-crf</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuezhe</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">The Stanford CoreNLP natural language processing toolkit</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mihai</forename><surname>Surdeanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Bauer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jenny</forename><surname>Finkel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><forename type="middle">J</forename><surname>Bethard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Mcclosky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Association for Computational Linguistics (ACL) System Demonstrations</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">Part-of-speech tagging from 97% to 100%: is it time for some linguistics? Computational Linguistics and Intelligent Text Processing pages</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Christopher D Manning</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="171" to="189" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Building a large annotated corpus of english: The penn treebank</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Beatrice</forename><surname>Santorini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mary</forename><forename type="middle">Ann</forename><surname>Marcinkiewicz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="313" to="330" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Distributed representations of words and phrases and their compositionality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Adversarial training methods for semisupervised text classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Takeru</forename><surname>Miyato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Andrew</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ian</forename><surname>Dai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Goodfellow</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">A Novel Neural Network Model for Joint POS Tagging and Graph-based Dependency Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Dat Quoc Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Dras</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CoNLL 2017 Shared Task: Multilingual Parsing from Raw Text to Universal Dependencies</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Razvan</forename><surname>Pascanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1211.5063</idno>
+		<title level="m">On the difficulty of training recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Semi-supervised sequence tagging with bidirectional language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Waleed</forename><surname>Matthew E Peters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chandra</forename><surname>Ammar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Russell</forename><surname>Bhagavatula</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Power</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Multilingual part-of-speech tagging with bidirectional long short-term memory models and auxiliary loss</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barbara</forename><surname>Plank</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Bidirectional recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">K</forename><surname>Paliwal</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Trans. Sig. Proc</title>
+		<imprint>
+			<biblScope unit="volume">45</biblScope>
+			<biblScope unit="issue">11</biblScope>
+			<biblScope unit="page" from="2673" to="2681" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Uri</forename><surname>Shaham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yutaro</forename><surname>Yamada</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sahand</forename><surname>Negahban</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.05432</idno>
+		<title level="m">Understanding adversarial training: Increasing local stability of neural nets through robust optimization</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Semi-supervised condensed nearest neighbor for part-of-speech tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL-HLT</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Deep multi-task learning with low level tasks supervised at lower layers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Dropout: A simple way to prevent neural networks from overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Udpipe: Trainable pipeline for processing conll-u files performing tokenization, morphological analysis, pos tagging and parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milan</forename><surname>Straka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Hajic</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jana</forename><surname>Straková</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">LREC</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<monogr>
+		<title level="m" type="main">Semi-supervised sequential labeling and segmentation using gigaword scale unlabeled data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Suzuki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hideki</forename><surname>Isozaki</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2008" />
+			<publisher>ACL-HLT</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<monogr>
+		<title level="m" type="main">Intriguing properties of neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Szegedy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wojciech</forename><surname>Zaremba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joan</forename><surname>Bruna</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dumitru</forename><surname>Erhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ian</forename><surname>Goodfellow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rob</forename><surname>Fergus</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+	<note>In ICLR</note>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<monogr>
+		<title level="m" type="main">Introduction to the conll-2003 shared task: Language-independent named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erik F Tjong Kim</forename><surname>Sang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fien De</forename><surname>Meulder</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+	<note>In CoNLL</note>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">Feature-rich part-ofspeech tagging with a cyclic dependency network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kristina</forename><surname>Toutanova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoram</forename><surname>Singer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">HLT-NAACL</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<monogr>
+		<title level="m" type="main">Learning with lookahead: Can history-based models rival globally optimized models?</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshimasa</forename><surname>Tsuruoka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yusuke</forename><surname>Miyao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun&amp;apos;ichi</forename><surname>Kazama</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+	<note>In CoNLL</note>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<analytic>
+		<title level="a" type="main">A theoretical framework for robustness of (deep) classifiers against adversarial samples</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Beilun</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ji</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yanjun</forename><surname>Qi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<analytic>
+		<title level="a" type="main">Adversarial training for relation extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yi</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Bamman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stuart</forename><surname>Russell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Data noising as smoothing in neural network language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ziang</forename><surname>Xie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sida</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiwei</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aiming</forename><surname>Levy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Nie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew Y</forename><surname>Jurafsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<analytic>
+		<title level="a" type="main">Transfer learning for sequence tagging with hierarchical recurrent networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhilin</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William</forename><forename type="middle">W</forename><surname>Cohen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

@@ -1,0 +1,654 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T07:26+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">DEEP BIAFFINE ATTENTION FOR NEURAL DEPENDENCY PARSING</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+				<date type="published" when="2017-03-10">10 Mar 2017</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Dozat</surname></persName>
+							<email>tdozat@stanford.edu</email>
+							<affiliation key="aff0">
+								<orgName type="institution" key="instit1">Stanford University</orgName>
+								<orgName type="institution" key="instit2">Stanford University</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+							<email>manning@stanford.edu</email>
+							<affiliation key="aff0">
+								<orgName type="institution" key="instit1">Stanford University</orgName>
+								<orgName type="institution" key="instit2">Stanford University</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">DEEP BIAFFINE ATTENTION FOR NEURAL DEPENDENCY PARSING</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date type="published" when="2017-03-10">10 Mar 2017</date>
+						</imprint>
+					</monogr>
+					<note>Published as a conference paper at ICLR 2017</note>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>This paper builds off recent work from Kiperwasser &amp; Goldberg (2016) using neu-ral attention in a simple graph-based dependency parser. We use a larger but more thoroughly regularized parser than other recent BiLSTM-based approaches, with biaffine classifiers to predict arcs and labels. Our parser gets state of the art or near state of the art performance on standard treebanks for six different languages, achieving 95.7% UAS and 94.1% LAS on the most popular English PTB dataset. This makes it the highest-performing graph-based parser on this benchmark-outperforming Kiperwasser &amp; Goldberg (2016) by 1.8% and 2.2%-and comparable to the highest performing transition-based parser (Kuncoro et al., 2016), which achieves 95.8% UAS and 94.6% LAS. We also show which hyperparameter choices had a significant effect on parsing accuracy, allowing us to achieve large gains over other graph-based approaches.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Dependency parsers-which annotate sentences in a way designed to be easy for humans and computers alike to understand-have been found to be extremely useful for a sizable number of NLP tasks, especially those involving natural language understanding in some way <ref type="bibr" target="#b4">(Bowman et al., 2016;</ref><ref type="bibr" target="#b1">Angeli et al., 2015;</ref><ref type="bibr" target="#b14">Levy &amp; Goldberg, 2014;</ref><ref type="bibr" target="#b18">Toutanova et al., 2016;</ref><ref type="bibr" target="#b16">Parikh et al., 2015)</ref>. However, frequent incorrect parses can severely inhibit final performance, so improving the quality of dependency parsers is needed for the improvement and success of these downstream tasks.</p><p>The current state-of-the-art transition-based neural dependency parser ( <ref type="bibr" target="#b13">Kuncoro et al., 2016</ref>) substantially outperforms many much simpler neural graph-based parsers. We modify the neural graphbased approach first proposed by <ref type="bibr" target="#b12">Kiperwasser &amp; Goldberg (2016)</ref> in a few ways to achieve competitive performance: we build a network that's larger but uses more regularization; we replace the traditional MLP-based attention mechanism and affine label classifier with biaffine ones; and rather than using the top recurrent states of the LSTM in the biaffine transformations, we first put them through MLP operations that reduce their dimensionality. Furthermore, we compare models trained with different architectures and hyperparameters to motivate our approach empirically. The resulting parser maintains most of the simplicity of neural graph-based approaches while approaching the performance of the SOTA transition-based one.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">BACKGROUND AND RELATED WORK</head><p>Transition-based parsers-such as shift-reduce parsers-parse sentences from left to right, maintaining a "buffer" of words that have not yet been parsed and a "stack" of words whose head has not been seen or whose dependents have not all been fully parsed. At each step, transition-based parsers can access and manipulate the stack and buffer and assign arcs from one word to another. One can then train any multi-class machine learning classifier on features extracted from the stack, buffer, and previous arc actions in order to predict the next action.</p><p>Chen &amp; Manning (2014) make the first successful attempt at incorporating deep learning into a transition-based dependency parser. At each step, the (feedforward) network assigns a probability to each action the parser can take based on word, tag, and label embeddings from certain words  <ref type="formula" target="#formula_6">(2016)</ref> augment it with a beam search and a conditional random field loss objective to allow the parser to "undo" previous actions once it finds evidence that they may have been incorrect; and <ref type="bibr" target="#b7">Dyer et al. (2015)</ref> and ( <ref type="bibr" target="#b13">Kuncoro et al., 2016</ref>) instead use LSTMs to represent the stack and buffer, getting state-of-the-art performance by building in a way of composing parsed phrases together.</p><p>Transition-based parsing processes a sentence sequentially to build up a parse tree one arc at a time. Consequently, these parsers don't use machine learning for directly predicting edges; they use it for predicting the operations of the transition algorithm. Graph-based parsers, by contrast, use machine learning to assign a weight or probability to each possible edge and then construct a maximum spaning tree (MST) from these weighted edges. <ref type="bibr" target="#b12">Kiperwasser &amp; Goldberg (2016)</ref> present a neural graph-based parser (in addition to a transition-based one) that uses the same kind of attention mechanism as <ref type="bibr" target="#b2">Bahdanau et al. (2014)</ref> for machine translation. In Kiperwasser &amp; Goldberg's 2016 model, the (bidirectional) LSTM's recurrent output vector for each word is concatenated with each possible head's recurrent vector, and the result is used as input to an MLP that scores each resulting arc. The predicted tree structure at training time is the one where each word depends on its highestscoring head. Labels are generated analogously, with each word's recurrent output vector and its gold or predicted head word's recurrent vector being used in a multi-class MLP.</p><p>Similarly, <ref type="bibr" target="#b10">Hashimoto et al. (2016)</ref> include a graph-based dependency parser in their multi-task neural model. In addition to training the model with multiple distinct objectives, they replace the traditional MLP-based attention mechanism that <ref type="bibr" target="#b12">Kiperwasser &amp; Goldberg (2016)</ref> use with a bilinear one (but still using an MLP label classifier). This makes it analogous to Luong et al.'s 2015 proposed attention mechanism for neural machine translation. <ref type="bibr" target="#b6">Cheng et al. (2016)</ref> likewise propose a graph-based neural dependency parser, but in a way that attempts to circumvent the limitation of other neural graph-based parsers being unable to condition the scores of each possible arc on previous parsing decisions. In addition to having one bidirectional recurrent network that computes a recurrent hidden vector for each word, they have additional, unidirectional recurrent networks (leftto-right and right-to-left) that keep track of the probabilities of each previous arc, and use these together to predict the scores for the next arc.</p><p>. . .</p><formula xml:id="formula_0">root ROOT Kim NNP 1 1 1 1 ⊤ · · = BiLSTM: r i</formula><p>Embeddings:</p><formula xml:id="formula_1">x i MLP: h (arc-dep) i , h (arc-head) i H (arc-dep) ⊕ 1 U (arc) H (arc-head) S (arc)</formula><p>Figure 2: BiLSTM with deep biaffine attention to score each possible head for each dependent, applied to the sentence "Casey hugged Kim". We reverse the order of the biaffine transformation here for clarity.</p><p>classifier, but using a (d × d) linear transformation of the stacked LSTM output RU (1) in place of the weight matrix W and a (d × 1) transformation Ru (2) for the bias term b (2).</p><formula xml:id="formula_2">s i = W r i + b Fixed-class affine classifier (1) s (arc) i = RU (1) r i + Ru (2)</formula><p>Variable-class biaffine classifier (2)</p><p>In addition to being arguably simpler than the MLP-based approach (involving one bilinear layer rather than two linear layers and a nonlinearity), this has the conceptual advantage of directly modeling both the prior probability of a word j receiving any dependents in the term r ⊤ j u (2) and the likelihood of j receiving a specific dependent i in the term r ⊤ j U (1) r i . Analogously, we also use a biaffine classifier to predict dependency labels given the gold or predicted head y i (3).</p><formula xml:id="formula_3">s (label) i = r ⊤ yi U (1) r i + (r yi ⊕ r i ) ⊤ U (2) + b</formula><p>Fixed-class biaffine classifier (3) This likewise directly models each of the prior probability of each class, the likelihood of a class given just word i (how probable a word is to take a particular label), the likelihood of a class given just the head word y i (how probable a word is to take dependents with a particular label), and the likelihood of a class given both word i and its head (how probable a word is to take a particular label given that word's head).</p><p>Applying smaller MLPs to the recurrent output states before the biaffine classifier has the advantage of stripping away information not relevant to the current decision. That is, every top recurrent state r i will need to carry enough information to identify word i's head, find all its dependents, exclude all its non-dependents, assign itself the correct label, and assign all its dependents their correct labels, as well as transfer any relevant information to the recurrent states of words before and after it. Thus r i necessarily contains significantly more information than is needed to compute any individual score, and training on this superfluous information needlessly reduces parsing speed and increases the risk of overfitting. Reducing dimensionality and applying a nonlinearity (4 -6) addresses both of these problems. We call this a deep bilinear attention mechanism, as opposed to shallow bilinear attention, which uses the recurrent states directly.</p><formula xml:id="formula_4">h (arc-dep) i = MLP (arc-dep) (r i )<label>(4)</label></formula><formula xml:id="formula_5">h (arc-head) j = MLP (arc-head) (r j )<label>(5)</label></formula><formula xml:id="formula_6">s (arc) i = H (arc-head) U (1) h (arc-dep) i<label>(6)</label></formula><formula xml:id="formula_7">+ H (arc-head) u (2)</formula><p>We apply MLPs to the recurrent states before using them in the label classifier as well. As with other graph-based models, the predicted tree at training time is the one where each word is a dependent of its highest scoring head (although at test time we ensure that the parse is a well-formed tree via the MST algorithm). Aside from architectural differences between ours and the other graph-based parsers, we make a number of hyperparameter choices that allow us to outperform theirs, laid out in <ref type="table">Table 1</ref>. We use 100-dimensional uncased word vectors 2 and POS tag vectors; three BiLSTM layers (400 dimensions in each direction); and 500-and 100-dimensional ReLU MLP layers. We also apply dropout at every stage of the model: we drop words and tags (independently); we drop nodes in the LSTM layers (input and recurrent connections), applying the same dropout mask at every recurrent timestep (cf. the Bayesian dropout of <ref type="bibr" target="#b8">Gal &amp; Ghahramani (2015)</ref>); and we drop nodes in the MLP layers and classifiers, likewise applying the same dropout mask at every timestep. We optimize the network with annealed Adam <ref type="bibr" target="#b11">(Kingma &amp; Ba, 2014</ref>) for about 50,000 steps, rounded up to the nearest epoch.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">HYPERPARAMETER CONFIGURATION</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">EXPERIMENTS &amp; RESULTS</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">DATASETS</head><p>We show test results for the proposed model on the English Penn Treebank, converted into Stanford Dependencies using both version 3.3.0 and version 3.5.0 of the Stanford Dependency converter (PTB-SD 3.3.0 and PTB-SD 3.5.0); the Chinese Penn Treebank; and the CoNLL 09 shared task dataset, 3 following standard practices for each dataset. We omit punctuation from evaluation only for the PTB-SD and CTB. For the English PTB-SD datasets, we use POS tags generated from the Stanford POS tagger ( <ref type="bibr" target="#b17">Toutanova et al., 2003)</ref>; for the Chinese PTB dataset we use gold tags; and for the CoNLL 09 dataset we use the provided predicted tags. Our hyperparameter search was done with the PTB-SD 3.5.0 validation dataset in order to minimize overfitting to the more popular PTB-SD 3.3.0 benchmark, and in our hyperparameter analysis in the following section we report performance on the PTB-SD 3.5.0 test set, shown in <ref type="table" target="#tab_2">Tables 2 and 3</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">HYPERPARAMETER CHOICES</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.1">ATTENTION MECHANISM</head><p>We examined the effect of different classifier architectures on accuracy and performance. What we see is that the deep bilinear model outperforms the others with respect to both speed and accuracy. The model with shallow bilinear arc and label classifiers gets the same unlabeled performance as the deep model with the same settings, but because the label classifier is much larger ((801 × c × 801) as opposed to (101 × c × 101)), it runs much slower and overfits. One way to decrease this overfitting is by increasing the MLP dropout, but that of course doesn't change parsing speed; another way is to decrease the recurrent size to 300, but this hinders unlabeled accuracy without increasing parsing speed up to the same levels as our deeper model. We also implemented the MLP-based approach to attention and classification used in <ref type="bibr" target="#b12">Kiperwasser &amp; Goldberg (2016)</ref>. <ref type="bibr">4</ref> We found this version to   likewise be somewhat slower and significantly underperform the deep biaffine approach in both labeled and unlabeled accuracy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.2">NETWORK SIZE</head><p>We also examine more closely how network size influences speed and accuracy. In Kiperwasser &amp; Goldberg's 2016 model, the network uses 2 layers of 125-dimensional bidirectional LSTMs; in Hashimoto et al.'s 2016 model, it has one layer of 100-dimensional bidirectional LSTMs dedicated to parsing (two lower layers are also trained on other objectives); and Cheng et al.'s 2016 model has one layer of 368-dimensional GRU cells. We find that using three or four layers gets significantly better performance than two layers, and increasing the LSTM sizes from 200 to 300 or 400 dimensions likewise signficantly improves performance. <ref type="bibr">5</ref> </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.3">RECURRENT CELL</head><p>GRU cells have been promoted as a faster and simpler alternative to LSTM cells, and are used in the approach of <ref type="bibr" target="#b6">Cheng et al. (2016)</ref>; however, in our model they drastically underperformed LSTM cells. We also implemented the coupled input-forget gate LSTM cells (Cif-LSTM) suggested by <ref type="bibr" target="#b9">Greff et al. (2015)</ref>, <ref type="bibr">6</ref> finding that while the resulting model still slightly underperforms the more popular LSTM cells, the difference between the two is much smaller. Additionally, because the gate and candidate cell activations can be computed simultaneously with one matrix multiplication, the Cif-LSTM model is faster than the GRU version even though they have the same number of parameters. We hypothesize that the output gate in the Cif-LSTM model allows it to maintain a sparse recurrent output state, which helps it adapt to the high levels of dropout needed to prevent overfitting in a way that GRU cells are unable to do.    Because we increase the parser's power, we also have to increase its regularization. In addition to using relatively extreme dropout in the recurrent and MLP layers mentioned in <ref type="table">Table 1</ref>, we also regularize the input layer. We drop 33% of words and 33% of tags during training: when one is dropped the other is scaled by a factor of two to compensate, and when both are dropped together, the model simply gets an input of zeros. Models trained with only word or tag dropout but not both wind up signficantly overfitting, hindering label accuracy and-in the latter case-attachment accuracy. Interestingly, not using any tags at all actually results in better performance than using tags without dropout.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.5">OPTIMIZER</head><p>We choose to optimize with Adam <ref type="bibr" target="#b11">(Kingma &amp; Ba, 2014)</ref>, which (among other things) keeps a moving average of the L 2 norm of the gradient for each parameter throughout training and divides the gradient for each parameter by this moving average, ensuring that the magnitude of the gradients will on average be close to one. However, we find that the value for β 2 recommended by Kingma &amp; Bawhich controls the decay rate for this moving average-is too high for this task (and we suspect more generally). When this value is very large, the magnitude of the current update is heavily influenced by the larger magnitude of gradients very far in the past, with the effect that the optimizer can't adapt quickly to recent changes in the model. Thus we find that setting β 2 to .9 instead of .999 makes a large positive impact on final performance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">RESULTS</head><p>Our model gets nearly the same UAS performance on PTB-SD 3.3.0 as the current SOTA model from <ref type="bibr" target="#b13">Kuncoro et al. (2016)</ref> in spite of its substantially simpler architecture, and gets SOTA UAS performance on CTB 5.1 7 as well as SOTA performance on all CoNLL 09 languages. It is worth noting that the CoNLL 09 datasets contain many non-projective dependencies, which are difficult or impossible for transition-based-but not graph-based-parsers to predict. This may account for some of the large, consistent difference between our model and Andor et al.'s 2016 transition-based model applied to these datasets.</p><p>Where our model appears to lag behind the SOTA model is in LAS, indicating one of a few possibilities. Firstly, it may be the result of inefficiencies or errors in the GloVe embeddings or POS tagger, in which case using alternative pretrained embeddings or a more accurate tagger might improve label classification. Secondly, the SOTA model is specifically designed to capture phrasal compositionality; so another possibility is that ours doesn't capture this compositionality as effectively, and that this results in a worse label score. Similarly, it may be the result of a more general limitation of graph-based parsers, which have access to less explicit syntactic information than transition-based parsers when making decisions. Addressing these latter two limitations would require a more innovative architecture than the relatively simple one used in current neural graph-based parsers.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">CONCLUSION</head><p>In this paper we proposed using a modified version of bilinear attention in a neural dependency parser that increases parsing speed without hurting performance. We showed that our larger but more regularized network outperforms other neural graph-based parsers and gets comparable performance to the current SOTA transition-based parser. We also provided empirical motivation for the proposed architecture and configuration over similar ones in the existing literature. Future work will involve exploring ways of bridging the gap between labeled and unlabeled accuracy and augment the parser with a smarter way of handling out-of-vocabulary tokens for morphologically richer languages.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head></head><label></label><figDesc>Figure 1: A dependency tree parse for Casey hugged Kim, including part-of-speech tags and a special root token. Directed edges (or arcs) with labels (or relations) connect the verb to the root and the arguments to the verb head.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>English</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Test accuracy and speed on PTB-SD 3.5.0. Statistically significant differences are marked 
+with an asterisk. 
+
+Input Dropout 
+Adam 
+Model 
+UAS 
+LAS 
+Model 
+UAS 
+LAS 
+Default 
+95.75 
+94.22 
+β2 = .9 
+95.75 
+94.22 
+No word dropout 95.74 
+94.08* 
+β2 = .999 95.53* 93.91* 
+No tag dropout 
+95.28* 93.60* 
+No tags 
+95.77 
+93.91* 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Test Accuracy on PTB-SD 3.5.0. Statistically significant differences are marked with an 
+asterisk. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="true"><head>Table 4 : Results on the English PTB and Chinese PTB parsing datasets</head><label>4</label><figDesc></figDesc><table>Catalan 
+Chinese 
+Czech 
+Model 
+UAS 
+LAS 
+UAS 
+LAS 
+UAS 
+LAS 
+
+Andor et al. 
+92.67 89.83 84.72 80.85 88.94 84.56 
+Deep Biaffine 94.69 92.02 88.90 85.38 92.08 87.38 
+
+English 
+German 
+Spanish 
+Model 
+UAS 
+LAS 
+UAS 
+LAS 
+UAS 
+LAS 
+
+Andor et al. 
+93.22 91.23 90.91 89.15 92.62 89.95 
+Deep Biaffine 95.21 93.20 93.46 91.44 94.34 91.65 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Results on the CoNLL '09 shared task datasets 
+
+4.2.4 EMBEDDING DROPOUT 
+
+</table></figure>
+
+			<note place="foot" n="3"> PROPOSED DEPENDENCY PARSER 3.1 DEEP BIAFFINE ATTENTION We make a few modifications to the graph-based architectures of Kiperwasser &amp; Goldberg (2016), Hashimoto et al. (2016), and Cheng et al. (2016), shown in Figure 2: we use biaffine attention instead of bilinear or traditional MLP-based attention; we use a biaffine dependency label classifier; and we apply dimension-reducing MLPs to each recurrent output vector r i before applying the biaffine transformation. 1 The choice of biaffine rather than bilinear or MLP mechanisms makes the classifiers in our model analogous to traditional affine classifiers, which use an affine transformation over a single LSTM output state r i (or other vector input) to predict the vector of scores s i for all classes (1). We can think of the proposed biaffine attention mechanism as being a traditional affine 1 In this paper we follow the convention of using lowercase italic letters for scalars and indices, lowercase bold letters for vectors, uppercase italic letters for matrices, uppercase bold letters for higher order tensors. We also maintain this notation when indexing; so row i of matrix R would be represented as ri.</note>
+
+			<note place="foot" n="2"> We compute a &quot;trained&quot; embedding matrix composed of words that occur at least twice in the training dataset and add these embeddings to their corresponding pretrained embeddings. Any words that don&apos;t occur in either embedding matrix are replaced with a separate OOV token. 3 We exclude the Japanese dataset from our evaluation because we do not have access to it. 4 In the version of TensorFlow we used, the model&apos;s memory requirements during training exceeded the available memory on a single GPU when default settings were used, so we reduced the MLP hidden size to 200</note>
+
+			<note place="foot" n="5"> The model with 400-dimensional recurrent states significantly outperforms the 300-dimensional one on the validation set, but not on the test set 6 In addition to using a coupled input-forget gate, we remove the first tanh nonlinearity, which is no longer needed when using a coupled gate</note>
+
+			<note place="foot" n="7"> We&apos;d like to thank Zhiyang Teng for finding a bug in the original code that affected the CTB 5.1 dataset</note>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Globally normalized transitionbased neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Andor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aliaksei</forename><surname>Severyn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Presta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kuzman</forename><surname>Ganchev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+		<ptr target="https://arxiv.org/abs/1603.06042" />
+	</analytic>
+	<monogr>
+		<title level="m">Association for Computational Linguistics</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Leveraging linguistic structure for open domain information extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gabor</forename><surname>Angeli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Melvin</forename><forename type="middle">Johnson</forename><surname>Premkumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 53rd Annual Meeting of the Association for Computational Linguistics (ACL 2015)</title>
+		<meeting>the 53rd Annual Meeting of the Association for Computational Linguistics (ACL 2015)</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Neural machine translation by jointly learning to align and translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Training with exploration improves a greedy stack-LSTM parser</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on empirical methods in natural language processing</title>
+		<meeting>the conference on empirical methods in natural language processing</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">A fast unified model for parsing and sentence understanding</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jon</forename><surname>Samuel R Bowman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abhinav</forename><surname>Gauthier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raghav</forename><surname>Rastogi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Gupta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Christopher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Potts</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">A fast and accurate dependency parser using neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Christopher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on empirical methods in natural language processing</title>
+		<meeting>the conference on empirical methods in natural language processing</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="740" to="750" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Bi-directional attention with agreement for dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Fang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodong</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Deng</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.02076</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Transitionbased dependency parsing with stack long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang</forename><surname>Ling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Austin</forename><surname>Matthews</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on empirical methods in natural language processing</title>
+		<meeting>the conference on empirical methods in natural language processing</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Dropout as a bayesian approximation: Representing model uncertainty in deep learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yarin</forename><surname>Gal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zoubin</forename><surname>Ghahramani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Machine Learning</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">LSTM: A search space odyssey</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Greff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh</forename><forename type="middle">Kumar</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Koutník</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Bas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Steunebrink</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Neural Networks and Learning Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">A joint many-task model: Growing a neural network for multiple nlp tasks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuma</forename><surname>Hashimoto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshimasa</forename><surname>Tsuruoka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01587</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diederik</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Ba</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Simple and accurate dependency parsing using bidirectional LSTM feature representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eliyahu</forename><surname>Kiperwasser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Transactions of the Association for Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="313" to="327" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">What do recurrent neural network grammars learn about syntax? CoRR</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adhiguna</forename><surname>Kuncoro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lingpeng</forename><surname>Kong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Graham</forename><surname>Neubig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+		<idno>abs/1611.05774</idno>
+		<ptr target="http://arxiv.org/abs/1611.05774" />
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Dependency-based word embeddings</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Omer</forename><surname>Levy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL 2014</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="302" to="308" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Effective approaches to attentionbased neural machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minh-Thang</forename><surname>Luong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hieu</forename><surname>Pham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Empirical Methods in Natural Language Processing</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Grounded semantic parsing for complex knowledge extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ankur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hoifung</forename><surname>Parikh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kristina</forename><surname>Poon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Toutanova</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of North American Chapter of the Association for Computational Linguistics</title>
+		<meeting>North American Chapter of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="756" to="766" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Feature-rich part-ofspeech tagging with a cyclic dependency network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kristina</forename><surname>Toutanova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Christopher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoram</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Singer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2003 Conference of the North American Chapter</title>
+		<meeting>the 2003 Conference of the North American Chapter</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="173" to="180" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Compositional learning of embeddings for relation paths in knowledge bases and text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kristina</forename><surname>Toutanova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Victoria</forename><surname>Xi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wen-Tau</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Yih</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Structured training for neural network transition-based parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Alberti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Collins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Annual Meeting of the Association for Computational Linguistics</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

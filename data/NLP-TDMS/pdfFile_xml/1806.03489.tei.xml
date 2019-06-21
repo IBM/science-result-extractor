@@ -1,0 +1,1335 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:51+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Robust Lexical Features for Improved Neural Network Named-Entity Recognition</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abbas</forename><surname>Ghaddar</surname></persName>
+							<email>abbas.ghaddar@umontreal.ca</email>
+							<affiliation key="aff0">
+								<orgName type="department">RALI-DIRO</orgName>
+								<orgName type="institution">RALI-DIRO Université de Montréal Montréal</orgName>
+								<address>
+									<country key="CA">Canada</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philippe</forename><surname>Langlais</surname></persName>
+							<affiliation key="aff1">
+								<orgName type="institution">Université de Montréal Montréal</orgName>
+								<address>
+									<country key="CA">Canada</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Robust Lexical Features for Improved Neural Network Named-Entity Recognition</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Neural network approaches to Named-Entity Recognition reduce the need for carefully hand-crafted features. While some features do remain in state-of-the-art systems, lexical features have been mostly discarded, with the exception of gazetteers. In this work, we show that this is unfair: lexical features are actually quite useful. We propose to embed words and entity types into a low-dimensional vector space we train from annotated data produced by distant supervision thanks to Wikipedia. From this, we compute-offline-a feature vector representing each word. When used with a vanilla recurrent neural network model, this representation yields substantial improvements. We establish a new state-of-the-art F1 score of 87.95 on ONTONOTES 5.0, while matching state-of-the-art performance with a F1 score of 91.73 on the over-studied CONLL-2003 dataset.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Named-Entity Recognition (NER) is the task of identifying textual mentions and classifying them into a predefined set of types. Various approaches have been proposed to tackle the task, from hand-crafted feature-based machine learning models like conditional random fields ( <ref type="bibr" target="#b10">Finkel et al., 2005</ref>) and perceptron ( <ref type="bibr" target="#b32">Ratinov and Roth, 2009)</ref>, to deep neural models <ref type="bibr" target="#b7">(Collobert et al., 2011;</ref><ref type="bibr" target="#b23">Ma and Hovy, 2016;</ref><ref type="bibr" target="#b37">Strubell et al., 2017)</ref>.</p><p>Word representations ( <ref type="bibr" target="#b40">Turian et al., 2010;</ref>, also known as word embeddings, are a key element for multiple NLP tasks including NER <ref type="bibr" target="#b7">(Collobert et al., 2011</ref>). Due to the small amount of named-entity annotated data, embeddings are used to extend, rather than replace, hand-crafted features in order to obtain state-of-the-art performance ( <ref type="bibr" target="#b19">Lample et al., 2016)</ref>. Recent studies ( <ref type="bibr" target="#b42">Yang et al., 2017;</ref><ref type="bibr" target="#b35">Søgaard and Goldberg, 2016)</ref> have explored methods for supplying deep sequential taggers with complementary features to standard embeddings. <ref type="bibr" target="#b28">Peters et al. (2017)</ref> and <ref type="bibr" target="#b39">Tran et al. (2017)</ref> tested special embeddings extracted from a neural language model (LM) trained on a large corpus. LM embeddings capture context-dependent aspects of word meaning using future (forward LM) and previous (backward LM) context words. When this information is added to standard features, it leads to significant improvements in NER. Also, <ref type="bibr" target="#b6">Chiu and Nichols (2016)</ref> showed that external knowledge resources (namely gazetteers) are crucial to NER performance. Gazetteer features encode the presence of word n-grams in predefined lists of NEs.</p><p>In this work, we discuss some of the limitations of gazetteer features and propose an alternative lexical representation which is trained offline and that can be added to any neural NER system. In a nutshell, we embed words and entity types into a joint vector space by leveraging WiFiNE ( <ref type="bibr" target="#b14">Ghaddar and Langlais, 2018)</ref>, a ressource which automatically annotates mentions in Wikipedia with 120 entity types. From this vector space, we compute for each word a 120-dimensional vector, where each dimension encodes the similarity of the word with an entity type. We call this vector an LS representation, for Lexical Similarity. When included in a vanilla LSTM-CRF NER model, LS representations lead to significant gains. We establish a new state-of-the-art F1 score of 87.95 on ONTONOTES 5.0, while matching state-of-the-art performance on the over-studied <ref type="bibr">CONLL-2003 dataset.</ref> In the rest of this paper, we motivate our work in Section 2. We describe how we compute LS vectors in Section 3. We present our system in Section 4 and report results in Section 5. In Section 6, we discuss related works before concluding in Section 7.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Motivation</head><p>Gazetteers are lists of entities that are associated with specific NE categories. They are widely used as a feature source in NER, and have been successfully included in feature-based <ref type="bibr" target="#b32">(Ratinov and Roth, 2009)</ref> and neural (Chiu and Nichols, 2016) models. Typically, lists of entities are compiled from structured data sources such as <ref type="bibr">DBpedia (Auer et al., 2007</ref>) or Freebase ( <ref type="bibr" target="#b4">Bollacker et al., 2008)</ref>. The surface form of the title of a Wikipedia article, as well as aliases and redirects are mapped to an entity type using the object type attribute of the related DBpedia (or Freebase) page. <ref type="bibr" target="#b32">Ratinov and Roth (2009)</ref> use this methodology to compile 30 lists of fine-grained entity types extracted from Wikipedia, while Chiu and Nichols (2016) create 4 gazetteers that map to CoNLL categories (PER, LOC, ORG and MISC). Despite their importance, gazetteer-based features suffer from a number of limitations.</p><p>• Binary representation. Gazetteer features encode only the presence of an n-gram in each list and omit its relative frequency. For example, the word "France" can be used as a person, an organization, or a location, while it likely refers to the country most of the time. Binary features cannot capture this preference.</p><p>• Generation. At test time, we need to match every n-gram (up to the length of the longest lexicon entry) in a sentence against entries in the lexicons, which is time consuming. In their work, Chiu and Nichols (2016) use 4 lists that count over 2.3M entries.</p><p>• Non-entity words. Gazetteer features do not capture signal from non-entity words, while earlier feature-based models strived to encode that some words (or n-grams) trigger specific entity types. For instance, words such as "eat", "directed" or "born" are words that typically appear after a mention of type PER.</p><p>To overcome those limitations, we propose an alternative approach where we embed annotations mined from Wikipedia into a vector space from which we compute a feature vector that represent words. This vector compactly and efficiently encodes both gazetteer and lexical information. Note that at test time, we only have to feed our model with this feature vector, which is efficient.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Our Method</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Embedding Words and Entity Types</head><p>Turning Wikipedia into a corpus of named-entities annotated with types is a task that received continuous attention over the years ( <ref type="bibr" target="#b25">Nothman et al., 2008;</ref><ref type="bibr" target="#b1">Al-Rfou et al., 2015;</ref><ref type="bibr" target="#b13">Ghaddar and Langlais, 2017)</ref>. It consists mainly in exploiting the hyperlink structure of Wikipedia in order to detect entity mentions. Then, structured data from a knowledge base (for instance Freebase) are used to map hyperlinks to entity types. Because the number of anchored strings in Wikipedia is no more than 3% of the text tokens, <ref type="bibr">Ghad- dar and Langlais (2017)</ref> proposed to augment Wikipedia articles with mentions unmarked in Wikipedia, thanks to a mix of heuristics that benefit the Wikipedia structure ( <ref type="bibr" target="#b11">Ghaddar and Langlais, 2016a)</ref>, as well as a coreference resolution system adapted specifically to Wikipedia <ref type="bibr" target="#b12">(Ghaddar and Langlais, 2016b)</ref>.</p><p>The authors applied their approach on English Wikipedia and produce coarse (4 classes) and finegrained (120 labels) named-entity annotations, leading to WiNER ( <ref type="bibr" target="#b13">Ghaddar and Langlais, 2017)</ref> and <ref type="bibr">WiFiNE (Ghaddar and Langlais, 2018)</ref>. In this work, we adopt WiFiNE which is publicly available at http://rali.iro.umontreal.ca/rali/en/wifiner-wikipedia-for-et as our source of annotations. Each entity mention is mapped (via its Freebase object type attribute) to a pre-defined set of 120 entity types. Types are stored in a 2-level hierarchical structure (e.g. /person and /person/musician). The corpus consist of 3.2M Wikipedia articles, comprising 1.3G tokens that we annotated with 157.4M named-entity mentions and their types. We used this very large quantity of automatically annotated data for jointly embedding words and entity types into the same low-dimensional space. The key idea consists in learning an embedding for each entity type using its surrounding words. For instance, the embedding for /product/software will be trained using context words that surround all entities that were (automatically) labelled as /product/software in Wikipedia. In practice, we found that simply concatenating a sentence (v1) with its annotated version (v2), as illustrated in <ref type="figure" target="#fig_1">Figure 1</ref>, offers a simple but efficient way of combining words and entity types so that embeddings can make good use of them.  We use the FastText toolkit ( <ref type="bibr" target="#b3">Bojanowski et al., 2016</ref>) to learn the uncased embeddings for both words and entity types. We train a skipgram model to learn 100-dimensional vectors with a minimum word frequency cutoff of 5, and a window size of 5. This configuration (recommended by the authors) performs the best in the experiments described in Section 5. Since FastText learns representations of character ngrams, it has the ability to produce vectors for unknown words.   ) two-dimensional projection of the embedding of 6 entity types and a sample of 1500 words. Entity type embeddings are marked by big Xs, while circles indicate words. For visualization proposes, we only plot single-word mentions that were annotated in WiFiNE with one of those 6 types. Words were randomly and proportionally sampled according to the frequency of each entity type. In addition, words have the color associated with the most frequent type they were annotated with in WiFiNE.</p><p>We observe that mentions often annotated by a given type in our resource tend to cluster around this entity type. For instance, "firefox" is close to the type /product/software, while "enzyme" is close to the /biology entity type. We also notice that words that are labelled with different types tend to appear between types they were annotated with. For instance, "gpx2", which is used both as a software and as a gene, has its embedding in between /product/software and /biology. We inspected some of the words plotted in <ref type="figure" target="#fig_3">Figure 2</ref>, and found that "jrun" and "xp" are incorrectly labelled as /product/weapon in WiFiNE. But since these words are seen in a software context, their embeddings are closer to the /product/software embedding than the /product/weapon one. We feel this tolerance to noise is a desirable feature, one that hopefully allows a more efficient use of distant supervision. Last, we also observe the tendency of rare words to cluster around their entity type. For instance, "iota" and "x.org" are embedded near their respective types, despite the fact that they appear less than 30 times in the version of Wikipedia used to compile WiFiNE.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">LS Representation</head><p>This joint vector space only serves the purpose of associating to each word a LS representation, that is, a 120-dimensional vector where the ith coefficient is a value in the [−1, +1] interval, equal to the cosine similarity 1 between the word embedding and the embedding of the ith entity type (we have 120 types).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Word</head><p>Entity  <ref type="table">table)</ref>. <ref type="table">Table 1</ref> shows the topmost similar entity types for proper names (left column) and common words (right column). We observe that ambiguous mentions (those annotated with several types) are adequately handled. For instance, the LS representation of the word "hilton" encodes that it more often refers to a hotel or a restaurant than to an actress. Also, we observe that entity words that are either not or rarely annotated in WiFiNE are still adequately associated with their right type. For instance, "dammstadt", which appears only 5 times in WiFiNE, and which refers to the Damm city in Germany, is most similar to /location/city and /location/railway. Interestingly, this mention does not have its page in English Wikipedia. Furthermore, we observe that non-entity context words have a strong similarity to types they precede or succeed. For instance the verb "directed" is very close to /person/director, an entity type that usually precedes it, and to /art/film, that usually follows it. Likewise, the preposition "in" is near /date and /location/city, which frequently follow "in".</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Strength of the LS Representation</head><p>To summarize, we propose a compact lexical representation which is computed offline, therefore incurring no computation burden at test time This representation encodes the preference of an entity-mention word for a given type, an information out of reach of binary gazetteer features. It also lends itself nicely to the inclusion of lexical features that have been successfully used in earlier feature-based systems <ref type="bibr">(Rati- nov and Roth, 2009;</ref><ref type="bibr" target="#b22">Luo et al., 2015)</ref>. Also, because entity types are well represented in WiFiNE, their embeddings are robust: Our representation does accommodate unfrequent words and seems tolerant to the inherent noise of distant supervision.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Our NER System</head><p>In order to test the efficiency of our lexical feature representation, we implemented a state-of-the-art NER system we now describe.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Bi-LSTM-CRF Model</head><p>We adopt the popular Bi-LSTM-CRF architecture <ref type="figure" target="#fig_5">(Figure 3)</ref>, a de facto baseline in many sequential tagging tasks ( <ref type="bibr" target="#b19">Lample et al., 2016;</ref><ref type="bibr" target="#b35">Søgaard and Goldberg, 2016;</ref><ref type="bibr" target="#b6">Chiu and Nichols, 2016)</ref>.  <ref type="figure">Figure:</ref> Character representation of the word "Roma" given to the word-level bi-LSTM.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Features</head><p>In addition to the LS vector, we incorporate publicly available pre-trained embeddings, as well as character-level, and capitalization features. Those features have been shown to be crucial for stateof-the-art performance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.1">Word Embeddings</head><p>We experimented with several publicly available word embeddings, such as Senna (Collobert et al., 2011), Word2Vec (Mikolov et al., 2013), GloVe ( <ref type="bibr" target="#b27">Pennington et al., 2014</ref>), and SSKIP ( <ref type="bibr" target="#b43">Yulia et al., 2015)</ref>. We find that the latter performs the best in our experiments. SSKIP embeddings are 100-dimensional case sensitive vectors that where trained using a n-skip-gram model ( <ref type="bibr" target="#b43">Yulia et al., 2015</ref>) on 42B tokens. These embeddings were previously used by <ref type="bibr" target="#b19">(Lample et al., 2016;</ref><ref type="bibr" target="#b37">Strubell et al., 2017)</ref>, who report good performance on CONLL, and state-of-the-art results on ONTONOTES respectively. Note that these pre-trained embeddings are adjusted during training.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.2">Character Embeddings</head><p>Following ( <ref type="bibr" target="#b19">Lample et al., 2016)</ref>, we use a forward and a backward LSTM to derive a representation of each word from its characters (right part of <ref type="figure" target="#fig_5">Figure 3)</ref>. A character lookup table is randomly initialized, then trained at the same time as the Bi-LSTM model sketched in Section 4.1.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.3">Capitalization Features</head><p>Similarly to previous works, we use capitalization features for characterizing certain categories of capitalization patterns: allUpper, allLower, upperFirst, upperNotFirst , numeric or noAlphaNum. We define a random lookup table for these features, and learn its parameters during training.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.4">LS Vectors</head><p>Contrarily to previous features, lexical vectors are computed offline and are not adjusted during training. We found useful in practice to apply a MinMax scaler in the range [−1, +1] to each LS vector we computed; thus, [.., 0.095, .., 0.20, .., 0.76, ..] becomes [.., −1, .., −0.67, .., 1, ..].</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Experiments</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Data and Evaluation</head><p>We consider two well-established NER benchmarks: CONLL-2003 and ONTONOTES 5.0. <ref type="table" target="#tab_2">Table 2</ref> provides an overview of the two datasets. As we can see, ONTONOTES is much larger. For both datasets, we convert the IOB encoding to BILOU, since <ref type="bibr" target="#b32">Ratinov and Roth (2009)</ref> found the latter to perform better. In keeping with others, we report mention-level F1 score using the conlleval script 2 .</p><p>The   <ref type="bibr">300k)</ref>. This dataset is annotated with 18 entity types, and is much larger than CONLL. Following previous researches ( <ref type="bibr" target="#b6">Chiu and Nichols, 2016;</ref><ref type="bibr" target="#b37">Strubell et al., 2017)</ref>, we use the official train/dev/test split of the CoNLL-2012 shared task ( <ref type="bibr" target="#b30">Pradhan et al., 2012</ref>). Also, we exclude (both during training and testing) the New Testaments portion as it does not contain gold NE annotations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Training and Implementation</head><p>Training is carried out by mini-batch stochastic gradient descent (SGD) with a momentum of 0.9 and a gradient clipping of 5.0. The mini-batch is 10 for both datasets, and learning rates are 0.009 and 0.013 for CONLL and ONTONOTES respectively. More sophisticated optimization algorithms such as AdaDelta <ref type="bibr">(Zeiler, 2012)</ref> or Adam ( <ref type="bibr" target="#b18">Kingma and Ba, 2014</ref>) converge faster, but none outperformed SGD with exponential learning rate decay in our experiments.</p><p>Our system uses a single Bi-LSTM layer at the word level whose hidden dimensions are set to 128 and 256 for CONLL and ONTONOTES respectively. For both models, the character embedding size was set to 25, and the hidden dimension of the forward and backward character LSTMs are set to 50. To mitigate overfitting, we apply a dropout mask ( <ref type="bibr" target="#b36">Srivastava et al., 2014</ref>) with a probability of 0.5 on the input and output vectors of the Bi-LSTM layer. For both datasets, we set the dimension of capitalization embeddings to 25 and trained the models up to 50 epochs.</p><p>We tuned the hyper-parameters by grid search, and used early stopping based on the performance on the development set. We varied dropout <ref type="bibr">([0.25, 0.5, 0.65]</ref>), hidden units ( <ref type="bibr">[50,</ref><ref type="bibr">128,</ref><ref type="bibr">256,</ref><ref type="bibr">300]</ref>), capitalization ( <ref type="bibr">[10,</ref><ref type="bibr">20,</ref><ref type="bibr">30]</ref>) and char ( <ref type="bibr">[25,</ref><ref type="bibr">50,</ref><ref type="bibr">100]</ref>) embedding dimensions, learning rate ([0.001, 0.015] by step 0.002), and optimization algorithms and fixed the other hyper-parameters. We implemented our system using the <ref type="bibr">Tensorflow (Abadi et al., 2016</ref>) library, and ran our models on a GeForce GTX TITAN Xp GPU. Training requires about 2.5 hours for CONLL and 8 hours for ONTONOTES. <ref type="table">Table 3</ref> shows the development set performance of our final models on each dataset compared to the work of <ref type="bibr" target="#b6">Chiu and Nichols (2016)</ref>. The authors use an architecture similar to ours, but use a binary gazetteer feature set, while we use our LS representation. Since our systems involve random initialization, we report the mean as well as the standard deviation over five runs. The improvements yielded by our model on the CONLL dataset are significant although modest, while those observed on ONTONOTES are more substantial. We also observe a lower variance of our system over the 5 runs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Results on the Development Set</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>CONLL</head><p>ONTONOTES (Chiu and Nichols, 2016) 94.03 (± 0.23) 84.57 <ref type="bibr">(± 0.27)</ref> Our model 94.80 (± 0.10) 86.44 (± 0.14) <ref type="table">Table 3</ref>: Development set F1 scores of our best hyper-parameter setting compared to the results reported in ( <ref type="bibr" target="#b6">Chiu and Nichols, 2016)</ref>.  First, we observe that our model significantly outperforms models that use extensive sets of handcrafted features <ref type="bibr" target="#b32">(Ratinov and Roth, 2009;</ref><ref type="bibr" target="#b20">Lin and Wu, 2009)</ref> as well as the system of ( <ref type="bibr" target="#b22">Luo et al., 2015</ref>) that uses NE and Entity Linking annotations to jointly optimize the performance on both tasks. Second, our model outperforms as well other NN models that only use standard word embeddings, which indicates that our lexical feature vector is complementary to standard word embeddings. Third, our system matches state-of-the-art performances of models that use either more complex architectures or more elaborate features. <ref type="bibr" target="#b39">Tran et al. (2017)</ref> use three layers of stacked residual RNN (Bi-LSTM) with bias decoding. Our model is much simpler and faster. They report a performance of 90.43 when using an architecture similar to ours. The two systems that have slightly higher F1 scores on the CONLL dataset both use embeddings obtained from a forward and a backward Language Model trained on the One Billion Word Benchmark ( <ref type="bibr" target="#b5">Chelba et al., 2013)</ref>. They report gains between 0.8 and 1.2 points by using such LM embeddings, which suggests that LS vectors are indeed efficient. Unfortunately, due to time and resource constraints, <ref type="bibr">4</ref> we were not able to measure whether both features complement each other. This is left for future investigations. <ref type="table" target="#tab_6">Table 5</ref> reports the F1 score of our system compared to the performance reported by others on the ONTONOTES test set. To the best of our knowledge, we surpass previously reported F1 scores on this dataset. In particular, our system significantly outperforms the Bi-LSTM-CNN-CRF models of (Chiu and Nichols, 2016) and ( <ref type="bibr" target="#b37">Strubell et al., 2017)</ref> by an absolute gain of 1.68 and 0.96 points respectively. Less surprisingly, it surpasses systems with hand-crafted features, including <ref type="bibr" target="#b32">Ratinov and Roth (2009)</ref> that use gazetteers, and the system of <ref type="bibr" target="#b8">Durrett and Klein (2014)</ref> which uses coreference annotation in ONTONOTES to jointly model NER, entity linking, and coreference resolution tasks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Results on CONLL</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.5">Results on ONTONOTES</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>LEX GAZ CAP EMB CHE LME LS F1 ( <ref type="bibr" target="#b9">Finkel and Manning, 2009</ref>   <ref type="table" target="#tab_3">Table 4</ref> for an explanation of the column of features.</p><p>The ONTONOTES benchmark is annotated with 18 types (e.g. LAW, PRODUCT) and contains many rare words, especially in the Web data collection. <ref type="bibr" target="#b6">Chiu and Nichols (2016)</ref> note that the 4-class gazetteer they used yielded marginal improvements on ONTONOTES, contrarily to CONLL. In particular, they observe that mentions that match LOC entries in their gazetteer often match GPE, NORP and FAC lists.   <ref type="formula">(2016)</ref>). BC = broadcast conversation, BN = broadcast news, MZ = magazine, NW = newswire, TC = telephone conversation, WB = blogs and newsgroups.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>They suggest that a finer-grained gazetteer could improve the performance of their system on ONTONOTES. Our results confirm this, since we use 120 types. We further detail the gains we observed for each sub-collection of texts in the test set. <ref type="table" target="#tab_8">Table 6</ref> reveals that major improvements over the model of <ref type="bibr" target="#b6">(Chiu and Nichols, 2016</ref>) are on noisier collections such as telephone conversations (+3 points) and blogs or newsgroups (+2 points). Those type of texts are characterized by a large set of infrequent words, for which classical embeddings are typically poorly trained. Our approach does not seem to suffer from this problem as severely, as discussed in Section 2.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.6">Ablation Results</head><p>In this experiment, we directly compare the LS representation with the SSKIP word-embedding feature set. In order to maintain a high level of performance, both character and capitalization features are used in all configurations. We want to point out that LS vectors are not adapted during training, contrarily to the SSKIP embeddings. Similarly to Section 5.3, we report in <ref type="table" target="#tab_9">Table 7</ref>, for each feature configuration, the average F1 score as well as the standard deviation over five runs.</p><p>Model CONLL ONTONOTES SSKIP 90.52 (± 0.18) 86.57 (± 0.10) LS 89.94 (± 0.16) 85.92 (± 0.12) all 91.73 (± 0.10) 87.95 (± 0.13) We observe that on both CONLL and ONTONOTES, the SSKIP model outperforms our feature vector approach by 0.65 F1 points on average. The difference is not has high as we first expected, especially since the SSKIP model is adjusted during training, while our representation is not. Still, LS vectors seem to encode a large portion of the information needed to model the NER task. Also, it is worth mentioning that our embeddings are trained on 1.3B words compared to 42B for SSKIP.</p><p>We also observe that models that use both feature sets significantly outperform other configurations. To confirm that the gains came from our feature vector and not from increasing the number of hidden units, we tested several SSKIP models by increasing the LSTM hidden layer dimension so that number of parameters is the same as the model with LS vectors. We observed a degradation of performance on both datasets, mostly due to overfitting on the training set. From those results, we conclude that our lexical representation and the SSKIP one are complementary.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Related Works</head><p>Traditional approaches to NER, like CRF-based ( <ref type="bibr" target="#b10">Finkel et al., 2005</ref>) and Perceptron-based systems <ref type="bibr">(Rati- nov and Roth, 2009</ref>) have dominated the field for over a decade. They rely heavily on hand-engineered features ( <ref type="bibr" target="#b22">Luo et al., 2015</ref>) and external resources such as gazetteers. One major drawback of such an approach is its weak generalization power ( <ref type="bibr" target="#b19">Lample et al., 2016)</ref>. Current state-of-the art systems ( <ref type="bibr" target="#b6">Chiu and Nichols, 2016;</ref><ref type="bibr" target="#b37">Strubell et al., 2017</ref>) use a combination of Convolutional Neural Networks (CNNs), Bi-LSTMs, along with a CRF decoder. CNNs are used to encode character-level features <ref type="bibr">(prefix and suf- fix)</ref>, while LSTM is used to encode word-level features. Finally, a CRF is placed on top of those models in order to decode the best tag sequence. Pre-trained embeddings obtained by unsupervised learning are core features of those models. In this work, we show that deep NN architectures can also benefit from lexical features, at least when encoded in the compact form we propose. <ref type="bibr" target="#b39">Tran et al. (2017)</ref> and <ref type="bibr" target="#b28">Peters et al. (2017)</ref> propose an alternative approach different from ours. They incorporate LM embeddings that were pre-trained on a large unlabelled corpus as features for NER. These embeddings allow to generate a representation for a word depending on its context. For instance, the LM embeddings of the word France in "France is a developed country" is different than that in "Anatole France began his literary career". Such embeddings are trained on very large amount of texts.</p><p>Our feature set is crafted from distant supervision applied to Wikipedia, a much less time-consuming process which we showed to be nevertheless adapted to rare words. <ref type="bibr" target="#b6">Chiu and Nichols (2016)</ref> used gazetteer features in order to establish state-of-the-art performance on both CONLL and ONTONOTES. They mined DBPedia in order to compile 4 lists of named-entities that contain over 2.3M entries. We show that LS representations outperform their gazetteer features.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Conclusion and Future Work</head><p>We have explored the idea of generating lexical features for NER out of Wikipedia data automatically annotated with fine-grained entity types. We used WiFiNE ( <ref type="bibr" target="#b14">Ghaddar and Langlais, 2018)</ref>, a Wikipedia dump annotated with fine entity type mentions, for training a vector space that jointly embeds words and named-entities. This vector space is used to compute a 120 dimensional vector per word, which encodes the similarity of the word to each of the entity types. Our results show that our proposed lexical representation, even though it is not adjusted at training time, matches state-of-the-art results compared to more complex approaches on the well-studied CONLL dataset, and delivers a new state-of-the-art F1 score of 87.95 on the more diversified ONTONOTES dataset. We further observe larger gains on collections with more unfrequent words.</p><p>The source code and the data we used in this work are publicly available at http://rali.iro. umontreal.ca/rali/en/wikipedia-lex-sim, with the hope that other researchers will report gains, when using our lexical representation. As a future work, we want to investigate the usefulness of our LS feature representation on other NER tasks, including NER in tweets where out-of-vocabulary and low-frequency words represent a challenge; as well as finer-grained NER which suffers from the lack of manually annotated training data.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>(</head><label></label><figDesc>v1) On October 9, 2009, the Norwegian Nobel Committee announced that Obama had won the 2009 Nobel Peace Prize. (v2) On /date, the /organization/government agency announced that /person/politician had won the /award.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Example of the two variants of a given sentence.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Two-dimensional representation of the vector space which embeds both words and entity types. Big Xs indicate entity types, while circles refer to words (i.e. named-entities, here).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 2 illustrates</head><label>2</label><figDesc>Figure 2 illustrates a T-SNE (van der Maaten, 2014) two-dimensional projection of the embedding of 6 entity types and a sample of 1500 words. Entity type embeddings are marked by big Xs, while circles indicate words. For visualization proposes, we only plot single-word mentions that were annotated in WiFiNE with one of those 6 types. Words were randomly and proportionally sampled according to the frequency of each entity type. In addition, words have the color associated with the most frequent type they were annotated with in WiFiNE.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Left Figure: Main architecture of our NER system. Right Figure: Character representation of the word "Roma" given to the word-level bi-LSTM.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head></head><label></label><figDesc>CONLL-2003 NER dataset (Tjong Kim Sang and De Meulder, 2003) is a well known collection of Reuters newswire articles that contains a large portion of sports news. It is annotated with four entity types: Person (PER), Location (LOC), Organization (ORG) and Miscellaneous (MISC). The four entity types are fairly evenly distributed, and the train/dev/test datasets present a similar type distribution.</figDesc><table>Dataset 
+Train 
+Dev 
+Test 
+CONLL-2003 
+#tok 
+204,567 51,578 46,666 
+#ent 
+23,499 
+5,942 
+5,648 
+ONTONOTES 5.0 #tok 1,088,503 147,724 152,728 
+#ent 
+81,828 11,066 11,257 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Statistics of the CONLL-2003 and ONTONOTES 5.0 datasets. #tok stands for the number of 
+tokens, and #ent indicates the number of named-entities gold annotated. 
+
+The ONTONOTES 5.0 dataset (Hovy et al., 2006; Pradhan et al., 2013) includes texts from five different 
+genres: broadcast conversation (200k), broadcast news (200k), magazine (120k), newswire (625k), and 
+web data (</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="true"><head>Table 4 reports</head><label>4</label><figDesc>our model's performance 3 on the CONLL test set, as well as the performance of systems previously tested on this test set (the figures are those published by the authors). Because of the small size of the training set, some authors (Chiu and Nichols, 2016; Yang et al., 2017; Peters et al., 2017; Peters et al., 2018) incorporated the development set as a part of training data after tuning the hyper-parameters. Consequently, their results are not directly comparable, so we do not report them.</figDesc><table>Model 
+LEX GAZ CAP EMB CHE LME LS F1 
+(Finkel et al., 2005) 
++ 
++ 
++ 
+• 
+• 
+• 
+• 86.86 
+(Ratinov and Roth, 2009) + 
++ 
++ 
+• 
+• 
+• 
+• 90.88 
+(Lin and Wu, 2009) 
++ 
++ 
++ 
+• 
+• 
+• 
+• 90.90 
+(Luo et al., 2015) 
++ 
++ 
++ 
+• 
+• 
+• 
+• 91.20 
+(Collobert et al., 2011) 
+• 
++ 
++ 
++ 
+• 
+• 
+• 89.56 
+(Huang et al., 2015) 
+• 
+• 
++ 
++ 
++ 
+• 
+• 90.10 
+(Lample et al., 2016) 
+• 
+• 
++ 
++ 
++ 
+• 
+• 90.94 
+(Ma and Hovy, 2016) 
+• 
+• 
++ 
++ 
++ 
+• 
+• 91.21 
+(Shen et al., 2017) 
+• 
+• 
++ 
++ 
+• 
+• 
+• 90.89 
+(Strubell et al., 2017) 
+• 
+• 
++ 
++ 
+• 
+• 
+• 90.54 
+(Tran et al., 2017) 
+• 
+• 
++ 
++ 
++ 
++ 
+• 91.69 
+(Liu et al., 2017) 
+• 
+• 
++ 
++ 
++ 
++ 
+• 91.71 
+This work 
+• 
++ 
++ 
++ 
++ 
+• 
++ 91.73 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>F1 scores on the CONLL test set. The first four systems are feature-based, the others are 
+neuronal. The feature configuration of each system is encoded with: LEX which stands for LEXical 
+feature, GAZ for GAZetteers, CAP for CAPitalization, EMB for pre-trained EMBeddings, CHE for CHaracter 
+Embeddings, LME for Language Model Embeddings, and LS for the proposed LS feature representation. 
++ indicates that the model uses the feature set. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>F1 scores on the ONTONOTES test set. The first four systems are feature-based, the following 
+ones are neuronal. See </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="false"><head>Table 6 : Per-genre F1 scores on ONTONOTES (numbers taken from Chiu and Nichols</head><label>6</label><figDesc></figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_9" validated="false"><head>Table 7 :</head><label>7</label><figDesc></figDesc><table>F1 scores of differently trained systems on CONLL and ONTONOTES 5.0 datasets. Capitaliza-
+tion (Section 4.2.3) and character features (Section 4.2.2) are used by default by all models. 
+
+</table></figure>
+
+			<note place="foot">This work is licensed under a Creative Commons Attribution 4.0 International License. License details: http:// creativecommons.org/licenses/by/4.0/</note>
+
+			<note place="foot" n="1"> The cosine similarity outperforms other metrics in our experiments.</note>
+
+			<note place="foot" n="2"> http://www.cnts.ua.ac.be/conll2000/chunking/conlleval.txt</note>
+
+			<note place="foot" n="3"> Standard deviation on the test set is reported in Table 7</note>
+
+			<note place="foot" n="4"> LM embeddings are not publicly available, and according to Jozefowicz et al. (2016), they require three weeks to train on 32 GPUs.</note>
+
+			<note place="foot">Matthew D Zeiler. 2012. ADADELTA: an adaptive learning rate method. arXiv preprint arXiv:1212.5701.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgements</head><p>This work has been partly funded by the TRIBE Natural Sciences and Engineering Research Council of Canada CREATE program and Nuance Foundation. We gratefully acknowledge the support of NVIDIA Corporation with the donation of the Titan Xp GPU used for this research. We thank the anonymous reviewers for their insightful comments.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Tensorflow: Large-scale machine learning on heterogeneous distributed systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martín</forename><surname>Abadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Agarwal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Barham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Brevdo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhifeng</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Craig</forename><surname>Citro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andy</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Dean</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthieu</forename><surname>Devin</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.04467</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Polyglot-NER: Massive multilingual named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rami</forename><surname>Al-Rfou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vivek</forename><surname>Kulkarni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bryan</forename><surname>Perozzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Skiena</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 SIAM International Conference on Data Mining, Vancouver</title>
+		<meeting>the 2015 SIAM International Conference on Data Mining, Vancouver<address><addrLine>British Columbia, Canada. SIAM</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Dbpedia: A nucleus for a web of open data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sören</forename><surname>Auer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Bizer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Georgi</forename><surname>Kobilarov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jens</forename><surname>Lehmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Cyganiak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zachary</forename><surname>Ives</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The semantic web</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="722" to="735" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Piotr</forename><surname>Bojanowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edouard</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.04606</idno>
+		<title level="m">Enriching Word Vectors with Subword Information</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Freebase: A Collaboratively Created Graph Database for Structuring Human Knowledge</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kurt</forename><surname>Bollacker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Colin</forename><surname>Evans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Praveen</forename><surname>Paritosh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Sturge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jamie</forename><surname>Taylor</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2008 ACM SIGMOD International Conference on Management of Data, SIGMOD &apos;08</title>
+		<meeting>the 2008 ACM SIGMOD International Conference on Management of Data, SIGMOD &apos;08</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="1247" to="1250" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">One billion word benchmark for measuring progress in statistical language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ciprian</forename><surname>Chelba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qi</forename><surname>Ge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thorsten</forename><surname>Brants</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phillipp</forename><surname>Koehn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tony</forename><surname>Robinson</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1312.3005</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Named entity recognition with bidirectional LSTM-CNNs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">C</forename><surname>Jason</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><surname>Chiu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nichols</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54st Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54st Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Natural language processing (almost) from scratch</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronan</forename><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Léon</forename><surname>Bottou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Karlen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koray</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pavel</forename><surname>Kuksa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="2493" to="2537" />
+			<date type="published" when="2011-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Durrett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+		<title level="m">A Joint Model for Entity Analysis: Coreference, Typing, and Linking. Transactions of the Association for Computational Linguistics</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="477" to="490" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Joint Parsing and Named Entity Recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jenny</forename><forename type="middle">Rose</forename><surname>Finkel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Human Language Technologies: The 2009 Annual Conference of the North American Chapter of the Association for Computational Linguistics</title>
+		<meeting>Human Language Technologies: The 2009 Annual Conference of the North American Chapter of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="326" to="334" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Incorporating Non-local Information into Information Extraction Systems by Gibbs Sampling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jenny</forename><forename type="middle">Rose</forename><surname>Finkel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Trond</forename><surname>Grenager</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 43rd Annual Meeting on Association for Computational Linguistics</title>
+		<meeting>the 43rd Annual Meeting on Association for Computational Linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="363" to="370" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abbas</forename><surname>Ghaddar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philippe</forename><surname>Langlais</surname></persName>
+		</author>
+		<title level="m">Coreference in Wikipedia: Main Concept Resolution. In CoNLL</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="229" to="238" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">WikiCoref: An English Coreference-annotated Corpus of Wikipedia Articles</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abbas</forename><surname>Ghaddar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philippe</forename><surname>Langlais</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Tenth International Conference on Language Resources and Evaluation (LREC 2016)</title>
+		<meeting>the Tenth International Conference on Language Resources and Evaluation (LREC 2016)<address><addrLine>Portorož, Slovenia</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page">5</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">WiNER: A Wikipedia Annotated Corpus for Named Entity Recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abbas</forename><surname>Ghaddar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phillippe</forename><surname>Langlais</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Eighth International Joint Conference on Natural Language Processing</title>
+		<meeting>the Eighth International Joint Conference on Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="413" to="422" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Transforming Wikipedia into a Large-Scale Fine-Grained Entity Type Corpus</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abbas</forename><surname>Ghaddar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phillippe</forename><surname>Langlais</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Eleventh International Conference on Language Resources and Evaluation (LREC 2018)</title>
+		<meeting>the Eleventh International Conference on Language Resources and Evaluation (LREC 2018)<address><addrLine>Paris, France, may</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+	<note>European Language Resources Association (ELRA), European Language Resources Association (ELRA</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">OntoNotes: the 90% solution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mitchell</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martha</forename><surname>Palmer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lance</forename><surname>Ramshaw</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ralph</forename><surname>Weischedel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the human language technology conference of the NAACL, Companion Volume: Short Papers</title>
+		<meeting>the human language technology conference of the NAACL, Companion Volume: Short Papers</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="57" to="60" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Bidirectional lstm-crf models for sequence tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiheng</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Yu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1508.01991</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Exploring the limits of language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Wu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1602.02410</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title level="m" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diederik</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Ba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6980</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guillaume</forename><surname>Lample</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sandeep</forename><surname>Subramanian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuya</forename><surname>Kawakami</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.01360</idno>
+		<title level="m">Neural architectures for Named Entity Recognition</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Phrase Clustering for Discriminative Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dekang</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaoyun</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Joint Conference of the 47th Annual Meeting of the ACL and the 4th International Joint Conference on Natural Language Processing of the AFNLP</title>
+		<meeting>the Joint Conference of the 47th Annual Meeting of the ACL and the 4th International Joint Conference on Natural Language Processing of the AFNLP</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2009" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="1030" to="1038" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Liyuan</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jingbo</forename><surname>Shang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Frank</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiang</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Huan</forename><surname>Gui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Peng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiawei</forename><surname>Han</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1709.04109</idno>
+		<title level="m">Empower Sequence Labeling with Task-Aware Neural Language Model</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Joint Entity Recognition and Disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gang</forename><surname>Luo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaojiang</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chin-Yew</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zaiqing</forename><surname>Nie</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2015 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2015 Conference on Empirical Methods in Natural Language Processing<address><addrLine>Lisbon, Portugal</addrLine></address></meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2015-09" />
+			<biblScope unit="page" from="879" to="888" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">End-to-end sequence labeling via bi-directional lstm-cnns-crf</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuezhe</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.01354</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Distributed representations of words and phrases and their compositionality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="3111" to="3119" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Transforming Wikipedia into named entity training data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joel</forename><surname>Nothman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tara</forename><surname>James R Curran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Murphy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Australian Language Technology Workshop</title>
+		<meeting>the Australian Language Technology Workshop</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="124" to="132" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Lexicon infused phrase embeddings for Named Entity Resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexandre</forename><surname>Passos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vineet</forename><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1404.5367</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Glove: Global Vectors for Word Representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="page" from="1532" to="1543" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">Semi-supervised sequence tagging with bidirectional language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Waleed</forename><surname>Matthew E Peters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chandra</forename><surname>Ammar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Russell</forename><surname>Bhagavatula</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Power</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.00108</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Matthew E Peters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohit</forename><surname>Neumann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matt</forename><surname>Iyyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Gardner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zettlemoyer</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1802.05365</idno>
+		<title level="m">Deep contextualized word representations</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">CoNLL-2012 shared task: Modeling multilingual unrestricted coreference in OntoNotes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Sameer Pradhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Moschitti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Olga</forename><surname>Xue</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuchen</forename><surname>Uryupina</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Joint Conference on EMNLP and CoNLL-Shared Task</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="1" to="40" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Towards Robust Linguistic Analysis using OntoNotes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Sameer Pradhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Moschitti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hwee</forename><forename type="middle">Tou</forename><surname>Xue</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Olga</forename><surname>Björkelund</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuchen</forename><surname>Uryupina</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhi</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zhong</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CoNLL</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="143" to="152" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Design challenges and misconceptions in named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lev</forename><surname>Ratinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Thirteenth Conference on Computational Natural Language Learning</title>
+		<meeting>the Thirteenth Conference on Computational Natural Language Learning</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="147" to="155" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">Illinois Named Entity Recognizer: Addendum to Ratinov and Roth &apos;09 reporting improved results</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tom</forename><surname>Redman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Sammons</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Roth</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yanyao</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hyokun</forename><surname>Yun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zachary</forename><forename type="middle">C</forename><surname>Lipton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yakov</forename><surname>Kronrod</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Animashree</forename><surname>Anandkumar</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.05928</idno>
+		<title level="m">Deep Active Learning for Named Entity Recognition</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Deep multi-task learning with low level tasks supervised at lower layers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Søgaard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoav</forename><surname>Goldberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="231" to="235" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Dropout: a simple way to prevent neural networks from overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of machine learning research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Fast and Accurate Entity Recognition with Iterated Dilated Convolutions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emma</forename><surname>Strubell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Patrick</forename><surname>Verga</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Belanger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mccallum</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2017 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="2660" to="2670" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Introduction to the CoNLL-2003 shared task: Languageindependent named entity recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Erik F Tjong Kim</forename><surname>Sang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fien De</forename><surname>Meulder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the seventh conference on Natural language learning at HLT-NAACL 2003</title>
+		<meeting>the seventh conference on Natural language learning at HLT-NAACL 2003</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="142" to="147" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Quan</forename><surname>Tran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Mackinlay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antonio</forename><forename type="middle">Jimeno</forename><surname>Yepes</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1706.07598</idno>
+		<title level="m">Named entity recognition with stack residual lstm and trainable bias decoding</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Word representations: a simple and general method for semi-supervised learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joseph</forename><surname>Turian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lev</forename><surname>Ratinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 48th annual meeting of the association for computational linguistics</title>
+		<meeting>the 48th annual meeting of the association for computational linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="384" to="394" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Accelerating t-SNE using Tree-Based Algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">J P</forename><surname>Van Der Maaten</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="page" from="3221" to="3245" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jie</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yue</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fei</forename><surname>Dong</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.05127</idno>
+		<title level="m">Neural Reranking for Named Entity Recognition</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wang Ling Lin Chu-Cheng</forename><surname>Yulia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tsvetkov</forename><forename type="middle">Silvio</forename><surname>Amir</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ramón</forename><surname>Fernandez Astudillo Chris Dyer Alan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W Black Isabel</forename><surname>Trancoso</surname></persName>
+		</author>
+		<title level="m">Not all contexts are created equal: Better word representations with variable attention</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

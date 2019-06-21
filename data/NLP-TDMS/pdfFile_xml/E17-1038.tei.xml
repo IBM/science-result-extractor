@@ -1,0 +1,994 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T07:26+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Neural Semantic Encoders</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher>Association for Computational Linguistics</publisher>
+				<availability status="unknown"><p>Copyright Association for Computational Linguistics</p>
+				</availability>
+				<date>April 3-7, 2017. 2017</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tsendsuren</forename><surname>Munkhdalai</surname></persName>
+							<email>tsendsuren.munkhdalai@umassmed.edu</email>
+							<affiliation key="aff0">
+								<orgName type="institution">University of Massachusetts</orgName>
+								<address>
+									<region>MA</region>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hong</forename><surname>Yu</surname></persName>
+							<email>hong.yu@umassmed.edu</email>
+							<affiliation key="aff0">
+								<orgName type="institution">University of Massachusetts</orgName>
+								<address>
+									<region>MA</region>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Neural Semantic Encoders</title>
+					</analytic>
+					<monogr>
+						<title level="j" type="main">the Association for Computational Linguistics</title>
+						<meeting>the 15th Conference of the European Chapter <address><addrLine>Valencia, Spain</addrLine></address>
+						</meeting>
+						<imprint>
+							<publisher>Association for Computational Linguistics</publisher>
+							<biblScope unit="volume">1</biblScope>
+							<biblScope unit="page" from="397" to="407"/>
+							<date type="published">April 3-7, 2017. 2017</date>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We present a memory augmented neural network for natural language understanding: Neural Semantic Encoders. NSE is equipped with a novel memory update rule and has a variable sized encoding memory that evolves over time and maintains the understanding of input sequences through read, compose and write operations. NSE can also access 1 multiple and shared memories. In this paper, we demonstrated the effectiveness and the flexibility of NSE on five different natural language tasks: natural language inference, question answering , sentence classification, document sentiment analysis and machine translation where NSE achieved state-of-the-art performance when evaluated on publically available benchmarks. For example, our shared-memory model showed an encouraging result on neural machine translation, improving an attention-based baseline by approximately 1.0 BLEU.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Recurrent neural networks (RNNs) have been successful for modeling sequences <ref type="bibr" target="#b7">(Elman, 1990)</ref>. Particularly, RNNs equipped with internal short memories, such as long short-term memories (LSTM) <ref type="bibr" target="#b10">(Hochreiter and Schmidhuber, 1997</ref>) have achieved a notable success in sequential tasks ( <ref type="bibr" target="#b6">Cho et al., 2014;</ref><ref type="bibr" target="#b32">Vinyals et al., 2015)</ref>. LSTM is powerful because it learns to control its short term memories. However, the short term memories in LSTM are a part of the training parameters. This imposes some practical difficulties in training and modeling long sequences with LSTM.</p><p>Recently several studies have explored ways of extending the neural networks with an external memory ( <ref type="bibr" target="#b8">Graves et al., 2014;</ref><ref type="bibr" target="#b9">Grefenstette et al., 2015)</ref>. Unlike LSTM, the short term memories and the training parameters of such a neural network are no longer coupled and can be adapted. In this paper we propose a novel class of memory augmented neural networks called Neural Semantic Encoders (NSE) for natural language understanding. NSE offers several desirable properties. NSE has a variable sized encoding memory which allows the model to access entire input sequence during the reading process; therefore efficiently delivering long-term dependencies over time. The encoding memory evolves over time and maintains the memory of the input sequence through read, compose and write operations. NSE sequentially processes the input and supports word compositionality inheriting both temporal and hierarchical nature of human language. NSE can read from and write to a set of relevant encoding memories simultaneously or multiple NSEs can access a shared encoding memory effectively supporting knowledge and representation sharing. NSE is flexible, robust and suitable for practical NLU tasks and can be trained easily by any gradient descent optimizer.</p><p>We evaluate NSE on five different real tasks. For four of them, our models set new state-ofthe-art results. Our results suggest that a NN model with the shared memory between encoder and decoder is a promising approach for sequence transduction problems such as machine translation and abstractive summarization. In particular, we observe that the attention-based neural machine translation can be further improved by sharedmemory models. We also analyze memory access pattern and compositionality in NSE and show that our model captures semantic and syntactic structures of input sentence. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>One of the pioneering work that attempts to extend deep neural networks with an external memory is Neural Turing Machines (NTM) ( <ref type="bibr" target="#b8">Graves et al., 2014</ref>). NTM implements a centralized controller and a fixed-sized random access memory. The NTM memory is addressable by both content (i.e. soft attention) and location based access mechanisms. The authors evaluated NTM on algorithmic tasks such as copying and sorting sequences.</p><p>Comparison with Neural Turing Machines: NSE addresses certain drawbacks of NTM. NTM has a single centralized controller, which is usually an MLP or RNN while NSE takes a modular approach. The main controller in NSE is decomposed into three separate modules, each of which performs for read, compose or write operation. In NSE, the compose module is introduced in addition to the standard memory update operations (i.e. read-write) in order to process the memory entries and input information.</p><p>The main advantage of NSE over NTM is in its memory update. Despite its sophisticated addressing mechanism, the NTM controller does not have mechanism to avoid information collision in the memory. Particularly the NTM controller emits two separate set of access weights (i.e. read weight and erase and write weights) that do not explicitly encode the knowledge about where information is read from and written to. Moreover the fixed-size memory in NTM has no memory allocation or de-allocation protocol. Therefore unless the controller is intelligent enough to track the previous read/write information, which is hard for an RNN when processing long sequences, the memory content is overlapped and information is overwritten throughout different time scales. We think that this is a potential reason that makes NTM hard to train and makes the training not stable. We also note that the effectiveness of the location based addressing introduced in NTM is unclear. In NSE, we introduce a novel and systematic memory update approach based on the soft attention mechanism. NSE writes new information to the most recently read memory locations. This is accomplished by sharing the same memory key vector between the read and write modules. The NSE memory update is scalable and potentially more robust to train. NSE is provided with a variable sized memory and thus unlike NTM, the size of the NSE memory is more relaxed. The novel memory update mechanism and the variable sized memory together prevent NSE from the information collision issue and avoid the need of the memory allocation and de-allocation protocols. Each memory location of the NSE memory stores a token representation in input sequence during encoding. This provides NSE with an anytime-access to the entire input sequence including the tokens from the future time scales, which is not permitted in NTM, RNN and attention-based encoders.</p><p>Lastly, NTM addresses small algorithmic problems while NSE focuses on a set of large-scale language understanding tasks.</p><p>The RNNSearch model proposed in ( <ref type="bibr" target="#b0">Bahdanau et al., 2015)</ref> can be seen as a variation of memory augmented networks due to its ability to read the historic output states of RNNs with soft attention. The work of <ref type="bibr" target="#b27">Sukhbaatar et al. (2015)</ref> combines the soft attention with Memory Networks (MemNNs) ( . Similar to RNNSearch, MemNNs are designed with non-writable memories. It constructs layered memory representa-tions and showed promising results on both artificial and real question answering tasks. We note that RNNSearch and MemNNs avoid the memory update and management overhead by simply using a non-writable memory storage. Another variation of MemNNs is Dynamic Memory Network ( <ref type="bibr">Ku- mar et al., 2016</ref>) that is equipped with an episodic memory and seems to be flexible in different settings.</p><p>Although NSE differs from other memoryaugumented NN models in many aspects, they all use soft attention mechanism with a type of similarity measures to retrieve relevant information from the external memory. For example, NTM implements cosine similarity and MemNNs use vector dot product. NSE uses the vector dot product for the similarity measure in NSE because it is faster to compute.</p><p>Other related work includes Neural ProgramInterpreters (Reed and de <ref type="bibr" target="#b24">Freitas, 2016)</ref>, which learns to run sub-programs and to compose them for high-level programs. It uses execution traces to provide the full supervision. Researchers have also explored ways to add unbounded memory to LSTM ( <ref type="bibr" target="#b9">Grefenstette et al., 2015</ref>) using a particular data structure. Although this type of architecture provides a flexible capacity to store information, the memory access is constrained by the data structure used for the memory bank, such as stack and queue.</p><p>Overall it is expensive to train and to scale the previously proposed memory-based models. Most models required a set of clever engineering tricks to work successfully. Most of the aforementioned memory augmented neural networks have been tested on synthetic tasks whereas in this paper we evaluated NSE on a wide range of real and largescale natural language applications.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Proposed Approach</head><p>Our training set consists of N examples</p><formula xml:id="formula_0">{X i , Y i } N i=1</formula><p>, where the input X i is a sequence</p><formula xml:id="formula_1">w i 1 , w i 2 , . . . , w i T i</formula><p>of tokens while the output Y i can be either a single target or a sequence. We transform each input token w t to its word embedding x t .</p><p>Our Neural Semantic Encoders (NSE) model has four main components: read, compose and write modules and an encoding memory M ∈ R k×l with a variable number of slots, where k is the embedding dimension and l is the length of the input sequence. Each memory slot vector m t ∈ R k corresponds to the vector representation of information about word w t in memory. In particular, the memory is initialized by the embedding vectors {x t } l t=1 and is evolved over time, through read, compose and write operations. <ref type="figure" target="#fig_0">Figure 1</ref> (a) illustrates the architecture of NSE.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Read, Compose and Write</head><p>NSE performs three main operations in every time step. After initializing the memory slots with the corresponding input representations, NSE processes an embedding vector x t and retrieves a memory slot m r,t that is expected to be associatively coherent (i.e. semantically associated) with the current input word w t . <ref type="bibr">2</ref> The slot location r (ranging from 1 to l) is defined by a key vector z t which the read module emits by attending over the memory slots. The compose module implements a composition operation that combines the memory slot with the current input. The write module then transforms the composition output to the encoding memory space and writes the resulting new representation into the slot location of the memory. Instead of composing the raw embedding vector x t , we use the hidden state o t produced by the read module at time t Concretely, let e l ∈ R l and e k ∈ R k be vectors of ones and given a read function f LST M r , a composition f M LP c and a write f LST M w NSE in <ref type="figure" target="#fig_0">Figure  1</ref> (a) computes the key vector z t , the output state h t , and the encoding memory M t in time step t as</p><formula xml:id="formula_2">o t = f LST M r (x t )</formula><p>(1)</p><formula xml:id="formula_3">z t = sof tmax(o t M t−1 ) (2) m r,t = z t M t−1 (3) c t = f M LP c (o t , m r,t )<label>(4)</label></formula><formula xml:id="formula_4">h t = f LST M w (c t )<label>(5)</label></formula><formula xml:id="formula_5">M t = M t−1 (1 − (z t ⊗ e k ) ) + (h t ⊗ e l )(z t ⊗ e k )<label>(6)</label></formula><p>where 1 is a matrix of ones, ⊗ denotes the outer product which duplicates its left vector l or k times to form a matrix. The read function f LST M r sequentially maps the word embeddings to the internal space of the memory M t−1 . Then Equation 2 looks for the slots related to the input by computing association degree between each memory slot and the hidden state o t . We calculate the association degree by the dot product and transform this scores to the fuzzy key vector z t by normalizing with sof tmax function. Since our key vector is fuzzy, the slot to be composed is retrieved by taking weighted sum of the all slots as in Equation 3. This process can also be seen as the soft attention mechanism ( <ref type="bibr" target="#b0">Bahdanau et al., 2015)</ref>. In Equation 4 and 5, we compose and process the retrieved slot with the current hidden state and map the resulting vector to the encoder output space. Finally, we write the new representation to the memory location pointed by the key vector in Equation 6 where the key vector z t emitted by the read module is reused to inform the write module of the most recently read slots. First the slot information that was retrieved is erased and then the new representation is located. NSE performs this iterative process until all words in the input sequence are read. The encoding memories {M } T t=1 and output states {h} T t=1 are further used for the tasks. Although NSE reads a single word at a time, it has an anytime-access to the entire sequence stored in the encoding memory. With the encoding memory, NSE maintains a mental image of the input sequence. The memory is initialized with the raw embedding vector at time t = 0. We term such a freshly initialized memory a baby memory. As NSE reads more input content in time, the baby memory evolves and refines the encoded mental image.</p><p>The read f LST M r , the composition f M LP c and the write f LST M w functions are neural networks and are the training parameters in our NSE. As the name suggests, we use LSTM and multi-layer perceptron (MLP) in this paper. Since NSE is fully differentiable, it can be trained with any gradient descent optimizer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Shared and Multiple Memory Accesses</head><p>For sequence to sequence transduction tasks like question answering, natural language inference and machine translation, it is beneficial to access other relevant memories in addition to its own one. The shared or the multiple memory access allows a set of NSEs to exchange knowledge representations and to communicate with each other to accomplish a particular task throughout the encoding memory.</p><p>NSE can be extended easily, so that it is able to read from and write to multiple memories simultaneously or multiple NSEs are able to access a shared memory. <ref type="figure" target="#fig_0">Figure 1</ref> (b) depicts a highlevel architectural diagram of a multiple memory access-NSE (MMA-NSE). The first memory (in green) is the shared memory accessed by more than one NSEs. Given a shared memory M n ∈ R k×n that has been encoded by processing a relevant sequence with length n, MMA-NSE with the access to one relevant memory is defined as</p><formula xml:id="formula_6">o t = f LST M r (x t )<label>(7)</label></formula><formula xml:id="formula_7">z t = sof tmax(o t M t−1 )<label>(8)</label></formula><formula xml:id="formula_8">m r,t = z t M t−1<label>(9)</label></formula><formula xml:id="formula_9">z n t = sof tmax(o t M n t−1 )<label>(10)</label></formula><formula xml:id="formula_10">m n r,t = z n t M n t−1<label>(11)</label></formula><formula xml:id="formula_11">c t = f M LP c (o t , m r,t , m n r,t )<label>(12)</label></formula><formula xml:id="formula_12">h t = f LST M w (c t )<label>(13)</label></formula><formula xml:id="formula_13">M t = M t−1 (1 − (z t ⊗ e k ) ) + (h t ⊗ e l )(z t ⊗ e k ) (14) M n t = M n t−1 (1−(z n t ⊗e k ) )+(h t ⊗e n )(z n t ⊗e k )<label>(15)</label></formula><p>and this is almost the same as standard NSE. The read module now emits the additional key vector z n t for the shared memory and the composition function f M LP c combines more than one slots. In MMA-NSE, the different memory slots are retrieved from the shared memories depending on their encoded semantic representations. They are then composed together with the current input and written back to their corresponding slots. Note that MMA-NSE is capable of accessing a variable number of relevant shared memories once a composition function that takes in dynamic inputs is chosen.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Experiments</head><p>We describe in this section experiments on five different tasks, in order to show that NSE can be effective and flexible in different settings. <ref type="bibr">3</ref> We report results on natural language inference, question answering (QA), sentence classification, document sentiment analysis and machine translation. All five tasks challenge a model in terms of language understanding and semantic reasoning.</p><p>The models are trained using <ref type="bibr">Adam (Kingma and Ba, 2014</ref>) with hyperparameters selected on    <ref type="bibr">4</ref> The word embeddings are fixed during training. The embeddings for out-of-vocabulary words were set to zero vector. We crop or pad the input sequence to a fixed length. A padding vector was inserted when padding. The models were regularized by using dropouts and an l 2 weight decay. 5</p><note type="other">100 242K 85.4 82.3 LSTM word-by-word attention (Rocktäschel et al., 2016) 100 252K 85.3 83.5 MMA-NSE attention 300 6.5M 86.9 85.4 mLSTM word-by-word attention (Wang and Jiang, 2015) 300 1.9M 92.0 86.1 LSTMN with deep attention fusion (Cheng et al., 2016) 450 3.4M 89.5 86.3 Decomposable attention model (Parikh et al., 2016) 200 582K 90.5 86.8 Full tree matching NTI-SLSTM-LSTM global attention (Munkhdalai and Yu, 2017) 300 3.2M 88.5 87.3</note></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Natural Language Inference</head><p>The natural language inference is one of the main tasks in language understanding. This task tests the ability of a model to reason about the semantic relationship between two sentences. In order to perform well on the task, NSE should be able to capture sentence semantics and be able to reason the relation between a sentence pair, i.e., whether a premise-hypothesis pair is entailing, contradictory or neutral. ReLU activation and a sof tmax layer. We set the batch size to 128, the initial learning rate to 3e-4 and l 2 regularizer strength to 3e-5, and train each model for 40 epochs. The write/read neural nets and the last linear layer were regularized by using 30% dropouts. We evaluated three different variations of NSE show in <ref type="table" target="#tab_1">Table 1</ref>. The NSE model encodes each sentence simultaneously by using a separate memory for each sentence. The second model -MMA-NSE first encodes the premise and then the hypothesis sentence by sharing the premise encoded memory in addition to the hypothesis memory. For the third model, we use inter-sentence attention which selectively reconstructs the premise representation. <ref type="table" target="#tab_1">Table 1</ref> shows the results of our models along with the results of published methods for the task. The classifier with handcrafted features extracts a set of lexical features. The next group of models are based on sentence encoding. While most of the sentence encoder models rely solely on word embeddings, the dependency tree CNN and the SPINN-PI models make use of sentence parser output. The SPINN-PI model is similar to NSE in spirit that it also explicitly computes word composition. However, the composition in the SPINN-PI is guided by supervisions from a dependency parser. NSE outperformed the previous sentence encoders on this task. The MMA-SNE further slightly improved the result, indicating that reading the premise memory is helpful while encoding the hypothesis.</p><p>The last set of methods designs inter-sentence relation with parameterized soft attention (Bahdanau et al., 2015). Our MMA-NSE attention model is similar to the LSTM attention model. Particularly, it attends over the premise encoder outputs {h p } T t=1 in respect to the final hypothesis representation h h l and constructs an attentively blended vector of the premise. This model obtained 85.4% accuracy score. The best performing model for this task performs tree matching with attention mechanism and LSTM.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Answer Sentence Selection</head><p>Answer sentence selection is an integral part of the open-domain question answering. For this task, a model is trained to identify the correct sentences that answer a factual question, from a set of candidate sentences. We experiment on WikiQA dataset constructed from Wikipedia ( <ref type="bibr" target="#b35">Yang et al., 2015)</ref>. The dataset contains 20,360/2,733/6,165 QA pairs for train/dev/test sets.</p><p>The MLP setup used in the language inference task is kept same, except that we now replace the sof tmax layer with a sigmoid layer and model the following conditional probability distribution.</p><formula xml:id="formula_14">p θ (y = 1|h q l , h a l ) = sigmoid(o QA )<label>(16)</label></formula><p>where h q l and h a l are the question and the answer encoded vectors and o QA denotes the output of the hidden layer of the MLP. We trained the MMA-NSE attention model to minimize the sigmoid cross entropy loss. MMA-NSE first encodes the answers and then the questions by accessing its own and the answer encoding memories. In our preliminary experiment, we found that the multiple memory access and the attention over answer encoder outputs {h a } T t=1 are crucial to this problem. Following previous work, we adopt MAP and MRR as the evaluation metrics for this task. <ref type="bibr">6</ref> We set the batch size to 4 and the initial learning rate to 1e-5, and train the model for 10 epochs. We used 40% dropouts after word embeddings and no <ref type="bibr">6</ref> We used trec eval script to calculate the evaluation metrics  l 2 weight decay. The word embeddings are pretrained 300-D Glove 840B vectors. For this task, a linear mapping layer transforms the 300-D word embeddings to the 512-D LSTM inputs. <ref type="table" target="#tab_3">Table 2</ref> presents the results of our model and the previous models for the task. <ref type="bibr">7</ref> The classifier with handcrafted features is a SVM model trained with a set of features. The Bigram-CNN model is a simple convolutional neural net. While the LSTM and LSTM attention models outperform the previous best result by nearly 5-6% by implementing deep LSTM with three hidden layers, NASM improves it further and sets a strong baseline by combining variational auto-encoder <ref type="bibr" target="#b15">(Kingma and Welling, 2014</ref>) with the soft attention. Our MMA-NSE attention model exceeds the NASM by approximately 1% on MAP and 0.8% on MRR for this task.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Sentence Classification</head><p>We evaluated NSE on the Stanford Sentiment Treebank (SST) <ref type="bibr" target="#b26">(Socher et al., 2013)</ref>. This dataset comes with standard train/dev/test sets and two subtasks: binary sentence classification or finegrained classification of five classes. We trained our model on the text spans corresponding to labeled phrases in the training set and evaluated the model on the full sentences.</p><p>The sentence representations were passed to a two-layer MLP for classification. The first layer of the MLP has ReLU activation and 1024 or 300 units for binary or fine-grained setting. The second layer is a sof tmax layer. The read/write modules are two one-layer LSTM with 300 hidden units and the word embeddings are the pre-trained 300-D Glove 840B vectors. We set the batch size to 64, the initial learning rate to 3e-4 and l 2 regularizer strength to 3e-5, and train each model for 25 epochs. The write/read neural nets and the last linear layer were regularized by 50% dropouts. <ref type="table">Table 3</ref> compares the result of our model with the state-of-the-art methods on the two subtasks. Most best performing methods exploited the parse tree provided in the treebank on this task with the exception of the DMN. The Dynamic Memory Network (DMN) model is a memory-augmented network. Our model outperformed the DMN and set the state-of-the-art results on both subtasks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>Bin FG RNTN ( <ref type="bibr" target="#b26">Socher et al., 2013)</ref> 85.4 45.7 Paragraph Vector ( <ref type="bibr" target="#b17">Le and Mikolov, 2014</ref>) 87.8 48.7 CNN-MC <ref type="bibr" target="#b13">(Kim, 2014)</ref> 88.1 47.4 DRNN ( <ref type="bibr" target="#b11">Irsoy and Cardie, 2015)</ref> 86.6 49.8 2-layer LSTM <ref type="bibr" target="#b29">(Tai et al., 2015)</ref> 86.3 46.0 Bi-LSTM( <ref type="bibr" target="#b29">Tai et al., 2015)</ref> 87.5 49.1 CT-LSTM( <ref type="bibr" target="#b29">Tai et al., 2015)</ref> 88.0 51.0 DMN ( <ref type="bibr" target="#b16">Kumar et al., 2016)</ref> 88.6 52.1 NSE 89.7 52.8 <ref type="table">Table 3</ref>: Test accuracy for sentence classification. Bin: Binary, FG: fine-grained 5 classes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Document Sentiment Analysis</head><p>We evaluated our models for document-level sentiment analysis on two publically available largescale datasets: the IMDB consisting of 335,018 movie reviews and 10 different classes and Yelp 13 consisting of 348,415 restaurant reviews and 5 different classes. Each document in the datasets is associated with human ratings and we used these ratings as gold labels for sentiment classification. Particularly, we used the pre-split datasets of ( <ref type="bibr" target="#b30">Tang et al., 2015</ref>). We stack a NSE or LSTM on the top of another NSE for document modeling. The first NSE encodes the sentences and the second NSE or LSTM takes sentence encoded outputs and constructs document representations. The document representation is given to a output sof tmax layer. The whole network is trained jointly by backpropagating the cross entropy loss. We used one-layer LSTM with 100 hidden units for the read/write modules and the pre-trained 100-D Glove 6B vectors for this task. We set the batch size to 32, the initial learning rate to 3e-4 and l 2 regularizer strength to 1e-5, and trained each model for 50 epochs. The write/read neural nets and the document-level NSE/LSTM were regularized by 15% dropouts and the softmax layer by 20% dropouts. In order to speedup the training, we created document buckets by considering the number of sentences per document, i.e., documents with the same number of sentences were put together in the same bucket. The buckets were shuffled and updated per epoch. We did not use curriculum scheduling ( <ref type="bibr" target="#b1">Bengio et al., 2009</ref>), although it is observed to help sequence training. <ref type="table" target="#tab_5">Table 4</ref> shows our results. We report two performance metrics: accuracy and MSE. The best results on the task were previously obtained by Conv-GRNN and LSTM-GRNN, which are also   <ref type="table">Table 5</ref>: BLEU scores for English-German translation task.</p><p>stacked models. These models first learn the sentence representations with a CNN or LSTM and then combine them for document representation using a gated recurrent neural network (GRNN). Our NSE models outperformed the previous stateof-the-art models in terms of both accuracy and MSE, by approximately 2-3%. On the other hand, all systems tend to show poor results on the IMDB dataset. That is, the IMDB dataset contains longer documents than the Yelp 13 and it has 10 classes while the Yelp 13 dataset has five classes to distinguish. <ref type="bibr">8</ref> The stacked NSEs (NSE-NSE) performed slightly better than the NSE-LSTM on the IMDB dataset. This is possibly due to the encoding memory of the document level NSE that preserves the long dependency in documents with a large number of sentences.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5">Machine Translation</head><p>Lastly, we conducted an experiment on neural machine translation (NMT). The NMT problem is mostly defined within the encoder-decoder framework ( <ref type="bibr" target="#b12">Kalchbrenner and Blunsom, 2013;</ref><ref type="bibr" target="#b6">Cho et al., 2014;</ref><ref type="bibr" target="#b28">Sutskever et al., 2014</ref>). The encoder provides the semantic and syntactic information about the source sentences to the decoder and the decoder generates the target sentences by conditioning on this information and its partially produced translation. For an efficient encoding, the attention-based NTM was introduced ( <ref type="bibr" target="#b0">Bahdanau et al., 2015</ref>).</p><p>For NTM, we implemented three different models. The first model is a baseline model and is similar to the one proposed in ( <ref type="bibr">Bahdanau et al., 2015) (RNNSearch)</ref>. This model (LSTM-LSTM) has two LSTM for the encoder/decoder and has the soft attention neural net, which attends over the source sentence and constructs a focused encoding vector for each target word. The second model is an NSE-LSTM encoder-decoder which encodes the source sentence with NSE and generates the targets with the LSTM network by using the NSE output states and the attention network. The last model is an NSE-NSE setup, where the encoding part is the same as the NSE-LSTM while the decoder NSE now uses the output state and has an access to the encoder memory, i.e., the encoder and the decoder NSEs access a shared memory. The memory is encoded by the first NSEs and then read/written by the decoder NSEs. We used the English-German translation corpus from the IWSLT 2014 evaluation campaign ( <ref type="bibr" target="#b4">Cettolo et al., 2012</ref>). The corpus consists of sentence-aligned translation of TED talks. The data was pre-processed and lowercased with the Moses toolkit. <ref type="bibr">9</ref> We merged the dev2010 and dev2012 sets for development and the tst2010, tst2011 and tst2012 sets for test data <ref type="bibr">10</ref> . Sentence pairs with length longer than 25 words were filtered out. This resulted in 110,439/4,998/4,793 pairs for train/dev/test sets. We kept the most frequent 25,000 words for the German dictionary. The English dictionary has 51,821 words. The 300-D Glove 840B vectors were used for embedding the words in the source sentence whereas a lookup embedding layer was used for the target German words. Note that the word embeddings are usually optimized along with the NMT models. However, for the evaluation purpose we in this experiment do not optimize the English word embeddings. Besides, we do not use a beam search to generate the target sentences.</p><p>The LSTM encoder/decoders have two layers with 300 units. The NSE read/write modules are two one-layer LSTM with the same number of units as the LSTM encoder/decoders. This ensures that the number of parameters of the models is roughly the equal. The models were trained to minimize word-level cross entropy loss and were regularized by 20% input dropouts and the 9 https://github.com/moses-smt/mosesdecoder <ref type="bibr">10</ref> We modified prepareData.sh script: https://github.com/facebookresearch/MIXER 30% output dropouts. We set the batch size to 128, the initial learning rate to 1e-3 for LSTM-LSTM and 3e-4 for the other models and l 2 regularizer strength to 3e-5, and train each model for 40 epochs. We report BLEU score for each models. 11 <ref type="table">Table 5</ref> reports our results. The baseline LSTM-LSTM encoder-decoder (with attention) obtained 17.02 BLEU on the test set. The NSE-LSTM improved the baseline slightly. Given this very small improvement of the NSE-LSTM, it is unclear whether the NSE encoder is helpful in NMT. However, if we replace the LSTM decoder with another NSE and introduce the shared memory access to the encoder-decoder model (NSE-NSE), we improve the baseline result by almost 1.0 BLEU. The NSE-NSE model also yields an increasing BLEU score on dev set. The result demonstrates that the attention-based NMT systems can be improved by a shared-memory encoder-decoder model. In addition, memory-based NMT systems should perform well on translation of long sequences by preserving long term dependencies.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Qualitative Analysis</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Memory Access and Compositionality</head><p>NSE is capabable of performing multiscale composition by retrieving associative slots for a particular input at a time step. We analyzed the memory access order and the compositionality of memory slot and the input word in the NSE model trained on the SNLI data. <ref type="figure">Figure 2</ref> shows the word association graphs for the two sentence picked from SNLI test set. The association graph was constructed by inspecting the key vector z. For an input word, we connect it to the most active slot pointed by z 12 .</p><p>Note the graph components clustered around the semantically rich words: "sits", "wall" and "autumn" (a) and "Three", "puppies", "tub" and "vet" (b). The memory slots corresponding to words that are semantically rich in the current context are the most frequently accessed. The graph is able to capture certain syntactic structures including phrases (e.g., "hand built rock wall") and modifier relations (between "sits" and "quietly" and  <ref type="figure">Figure 2</ref>: Word association or composition graphs produced by NSE memory access. The directed arcs connect the words that are composed via compose module. The source nodes are input words and the destination nodes (pointed by the arrows) correspond to the accessed memory slots. &lt; S &gt; denotes the beginning of sequence. between "tub" and "sprayed with water"). Another interesting property is that the model tends to perform sensible compositions while processing the input sentence. For example, NSE retrieved the memory slot corresponding to "wall" or "Three" when reading the input "rock" or "are".</p><p>In Appendix A, we show a step-by-step visualization of NSE memory states for the first sentence. Note how the encoding memory is evolved over time. In time step four (t = 4), the memory slot for "quietly" encodes information about "quiet(ly) little child". When t = 6, the model forms another composition involving "quietly", "quietly sits". In the last time step, we are able to find the most or the least frequently accessed slots in the memory. The least accessed slots correspond to function words while the frequently accessed slots are content words and tend to carry out rich semantics and intrinsic compositions found in the input sentence. Overall the model is less constrained and is able to compose multiword expressions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Conclusion</head><p>Our proposed memory augmented neural networks have achieved the state-of-the-art results when evaluated on five representative NLP tasks. NSE is capable of building an efficient architecture of the single, shared and multiple memory accesses for a specific NLP task. For example, for the NLI task NSE accesses premise encoded memory when processing hypothesis. For the QA task, NSE accesses answer encoded memory when reading question for QA. In machine translation, NSE shares a single encoded memory between encoder and decoder. Such flexibility in the architectural choice of the NSE memory access allows for the robust models for a better performance.</p><p>The initial state of the NSE memory stores information about each word in the input sequence. We in this paper used word embeddings to represent the words in the memory. Different variations of word representations such as characterbased models are left to be evaluated for memory initialization in the future. We plan to extend NSE so that it learns to select and access a relevant subset from a memory set. One could also explore unsupervised variations of NSE, for example, to train them to produce encoding memory and representation vector of entire sentences or documents using either new or existing models such as the skip-gram model ( <ref type="bibr" target="#b19">Mikolov et al., 2013</ref>).</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: High-level architectures of the Neural Semantic Encoders. NSE reads and writes its own encoding memory in each time step (a). MMA-NSE accesses multiple relevant memories simultaneously (b).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 1 :</head><label>1</label><figDesc></figDesc><table>Training and test accuracy on natural language inference task. d is the word embedding size and 
+|θ| M the number of model parameters. 
+
+development set. We chose two one-layer LSTM 
+for read/write modules on the tasks other than 
+QA on which we used two-layer LSTM. The pre-
+trained 300-D Glove 840B vectors and 100-D 
+Glove 6B vectors (Pennington et al., 2014) were 
+obtained for the word embeddings. </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Experiment results on answer sentence 
+selection. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Results of document-level sentiment clas-
+sification. PV: paragraph vector, Acc: accuracy, 
+and MSE: mean squared error. 
+
+Model 
+Train 
+Dev 
+Test 
+Baseline LSTM-LSTM 28.06 17.96 17.02 
+NSE-LSTM 
+28.73 17.67 17.13 
+NSE-NSE 
+29.89 18.53 17.93 
+
+</table></figure>
+
+			<note place="foot" n="1"> By access we mean changing the memory states by the read, compose and write operations.</note>
+
+			<note place="foot" n="2"> Such a coherence is calculated by a soft attention with dot product similarity.</note>
+
+			<note place="foot" n="3"> Code for the experiments and NSEs is available at https://bitbucket.org/tsendeemts/nse.</note>
+
+			<note place="foot" n="7"> Inclusion of simple word count feature improves the performance by around 0.15-0.3 across the board</note>
+
+			<note place="foot" n="8"> The average number of sentences and words in a document for IMDB: 14, 152 and Yelp 13: 9, 326</note>
+
+			<note place="foot" n="11"> We computed the BLEU score with multi-bleu.perl script of the Moses toolkit 12 Since z is fuzzy, we visualize the highest scoring slot. For a few inputs, z pointed to a slot corresponding to the same word. In this case, we masked out those slots and showed the second best scoring slot.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We would like to thank Abhyuday Jagannatha and the anonymous reviewers for their insightful comments and suggestions. This work was supported in part by the grant HL125089 from the National Institutes of Health (NIH). Any opinions, findings and conclusions or recommendations expressed in this material are those of the authors and do not necessarily reflect those of the sponsor.</p></div>
+			</div>
+
+			<div type="annex">
+			</div>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Neural machine translation by jointly learning to align and translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Curriculum learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jérôme</forename><surname>Louradour</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronan</forename><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 26th annual international conference on machine learning</title>
+		<meeting>the 26th annual international conference on machine learning</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="41" to="48" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">A large annotated corpus for learning natural language inference</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Samuel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gabor</forename><surname>Bowman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Angeli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Potts</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">A fast unified model for parsing and sentence understanding</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Samuel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jon</forename><surname>Bowman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Abhinav</forename><surname>Gauthier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raghav</forename><surname>Rastogi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Gupta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Potts</surname></persName>
+		</author>
+		<idno>abs/1603.06021</idno>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Wit 3 : Web inventory of transcribed and translated talks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mauro</forename><surname>Cettolo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Girardi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EAMT</title>
+		<meeting><address><addrLine>Trento, Italy</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+	<note>and Marcello Federico</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Long short-term memory-networks for machine reading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianpeng</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Dong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mirella</forename><surname>Lapata</surname></persName>
+		</author>
+		<idno>abs/1601.06733</idno>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Learning phrase representations using rnn encoder-decoder for statistical machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bart</forename><surname>Van Merriënboer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caglar</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fethi</forename><surname>Bougares</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Holger</forename><surname>Schwenk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1406.1078</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Finding structure in time</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><forename type="middle">L</forename><surname>Elman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Cognitive science</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="179" to="211" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Wayne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ivo</forename><surname>Danihelka</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1410.5401</idno>
+		<title level="m">Neural turing machines</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Learning to transduce with unbounded memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karl</forename><forename type="middle">Moritz</forename><surname>Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mustafa</forename><surname>Suleyman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS 2015</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1819" to="1827" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Modeling compositionality with multiplicative recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ozan</forename><surname>Irsoy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Claire</forename><surname>Cardie</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR 2015</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Recurrent continuous translation models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nal</forename><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In EMNLP</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page">413</biblScope>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Convolutional neural networks for sentence classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoon</forename><surname>Kim</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diederik</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Ba</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Autoencoding variational bayes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Diederik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Max</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Welling</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Ask me anything: Dynamic memory networks for natural language processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ankit</forename><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ozan</forename><surname>Irsoy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename><surname>Su</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert</forename><surname>English</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Brian</forename><surname>Pierce</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><surname>Ondruska</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ishaan</forename><surname>Gulrajani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno>abs/1506.07285</idno>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Distributed representations of sentences and documents</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Quoc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mikolov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICML</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Neural variational inference for text processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yishu</forename><surname>Miao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lei</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR 2016</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Distributed representations of words and phrases and their compositionality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="3111" to="3119" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Recognizing entailment and contradiction by tree-based convolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lili</forename><surname>Mou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rui</forename><surname>Men</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ge</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yan</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lu</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rui</forename><surname>Yan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhi</forename><surname>Jin</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Neural tree indexers for text understanding</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tsendsuren</forename><surname>Munkhdalai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hong</forename><surname>Yu</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ankur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oscar</forename><surname>Parikh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dipanjan</forename><surname>Täckström</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jakob</forename><surname>Das</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Uszkoreit</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.01933</idno>
+		<title level="m">A decomposable attention model for natural language inference</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="page" from="1532" to="1543" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Neural programmer-interpreters</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Scott</forename><surname>Reed</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nando De Freitas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICLR 2016</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Reasoning about entailment with neural attention</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Rocktäschel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karl</forename><forename type="middle">Moritz</forename><surname>Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomáš</forename><surname>Kočisk</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note>Kočisk`y, and Phil Blunsom</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Recursive deep models for semantic compositionality over a sentiment treebank</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Perelygin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Jean</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Chuang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><forename type="middle">Y</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Potts</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP 2013</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">End-to-end memory networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sainbayar</forename><surname>Sukhbaatar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rob</forename><surname>Fergus</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS 2015</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="2431" to="2439" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Sequence to sequence learning with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Quoc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Le</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="3104" to="3112" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+		<title level="m" type="main">Improved semantic representations from tree-structured long short-term memory networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai Sheng</forename><surname>Tai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Document modeling with gated recurrent neural network for sentiment classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Duyu</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bing</forename><surname>Qin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ting</forename><surname>Liu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">Question answering using enhanced lexical semantic models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming-Wei</forename><surname>Wen Tau Yih</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrzej</forename><surname>Meek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Pastusiak</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Grammar as a foreign language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Łukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Terry</forename><surname>Koo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slav</forename><surname>Petrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">Learning natural language inference with LSTM. CoRR</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shuohang</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jing</forename><surname>Jiang</surname></persName>
+		</author>
+		<idno>abs/1512.08849</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Memory networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICML 2015</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title level="m" type="main">Wikiqa: A challenge dataset for open-domain question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yi</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wen-Tau</forename><surname>Yih</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Meek</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Deep learning for answer sentence selection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lei</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karl</forename><forename type="middle">Moritz</forename><surname>Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Pulman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS Deep Learning Workshop</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

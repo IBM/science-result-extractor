@@ -1,0 +1,730 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:30+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">End-to-end Neural Coreference Resolution</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+				<date type="published" when="2017-12-15">15 Dec 2017</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+							<email>kentonl@cs.washington.edu</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luheng</forename><surname>He</surname></persName>
+							<email>luheng@cs.washington.edu</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Lewis</surname></persName>
+							<email>mikelewis@fb.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Zettlemoyer</surname></persName>
+							<affiliation key="aff1">
+								<orgName type="department" key="dep1">Allen Institute for Artificial Intelligence</orgName>
+								<orgName type="department" key="dep2">Facebook AI Research</orgName>
+								<address>
+									<settlement>Seattle, Menlo Park</settlement>
+									<region>WA, CA</region>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><forename type="middle">G</forename><surname>Allen</surname></persName>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="department">School of Computer Science &amp; Engineering</orgName>
+								<orgName type="institution">Univ. of Washington</orgName>
+								<address>
+									<settlement>Seattle</settlement>
+									<region>WA</region>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">End-to-end Neural Coreference Resolution</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date type="published" when="2017-12-15">15 Dec 2017</date>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We introduce the first end-to-end corefer-ence resolution model and show that it significantly outperforms all previous work without using a syntactic parser or hand-engineered mention detector. The key idea is to directly consider all spans in a document as potential mentions and learn distributions over possible antecedents for each. The model computes span em-beddings that combine context-dependent boundary representations with a head-finding attention mechanism. It is trained to maximize the marginal likelihood of gold antecedent spans from coreference clusters and is factored to enable aggressive pruning of potential mentions. Experiments demonstrate state-of-the-art performance , with a gain of 1.5 F1 on the OntoNotes benchmark and by 3.1 F1 using a 5-model ensemble, despite the fact that this is the first approach to be successfully trained with no external resources.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>We present the first state-of-the-art neural coreference resolution model that is learned end-toend given only gold mention clusters. All recent coreference models, including neural approaches that achieved impressive performance gains ( <ref type="bibr" target="#b25">Wiseman et al., 2016;</ref><ref type="bibr">Clark and Manning, 2016b,a)</ref>, rely on syntactic parsers, both for headword features and as the input to carefully handengineered mention proposal algorithms. We demonstrate for the first time that these resources are not required, and in fact performance can be improved significantly without them, by training an end-to-end neural model that jointly learns which spans are entity mentions and how to best cluster them.</p><p>Our model reasons over the space of all spans up to a maximum length and directly optimizes the marginal likelihood of antecedent spans from gold coreference clusters. It includes a span-ranking model that decides, for each span, which of the previous spans (if any) is a good antecedent. At the core of our model are vector embeddings representing spans of text in the document, which combine context-dependent boundary representations with a head-finding attention mechanism over the span. The attention component is inspired by parser-derived head-word matching features from previous systems <ref type="bibr" target="#b8">(Durrett and Klein, 2013)</ref>, but is less susceptible to cascading errors. In our analyses, we show empirically that these learned attention weights correlate strongly with traditional headedness definitions.</p><p>Scoring all span pairs in our end-to-end model is impractical, since the complexity would be quartic in the document length. Therefore we factor the model over unary mention scores and pairwise antecedent scores, both of which are simple functions of the learned span embedding. The unary mention scores are used to prune the space of spans and antecedents, to aggressively reduce the number of pairwise computations.</p><p>Our final approach outperforms existing models by 1.5 F1 on the OntoNotes benchmark and by 3.1 F1 using a 5-model ensemble. It is not only accurate, but also relatively interpretable. The model factors, for example, directly indicate whether an absent coreference link is due to low mention scores (for either span) or a low score from the mention ranking component. The head-finding attention mechanism also reveals which mentioninternal words contribute most to coreference decisions. We leverage this overall interpretability to do detailed quantitative and qualitative analyses, providing insights into the strengths and weaknesses of the approach.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>Machine learning methods have a long history in coreference resolution (see <ref type="bibr" target="#b18">Ng (2010)</ref> for a detailed survey). However, the learning problem is challenging and, until very recently, handengineered systems built on top of automatically produced parse trees ( <ref type="bibr" target="#b22">Raghunathan et al., 2010</ref>) outperformed all learning approaches. <ref type="bibr" target="#b8">Durrett and Klein (2013)</ref> showed that highly lexical learning approaches reverse this trend, and more recent neural models <ref type="bibr" target="#b25">(Wiseman et al., 2016;</ref><ref type="bibr" target="#b6">Clark and Manning, 2016b</ref>,a) have achieved significant performance gains. However, all of these models use parsers for head features and include highly engineered mention proposal algorithms. 1 Such pipelined systems suffer from two major drawbacks: (1) parsing mistakes can introduce cascading errors and (2) many of the handengineered rules do not generalize to new languages.</p><p>A non-pipelined system that jointly models mention detection and coreference resolution was first proposed by <ref type="bibr" target="#b7">Daumé III and Marcu (2005)</ref>. They introduce a search-based system that predicts the coreference structure in a left-to-right transition system that can incorporate global features. In contrast, our approach performs well while making much stronger independence assumptions, enabling straightforward inference.</p><p>More generally, a wide variety of approaches for learning coreference models have been proposed. They can typically be categorized as (1) mention-pair classifiers <ref type="bibr" target="#b19">(Ng and Cardie, 2002;</ref><ref type="bibr" target="#b2">Bengtson and Roth, 2008)</ref>, (2) entity-level models <ref type="bibr" target="#b12">(Haghighi and Klein, 2010;</ref><ref type="bibr">Manning, 2015, 2016b;</ref><ref type="bibr" target="#b25">Wiseman et al., 2016)</ref>, (3) latent-tree models <ref type="bibr" target="#b10">(Fernandes et al., 2012;</ref><ref type="bibr" target="#b3">Björkelund and Kuhn, 2014;</ref><ref type="bibr" target="#b16">Martschat and Strube, 2015)</ref>, or (4) mention-ranking models <ref type="bibr" target="#b8">(Durrett and Klein, 2013;</ref><ref type="bibr" target="#b26">Wiseman et al., 2015;</ref><ref type="bibr" target="#b5">Clark and Manning, 2016a)</ref>. Our span-ranking approach is most similar to mention ranking, but we reason over a larger space by jointly detecting mentions and predicting coreference.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Task</head><p>We formulate the task of end-to-end coreference resolution as a set of decisions for every possible span in the document. The input is a document D containing T words along with metadata such as speaker and genre information.</p><p>Let N = T (T +1) 2 be the number of possible text spans in D. Denote the start and end indices of a span i in D respectively by <ref type="bibr">START(i)</ref> and END(i), for 1 ≤ i ≤ N . We assume an ordering of the spans based on START(i); spans with the same start index are ordered by END(i).</p><p>The task is to assign to each span i an antecedent y i . The set of possible assignments for each y i is Y(i) = {ǫ, 1, . . . , i − 1}, a dummy antecedent ǫ and all preceding spans. True antecedents of span i, i.e. span j such that 1 ≤ j ≤ i − 1, represent coreference links between i and j. The dummy antecedent ǫ represents two possible scenarios: (1) the span is not an entity mention or (2) the span is an entity mention but it is not coreferent with any previous span. These decisions implicitly define a final clustering, which can be recovered by grouping all spans that are connected by a set of antecedent predictions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Model</head><p>We aim to learn a conditional probability distribution P (y 1 , . . . , y N | D) whose most likely configuration produces the correct clustering. We use a product of multinomials for each span:</p><formula xml:id="formula_0">P (y 1 , . . . , y N | D) = N i=1 P (y i | D) = N i=1 exp(s(i, y i )) y ′ ∈Y(i) exp(s(i, y ′ ))</formula><p>where s(i, j) is a pairwise score for a coreference link between span i and span j in document D. We omit the document D from the notation when the context is unambiguous. There are three factors for this pairwise coreference score: (1) whether span i is a mention, (2) whether span j is a mention, and (3) whether j is an antecedent of i:</p><formula xml:id="formula_1">s(i, j) = 0 j = ǫ s m (i) + s m (j) + s a (i, j) j 񮽙 = ǫ</formula><p>Here s m (i) is a unary score for span i being a mention, and s a (i, j) is pairwise score for span j being an antecedent of span i.     Span representation (g)</p><formula xml:id="formula_2">Span head ( ˆ x) Bidirectional LSTM (x * )</formula><p>Word &amp; character embedding (x)</p><p>Figure 1: First step of the end-to-end coreference resolution model, which computes embedding representations of spans for scoring potential entity mentions. Low-scoring spans are pruned, so that only a manageable number of spans is considered for coreference decisions. In general, the model considers all possible spans up to a maximum width, but we depict here only a small subset. By fixing the score of the dummy antecedent ǫ to 0, the model predicts the best scoring antecedent if any non-dummy scores are positive, and it abstains if they are all negative.</p><p>A challenging aspect of this model is that its size is O(T 4 ) in the document length. As we will see in Section 5, the above factoring enables aggressive pruning of spans that are unlikely to belong to a coreference cluster according the mention score s m (i).</p><p>Scoring Architecture We propose an end-toend neural architecture that computes the above scores given the document and its metadata.</p><p>At the core of the model are vector representations g i for each possible span i, which we describe in detail in the following section. Given these span representations, the scoring functions above are computed via standard feed-forward neural networks:</p><formula xml:id="formula_3">s m (i) = w m · FFNN m (g i ) s a (i, j) = w a · FFNN a ([g i , g j , g i • g j , φ(i, j)])</formula><p>where · denotes the dot product, • denotes element-wise multiplication, and FFNN denotes a feed-forward neural network that computes a nonlinear mapping from input to output vectors.</p><p>The antecedent scoring function s a (i, j) includes explicit element-wise similarity of each span g i • g j and a feature vector φ(i, j) encoding speaker and genre information from the metadata and the distance between the two spans.</p><p>Span Representations Two types of information are crucial to accurately predicting coreference links: the context surrounding the mention span and the internal structure within the span.</p><p>We use a bidirectional LSTM <ref type="bibr" target="#b13">(Hochreiter and Schmidhuber, 1997</ref>) to encode the lexical information of both the inside and outside of each span. We also include an attention mechanism over words in each span to model head words.</p><p>We assume vector representations of each word {x 1 , . . . , x T }, which are composed of fixed pretrained word embeddings and 1-dimensional convolution neural networks (CNN) over characters (see Section 7.1 for details)</p><p>To compute vector representations of each span, we first use bidirectional LSTMs to encode every word in its context:</p><formula xml:id="formula_4">f t,δ = σ(W f [x t , h t+δ,δ ] + b i ) o t,δ = σ(W o [x t , h t+δ,δ ] + b o ) c t,δ = tanh(W c [x t , h t+δ,δ ] + b c ) c t,δ = f t,δ • c t,δ + (1 − f t,δ ) • c t+δ,δ h t,δ = o t,δ • tanh(c t,δ ) x * t = [h t,1 , h t,−1 ]</formula><p>where δ ∈ {−1, 1} indicates the directionality of each LSTM, and x * t is the concatenated output of the bidirectional LSTM. We use independent LSTMs for every sentence, since cross-sentence context was not helpful in our experiments.</p><p>Syntactic heads are typically included as features in previous systems <ref type="bibr" target="#b8">(Durrett and Klein, 2013;</ref><ref type="bibr">Clark and Manning, 2016b,a)</ref>. Instead of relying on syntactic parses, our model learns a taskspecific notion of headedness using an attention mechanism ( <ref type="bibr" target="#b1">Bahdanau et al., 2014</ref>) over words in each span:</p><formula xml:id="formula_5">α t = w α · FFNN α (x * t ) a i,t = exp(α t ) END(i) k=START(i) exp(α k ) ˆ x i = END(i) t=START(i) a i,t · x t wherê</formula><p>x i is a weighted sum of word vectors in span i. The weights a i,t are automatically learned and correlate strongly with traditional definitions of head words as we will see in Section 9.2.</p><p>The above span information is concatenated to produce the final representation g i of span i: . We introduce the soft head word vectorˆx vectorˆ vectorˆx i and a feature vector φ(i) encoding the size of span i.</p><formula xml:id="formula_6">g i = [x * START(i) , x * END(i) , ˆ x i , φ(i)]</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Inference</head><p>The size of the full model described above is O <ref type="bibr">(T 4</ref> ) in the document length T . To maintain computation efficiency, we prune the candidate spans greedily during both training and evaluation.</p><p>We only consider spans with up to L words and compute their unary mention scores s m (i) (as defined in Section 4). To further reduce the number of spans to consider, we only keep up to λT spans with the highest mention scores and consider only up to K antecedents for each. We also enforce non-crossing bracketing structures with a simple suppression scheme. <ref type="bibr">2</ref> We accept spans in decreasing order of the mention scores, unless, when considering span i, there exists a previously accepted span j such that <ref type="bibr">START(i)</ref> </p><formula xml:id="formula_7">&lt; START(j) ≤ END(i) &lt; END(j) ∨ START(j) &lt; START(i) ≤ END(j) &lt; END(i).</formula><p>Despite these aggressive pruning strategies, we maintain a high recall of gold mentions in our experiments (over 92% when λ = 0.4).</p><p>For the remaining mentions, the joint distribution of antecedents for each document is computed in a forward pass over a single computation graph. The final prediction is the clustering produced by the most likely configuration.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Learning</head><p>In the training data, only clustering information is observed. Since the antecedents are latent, we optimize the marginal log-likelihood of all correct antecedents implied by the gold clustering:</p><formula xml:id="formula_8">log N i=1ˆy∈Y i=1ˆ i=1ˆy∈Y(i)∩GOLD(i) P (ˆ y)</formula><p>where <ref type="bibr">GOLD(i)</ref> is the set of spans in the gold cluster containing span i. If span i does not belong to a gold cluster or all gold antecedents have been pruned, GOLD(i) = {ǫ}.</p><p>By optimizing this objective, the model naturally learns to prune spans accurately. While the initial pruning is completely random, only gold mentions receive positive updates. The model can quickly leverage this learning signal for appropriate credit assignment to the different factors, such as the mention scores s m used for pruning.</p><p>Fixing score of the dummy antecedent to zero removes a spurious degree of freedom in the overall model with respect to mention detection. It also prevents the span pruning from introducing noise. For example, consider the case where span i has a single gold antecedent that was pruned, so GOLD(i) = {ǫ}. The learning objective will only correctly push the scores of non-gold antecedents lower, and it cannot incorrectly push the score of the dummy antecedent higher.</p><p>This learning objective can be considered a span-level, cost-insensitive analog of the learning objective proposed by <ref type="bibr" target="#b8">Durrett and Klein (2013)</ref>. We experimented with these cost-sensitive alternatives, including margin-based variants ( <ref type="bibr" target="#b26">Wiseman et al., 2015;</ref><ref type="bibr" target="#b5">Clark and Manning, 2016a</ref>), but a simple maximum-likelihood objective proved to be most effective.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Experiments</head><p>We use the English coreference resolution data from the CoNLL-2012 shared task ( <ref type="bibr" target="#b21">Pradhan et al., 2012</ref>) in our experiments. This dataset contains 2802 training documents, 343 development documents, and 348 test documents. The training documents contain on average 454 words and a maximum of 4009 words.  Pruning We prune the spans such that the maximum span width L = 10, the number of spans per word λ = 0.4, and the maximum number of antecedents K = 250. During training, documents are randomly truncated to up to 50 sentences.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.1">Hyperparameters</head><p>Learning We use ADAM ( <ref type="bibr" target="#b14">Kingma and Ba, 2014</ref>) for learning with a minibatch size of 1. The LSTM weights are initialized with random orthonormal matrices as described in <ref type="bibr" target="#b23">Saxe et al. (2013)</ref>. We apply 0.5 dropout to the word embeddings and character CNN outputs. We apply 0.2 dropout to all hidden layers and feature embeddings. Dropout masks are shared across timesteps to preserve long-distance information as described in <ref type="bibr" target="#b11">Gal and Ghahramani (2016)</ref>. The learning rate is decayed by 0.1% every 100 steps. The model is trained for up to 150 epochs, with early stopping based on the development set.</p><p>All code is implemented in TensorFlow ( <ref type="bibr" target="#b0">Abadi et al., 2015)</ref> and is publicly available. <ref type="bibr">3</ref> </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.2">Ensembling</head><p>We also report ensemble experiments using five models trained with different random initializations. Ensembling is performed for both the span pruning and antecedent decisions.</p><p>At test time, we first average the mention scores s m (i) over each model before pruning the spans. Given the same pruned spans, each model then computes the antecedent scores s a (i, j) separately, and they are averaged to produce the final scores.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Results</head><p>We report the precision, recall, and F1 for the standard MUC, B 3 , and CEAF φ 4 metrics using the official CoNLL-2012 evaluation scripts. The main evaluation is the average F1 of the three metrics.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8.1">Coreference Results</head><p>Table 1 compares our model to several previous systems that have driven substantial improvements over the past several years on the OntoNotes benchmark. We outperform previous systems in all metrics. In particular, our single model improves the state-of-the-art average F1 by 1.5, and our 5-model ensemble improves it by 3.1.</p><p>The most significant gains come from improvements in recall, which is likely due to our end-toend setup. During training, pipelined systems typically discard any mentions that the mention detector misses, which for Clark and Manning (2016a)  <ref type="table">Table 2</ref>: Comparisons of our single model on the development data. The 5-model ensemble provides a 1.3 F1 improvement. The head-finding attention, features, and all word representations contribute significantly to the full model.</p><p>consists of more than 9% of the labeled mentions in the training data. In contrast, we only discard mentions that exceed our maximum mention width of 10, which accounts for less than 2% of the training mentions. The contribution of joint mention scoring is further discussed in Section 8.3</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8.2">Ablations</head><p>To show the importance of each component in our proposed model, we ablate various parts of the architecture and report the average F1 on the development set of the data (see <ref type="figure" target="#fig_5">Figure 2</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Features</head><p>The distance between spans and the width of spans are crucial signals for coreference resolution, consistent with previous findings from other coreference models. They contribute 3.8 F1 to the final result.</p><p>Word representations Since our word embeddings are fixed, having access to a variety of word embeddings allows for a more expressive model without overfitting. We hypothesis that the different learning objectives of the GloVe and Turian embeddings provide orthogonal information (the former is word-order insensitive while the latter is word-order sensitive). Both embeddings contribute to some improvement in development F1.</p><p>The character CNN provides morphological information and a way to backoff for out-ofvocabulary words. Since coreference decisions often involve rare named entities, we see a contribution of 0.9 F1 from character-level modeling.</p><p>Metadata Speaker and genre indicators many not be available in downstream applications. We show that performance degrades by 1.4 F1 without them, but is still on par with previous state-of-theart systems that assume access to this metadata.</p><p>Head-finding attention Ablations also show a 1.3 F1 degradation in performance without the attention mechanism for finding task-specific heads. As we will see in Section 9.4, the attention mechanism should not be viewed as simply an approximation of syntactic heads. In many cases, it is beneficial to pay attention to multiple words that are useful specifically for coreference but are not traditionally considered to be syntactic heads.</p><p>Avg. F1 ∆ Our model (joint mention scoring) 67.7 w/ rule-based mentions 66.7 -1.0 w/ oracle mentions 85.2 +17.5 <ref type="table">Table 3</ref>: Comparisons of of various mention proposal methods with our model on the development data. The rule-based mentions are derived from the mention detector from <ref type="bibr" target="#b22">Raghunathan et al. (2010)</ref>, resulting in a 1 F1 drop in performance. The oracle mentions are from the labeled clusters and improve our model by over 17.5 F1.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8.3">Comparing Span Pruning Strategies</head><p>To tease apart the contributions of improved mention scoring and improved coreference decisions, we compare the results of our model with alternate span pruning strategies. In these experiments, we use the alternate spans for both training and evaluation. As shown in <ref type="table">Table 3</ref>, keeping mention candidates detected by the rule-based system over predicted parse trees <ref type="bibr" target="#b22">(Raghunathan et al., 2010</ref>) degrades performance by 1 F1. We also provide oracle experiment results, where we keep exactly the mentions that are present in gold coreference clusters. With oracle mentions, we see an improvement of 17.5 F1, suggesting an enormous room for improvement if our model can produce better mention scores and anaphoricity decisions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9">Analysis</head><p>To highlight the strengths and weaknesses of our model, we provide both quantitative and qualitative analyses. In the following discussion, we use predictions from the single model rather than the ensembled model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9.1">Mention Recall</head><p>The training data only provides a weak signal for spans that correspond to entity mentions, since singleton clusters are not explicitly labeled. As a by product of optimizing marginal likelihood, our model automatically learns a useful ranking of spans via the unary mention scores from Section 4. The top spans, according to the mention scores, cover a large portion of the mentions in gold clusters, as shown in <ref type="figure" target="#fig_9">Figure 3</ref>. Given a similar number of spans kept, our recall is comparable to the rulebased mention detector ( <ref type="bibr" target="#b22">Raghunathan et al., 2010</ref>) that produces 0.26 spans per word with a recall of 89.2%. As we increase the number of spans per word (λ in Section 5), we observe higher recall but with diminishing returns. In our experiments, keeping 0.4 spans per word results in 92.7% recall in the development data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9.2">Mention Precision</head><p>While the training data does not offer a direct measure of mention precision, we can use the gold syntactic structures provided in the data as a proxy. Spans with high mention scores should correspond to syntactic constituents. In <ref type="figure" target="#fig_11">Figure 4</ref>, we show the precision of topscoring spans when keeping 0.4 spans per word. For spans with 2-5 words, 75-90% of the predictions are constituents, indicating that the vast majority of the mentions are syntactically plausible. Longer spans, which are all relatively rare, prove more difficult for the model, and precision drops to 46% for spans with 10 words.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9.3">Head Agreement</head><p>We also investigate how well the learned head preferences correlate with syntactic heads. For each of the top-scoring spans in the development data that correspond to gold constituents, we compute the word with the highest attention weight.</p><p>We plot in <ref type="figure" target="#fig_11">Figure 4</ref> the proportion of these words that match syntactic heads. Agreement ranges between 68-93%, which is surprisingly 1 (A fire in a Bangladeshi garment factory) has left at least 37 people dead and 100 hospitalized. Most of the deceased were killed in the crush as workers tried to flee (the blaze) in the four-story building.</p><p>A fire in (a Bangladeshi garment factory) has left at least 37 people dead and 100 hospitalized. Most of the deceased were killed in the crush as workers tried to flee the blaze in (the four-story building). </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>5</head><p>Also such location devices, (some ships) have smoke floats (they) can toss out so the man overboard will be able to use smoke signals as a way of trying to, let the rescuer locate (them).  high, since no explicit supervision of syntactic heads is provided. The model simply learns from the clustering data that these head words are useful for making coreference decisions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9.4">Qualitative Analysis</head><p>Our qualitative analysis in <ref type="table" target="#tab_1">Table 4</ref> highlights the strengths and weaknesses of our model. Each row is a visualization of a single coreference cluster predicted by the model. Bolded spans in parentheses belong to the predicted cluster, and the redness of a word indicates its weight from the headfinding attention mechanism (a i,t in Section 4).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Strengths</head><p>The effectiveness of the attention mechanism for making coreference decisions can be seen in Example 1. The model pays attention to fire in the span A fire in a Bangladeshi garment factory, allowing it to successfully predict the coreference link with the blaze. For a subspan of that mention, a Bangladeshi garment factory, the model pays most attention instead to factory, allowing it successfully predict the coreference link with the four-story building.</p><p>The task-specific nature of the attention mechanism is also illustrated in Example 4. The model generally pays attention to coordinators more than the content of the coordination, since coordinators, such as and, provide strong cues for plurality.</p><p>The model is capable of detecting relatively long and complex noun phrases, such as a region of central Italy bordering the Adriatic Sea in Example 2. It also appropriately pays attention to region, showing that the attention mechanism provides more than content-word classification. The context encoding provided by the bidirectional LSTMs is critical to making informative head word decisions.</p><p>Weaknesses A benefit of using neural models for coreference resolution is their ability to use word embeddings to capture similarity between words, a property that many traditional featurebased models lack. While this can dramatically increase recall, as demonstrated in Example 1, it is also prone to predicting false positive links when the model conflates paraphrasing with relatedness or similarity. In Example 3, the model mistakenly predicts a link between The flight attendants and The pilots'. The predicted head words attendants and pilots likely have nearby word embeddings, which is a signal used-and often overused-by the model. The same type of error is made in Example 4, where the model predicts a coreference link between Prince Charles and his new wife Camilla and Charles and Diana, two noncoreferent mentions that are similar in many ways. These mistakes suggest substantial room for improvement with word or span representations that can cleanly distinguish between equivalence, entailment, and alternation. Unsurprisingly, our model does little in the uphill battle of making coreference decisions requiring world knowledge. In Example 5, the model incorrectly decides that them (in the context of let the rescuer locate them) is coreferent with some ships, likely due to plurality cues. However, an ideal model that uses common-sense reasoning would instead correctly infer that a rescuer is more likely to look for the man overboard rather than the ship from which he fell. This type of reasoning would require either (1) models that integrate external sources of knowledge with more complex inference or (2) a vastly larger corpus of training data to overcome the sparsity of these patterns.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="10">Conclusion</head><p>We presented a state-of-the-art coreference resolution model that is trained end-to-end for the first time. Our final model ensemble improves performance on the OntoNotes benchmark by over 3 F1 without external preprocessing tools used by previous systems. We showed that our model implicitly learns to generate useful mention candidates from the space of all possible spans. A novel headfinding attention mechanism also learns a taskspecific preference for head words, which we empirically showed correlate strongly with traditional head-word definitions.</p><p>While our model substantially pushes the stateof-the-art performance, the improvements are potentially complementary to a large body of work on various strategies to improve coreference resolution, including entity-level inference and incorporating world knowledge, which are important avenues for future work.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>+</head><label></label><figDesc>Mention score (sm)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Second step of our model. Antecedent scores are computed from pairs of span representations. The final coreference score of a pair of spans is computed by summing the mention scores of both spans and their pairwise antecedent score.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head></head><label></label><figDesc>This generalizes the recurrent span repre- sentations recently proposed for question- answering (Lee et al., 2016), which only include the boundary representations x * START(i) and x * END(i)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head></head><label></label><figDesc>Word representations The word embeddings are a fixed concatenation of 300-dimensional GloVe embeddings (Pennington et al., 2014) and 50-dimensional embeddings from Turian et al. (2010), both normalized to be unit vectors. Out- of-vocabulary words are represented by a vector of zeros. In the character CNN, characters are represented as learned 8-dimensional embeddings. The convolutions have window sizes of 3, 4, and 5 characters, each consisting of 50 filters. Hidden dimensions The hidden states in the LSTMs have 200 dimensions. Each feed- forward neural network consists of two hidden layers with 150 dimensions and rectified linear units (Nair and Hinton, 2010).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head></head><label></label><figDesc>Feature encoding We encode speaker informa- tion as a binary feature indicating whether a pair of spans are from the same speaker. Following Clark and Manning (2016b), the distance features are binned into the following buckets [1, 2, 3, 4, 5- 7, 8-15, 16-31, 32-63, 64+]. All features (speaker, genre, span distance, mention width) are repre- sented as learned 20-dimensional embeddings.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Proportion of gold mentions covered in the development data as we increase the number of spans kept per word. Recall is comparable to the mention detector of previous state-ofthe-art systems given the same number of spans. Our model keeps 0.4 spans per word in our experiments, achieving 92.7% recall of gold mentions.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>2 We</head><label>2</label><figDesc>are looking for (a region of central Italy bordering the Adriatic Sea). (The area) is mostly mountainous and includes Mt. Corno, the highest peak of the Apennines. (It) also includes a lot of sheep, good clean-living, healthy sheep, and an Italian entrepreneur has an idea about how to make a little money of them. 3 (The flight attendants) have until 6:00 today to ratify labor concessions. (The pilots') union and ground crew did so yesterday. 4 (Prince Charles and his new wife Camilla) have jumped across the pond and are touring the United States making (their) first stop today in New York. It's Charles' first opportunity to showcase his new wife, but few Americans seem to care. Here's Jeanie Mowth. What a difference two decades make. (Charles and Diana) visited a JC Penney's on the prince's last official US tour. Twenty years later here's the prince with his new wife.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Indirect measure of mention precision using agreement with gold syntax. Constituency precision: % of unpruned spans matching syntactic constituents. Head word precision: % of unpruned constituents whose syntactic head word matches the most attended word. Frequency: % of gold spans with each width.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>Examples predictions from the development data. Each row depicts a single coreference cluster 
+predicted by our model. Bold, parenthesized spans indicate mentions in the predicted cluster. The 
+redness of each word indicates the weight of the head-finding attention mechanism (a i,t in Section 4). 
+
+</table></figure>
+
+			<note place="foot" n="1"> For example, Raghunathan et al. (2010) use rules to remove pleonastic mentions of it detected by 12 lexicalized regular expressions over English parse trees.</note>
+
+			<note place="foot" n="2"> The official CoNLL-2012 evaluation only considers predictions without crossing mentions to be valid. Enforcing this consistency is not inherently necessary in our model.</note>
+
+			<note place="foot" n="3"> https://github.com/kentonl/e2e-coref</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgements</head><p>The research was supported in part by DARPA under the DEFT program (FA8750-13-2-0019), the ARO (W911NF-16-1-0121), the NSF (IIS-1252835, IIS-1562364), gifts from Google and Tencent, and an Allen Distinguished Investigator Award. We also thank the UW NLP group for helpful conversations and comments on the work.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martın</forename><surname>Abadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ashish</forename><surname>Agarwal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Barham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eugene</forename><surname>Brevdo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhifeng</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Craig</forename><surname>Citro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andy</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Dean</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthieu</forename><surname>Devin</surname></persName>
+		</author>
+		<title level="m">TensorFlow: Large-scale Machine Learning on Heterogeneous Systems. Software available from tensorflow.org</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Neural machine translation by jointly learning to align and translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.0473</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Understanding the value of features for coreference resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><surname>Bengtson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="294" to="303" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Learning structured perceptrons for coreference resolution with latent antecedents and non-local features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anders</forename><surname>Björkelund</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonas</forename><surname>Kuhn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Entity-centric coreference resolution with model stacking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Deep reinforcement learning for mention-ranking coreference models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Empirical Methods on Natural Language Processing (EMNLP)</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Improving coreference resolution by learning entitylevel distributed representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kevin</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Association for Computational Linguistics (ACL)</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">A large-scale exploration of effective global features for a joint entity detection and tracking model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hal</forename><surname>Daumé</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iii</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Marcu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on Human Language Technology and Empirical Methods in Natural Language Processing</title>
+		<meeting>the conference on Human Language Technology and Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="97" to="104" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Easy victories and uphill battles in coreference resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Durrett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">A joint model for entity analysis: Coreference, typing, and linking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Durrett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">TACL</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="477" to="490" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Latent structure perceptron with feature induction for unrestricted coreference resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cícero Nogueira Dos</forename><surname>Eraldo Rezende Fernandes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruy Luiz</forename><surname>Santos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Milidiú</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Joint Conference on EMNLP and CoNLL-Shared Task</title>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="41" to="48" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">A theoretically grounded application of dropout in recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yarin</forename><surname>Gal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zoubin</forename><surname>Ghahramani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1019" to="1027" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Coreference resolution in a modular, entity-centered model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aria</forename><surname>Haghighi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Human Language Technologies: The 2010 Annual Conference of the North American Chapter of the Association for Computational Linguistics</title>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="385" to="393" />
+		</imprint>
+	</monogr>
+	<note>Association for Computational Linguistics</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Long Short-term Memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Adam: A Method for Stochastic Optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diederik</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Ba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6980</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Learning recurrent span representations for extractive question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenton</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shimi</forename><surname>Salant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tom</forename><surname>Kwiatkowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ankur</forename><surname>Parikh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dipanjan</forename><surname>Das</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename><surname>Berant</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01436</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Latent structures for coreference resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Martschat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Strube</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Transactions of the Association for Computational Linguistics</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="405" to="418" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Rectified linear units improve restricted boltzmann machines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vinod</forename><surname>Nair</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ICML</title>
+		<meeting>ICML</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Supervised noun phrase coreference research: The first fifteen years</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent</forename><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 48th annual meeting of the association for computational linguistics</title>
+		<meeting>the 48th annual meeting of the association for computational linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="1396" to="1411" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Identifying anaphoric and non-anaphoric noun phrases to improve coreference resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Claire</forename><surname>Cardie</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 19th international conference on Computational linguistics</title>
+		<meeting>the 19th international conference on Computational linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2002" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1" to="7" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EMNLP</title>
+		<meeting>EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Conll-2012 shared task: Modeling multilingual unrestricted coreference in ontonotes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Sameer Pradhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nianwen</forename><surname>Moschitti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Olga</forename><surname>Xue</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuchen</forename><surname>Uryupina</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Joint Conference on EMNLP and CoNLL-Shared Task</title>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="1" to="40" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">A multipass sieve for coreference resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Heeyoung</forename><surname>Karthik Raghunathan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nathanael</forename><surname>Sudarshan Rangarajan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mihai</forename><surname>Chambers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dan</forename><surname>Surdeanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Jurafsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2010 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2010 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="492" to="501" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><forename type="middle">L</forename><surname>Andrew M Saxe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Surya</forename><surname>Mcclelland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ganguli</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1312.6120</idno>
+		<title level="m">Exact solutions to the nonlinear dynamics of learning in deep linear neural networks</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Word representations: A Simple and General Method for Semi-supervised Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joseph</forename><surname>Turian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lev</forename><surname>Ratinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 48th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 48th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Learning global features for coreference resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sam</forename><surname>Wiseman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><forename type="middle">M</forename><surname>Rush</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stuart M</forename><surname>Shieber</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1604.03035</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Learning anaphoricity and antecedent ranking features for coreference resolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sam</forename><surname>Wiseman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><forename type="middle">M</forename><surname>Rush</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stuart</forename><forename type="middle">M</forename><surname>Shieber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

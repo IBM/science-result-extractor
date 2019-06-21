@@ -1,0 +1,1105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:30+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Regularizing and Optimizing LSTM Language Models</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+				<date type="published" when="2017-08-07">7 Aug 2017</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Shirish Keskar</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+						</author>
+						<title level="a" type="main">Regularizing and Optimizing LSTM Language Models</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date type="published" when="2017-08-07">7 Aug 2017</date>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Recurrent neural networks (RNNs), such as long short-term memory networks (LSTMs), serve as a fundamental building block for many sequence learning tasks, including machine translation, language modeling, and question answering. In this paper, we consider the specific problem of word-level language modeling and investigate strategies for regularizing and optimizing LSTM-based models. We propose the weight-dropped LSTM which uses DropConnect on hidden-to-hidden weights as a form of recurrent regulariza-tion. Further, we introduce NT-ASGD, a variant of the averaged stochastic gradient method, wherein the averaging trigger is determined using a non-monotonic condition as opposed to being tuned by the user. Using these and other reg-ularization strategies, we achieve state-of-the-art word level perplexities on two data sets: 57.3 on Penn Treebank and 65.8 on WikiText-2. In exploring the effectiveness of a neural cache in conjunction with our proposed model, we achieve an even lower state-of-the-art perplexity of 52.8 on Penn Treebank and 52.0 on WikiText-2.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.">Introduction</head><p>Effective regularization techniques for deep learning have been the subject of much research in recent years. Given the over-parameterization of neural networks, generalization performance crucially relies on the ability to regularize the models sufficiently. Strategies such as dropout ( <ref type="bibr" target="#b34">Srivastava et al., 2014</ref>) and batch normalization <ref type="bibr" target="#b14">(Ioffe &amp; Szegedy, 2015)</ref> have found great success and are now ubiquitous in feed-forward and convolutional neural networks. Naïvely applying these approaches to the case of recurrent neural networks (RNNs) has not been highly successful however. Many recent works have hence been focused on the extension of these regularization strategies to RNNs; we briefly discuss some of them below.</p><p>A naïve application of dropout ( <ref type="bibr" target="#b34">Srivastava et al., 2014</ref>) to an RNN's hidden state is ineffective as it disrupts the RNN's ability to retain long term dependencies ( <ref type="bibr" target="#b41">Zaremba et al., 2014)</ref>. <ref type="bibr" target="#b8">Gal &amp; Ghahramani (2016)</ref> propose overcoming this problem by retaining the same dropout mask across multiple time steps as opposed to sampling a new binary mask at each timestep. Another approach is to regularize the network through limiting updates to the RNN's hidden state. One such approach is taken by <ref type="bibr" target="#b32">Semeniuta et al. (2016)</ref> wherein the authors drop updates to network units, specifically the input gates of the LSTM, in lieu of the units themselves. This is reminiscent of zoneout ( <ref type="bibr" target="#b21">Krueger et al., 2016</ref>) where updates to the hidden state may fail to occur for randomly selected neurons.</p><p>Instead of operating on the RNN's hidden states, one can regularize the network through restrictions on the recurrent matrices as well. This can be done either through restricting the capacity of the matrix ( <ref type="bibr" target="#b0">Arjovsky et al., 2016;</ref><ref type="bibr" target="#b40">Wisdom et al., 2016;</ref><ref type="bibr" target="#b15">Jing et al., 2016</ref>) or through element-wise interactions <ref type="bibr" target="#b2">(Balduzzi &amp; Ghifary, 2016;</ref><ref type="bibr" target="#b4">Bradbury et al., 2016;</ref><ref type="bibr" target="#b33">Seo et al., 2016</ref>).</p><p>Other forms of regularization explicitly act upon activations such as batch normalization <ref type="bibr" target="#b14">(Ioffe &amp; Szegedy, 2015)</ref>, recurrent batch normalization ( <ref type="bibr" target="#b5">Cooijmans et al., 2016)</ref>, and layer normalization ( <ref type="bibr" target="#b1">Ba et al., 2016)</ref>. These all introduce additional training parameters and can complicate the training process while increasing the sensitivity of the model.</p><p>In this work, we investigate a set of regularization strategies that are not only highly effective but which can also be used with no modification to existing LSTM implementations. The weight-dropped LSTM applies recurrent regularization through a DropConnect mask on the hidden-to-hidden recurrent weights. Other strategies include the use of randomized-length backpropagation through time (BPTT), embedding dropout, activation regularization (AR), and temporal activation regularization (TAR).</p><p>As no modifications are required of the LSTM implementation these regularization strategies are compatible with black box libraries, such as NVIDIA cuDNN, which can be many times faster than naïve LSTM implementations.</p><p>Effective methods for training deep recurrent networks have also been a topic of renewed interest. Once a model has been defined, the training algorithm used is required to not only find a good minimizer of the loss function but also converge to such a minimizer rapidly. The choice of the optimizer is even more important in the context of regularized models since such strategies, especially the use of dropout, can impede the training process. Stochastic gradient descent (SGD), and its variants such as Adam <ref type="bibr" target="#b19">(Kingma &amp; Ba, 2014</ref>) and RMSprop <ref type="bibr" target="#b37">(Tieleman &amp; Hinton, 2012)</ref> are amongst the most popular training methods. These methods iteratively reduce the training loss through scaled (stochastic) gradient steps. In particular, Adam has been found to be widely applicable despite requiring less tuning of its hyperparameters. In the context of word-level language modeling, past work has empirically found that SGD outperforms other methods in not only the final loss but also in the rate of convergence. This is in agreement with recent evidence pointing to the insufficiency of adaptive gradient methods ( <ref type="bibr" target="#b39">Wilson et al., 2017)</ref>.</p><p>Given the success of SGD, especially within the language modeling domain, we investigate the use of averaged SGD (ASGD) <ref type="bibr" target="#b30">(Polyak &amp; Juditsky, 1992)</ref> which is known to have superior theoretical guarantees. ASGD carries out iterations similar to SGD, but instead of returning the last iterate as the solution, returns an average of the iterates past a certain, tuned, threshold T . This threshold T is typically tuned and has a direct impact on the performance of the method. We propose a variant of ASGD where T is determined on the fly through a non-monotonic criterion and show that it achieves better training outcomes compared to SGD.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">Weight-dropped LSTM</head><p>We refer to the mathematical formulation of the LSTM,</p><formula xml:id="formula_0">i t = σ(W i x t + U i h t−1 ) f t = σ(W f x t + U f h t−1 ) o t = σ(W o x t + U o h t−1 ) ˜ c t = tanh(W c x t + U c h t−1 ) c t = i t ⊙ ˜ c t + f t ⊙ +˜c+˜c t−1 h t = o t ⊙ tanh(c t )</formula><p>where</p><formula xml:id="formula_1">[W i , W f , W o , U i , U f , U o ] are weight matrices, x t</formula><p>is the vector input to the timestep t, h t is the current exposed hidden state, c t is the memory cell state, and ⊙ is element-wise multiplication.</p><p>Preventing overfitting within the recurrent connections of an RNN has been an area of extensive research in language modeling. The majority of previous recurrent regularization techniques have acted on the hidden state vector h t−1 , most frequently introducing a dropout operation between timesteps, or performing dropout on the update to the memory state c t . These modifications to a standard LSTM prevent the use of black box RNN implementations that may be many times faster due to low-level hardware-specific optimizations.</p><p>We propose the use of DropConnect ( <ref type="bibr" target="#b38">Wan et al., 2013)</ref> on the recurrent hidden to hidden weight matrices which does not require any modifications to an RNN's formulation. As the dropout operation is applied once to the weight matrices, before the forward and backward pass, the impact on training speed is minimal and any standard RNN implementation can be used, including inflexible but highly optimized black box LSTM implementations such as NVIDIA's cuDNN LSTM.</p><p>By performing DropConnect on the hidden-to-hidden weight matrices [U i , U f , U o , U c ] within the LSTM, we can prevent overfitting from occurring on the recurrent connections of the LSTM. This regularization technique would also be applicable to preventing overfitting on the recurrent weight matrices of other RNN cells.</p><p>As the same weights are reused over multiple timesteps, the same individual dropped weights remain dropped for the entirety of the forward and backward pass. The result is similar to variational dropout, which applies the same dropout mask to recurrent connections within the LSTM by performing dropout on h t−1 , except that the dropout is applied to the recurrent weights. DropConnect could also be used on the non-recurrent weights of the LSTM [W i , W f , W o ] though our focus was on preventing overfitting on the recurrent connection.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.">Optimization</head><p>SGD is among the most popular methods for training deep learning models across various modalities including computer vision, natural language processing, and reinforcement learning. The training of deep networks can be posed as a non-convex optimization problem</p><formula xml:id="formula_2">min w 1 N N i=1 f i (w),</formula><p>where f i is the loss function for the i th data point, w are the weights of the network, and the expectation is taken over the data. Given a sequence of learning rates, γ k , SGD iteratively takes steps of the form</p><formula xml:id="formula_3">w k+1 = w k − γ k ˆ ∇f (w k ),<label>(1)</label></formula><p>where the subscript denotes the iteration number and thêthê ∇ denotes a stochastic gradient that may be computed on a minibatch of data points. SGD demonstrably performs well in practice and also possesses several attractive theoretical properties such as linear convergence ( <ref type="bibr" target="#b3">Bottou et al., 2016)</ref>, saddle point avoidance <ref type="bibr" target="#b29">(Panageas &amp; Piliouras, 2016)</ref> and better generalization performance <ref type="bibr" target="#b11">(Hardt et al., 2015</ref>). For the specific task of neural language modeling, traditionally SGD without momentum has been found to outperform other algorithms such as momentum SGD <ref type="bibr" target="#b35">(Sutskever et al., 2013)</ref>, Adam <ref type="bibr" target="#b19">(Kingma &amp; Ba, 2014</ref>), Adagrad (Duchi et al., 2011) and RMSProp <ref type="bibr" target="#b37">(Tieleman &amp; Hinton, 2012</ref>) by a statistically significant margin.</p><p>Motivated by this observation, we investigate averaged SGD (ASGD) to further improve the training process. ASGD has been analyzed in depth theoretically and many surprising results have been shown including its asymptotic second-order convergence <ref type="bibr" target="#b30">(Polyak &amp; Juditsky, 1992;</ref><ref type="bibr" target="#b23">Mandt et al., 2017)</ref>. ASGD takes steps identical to equation (1) but instead of returning the last iterate as the solution, returns</p><formula xml:id="formula_4">1 (K−T +1) K i=T w i ,</formula><p>where K is the total number of iterations and T &lt; K is a user-specified averaging trigger.</p><formula xml:id="formula_5">Algorithm 1 Non-monotonically Triggered ASGD (NT- ASGD) Inputs: Initial point w 0 , learning rate γ, logging interval L, non-monotone interval n. 1: Initialize k ← 0, t ← 0, T ← 0, logs ← [] 2: while stopping criterion not met do 3:</formula><p>Compute stochastic gradientˆ∇fgradientˆ gradientˆ∇f (w k ) and take SGD step (1).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>4:</head><p>if mod(k, L) = 0 and T = 0 then 5:</p><p>Compute validation perplexity v.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>6:</head><p>if t &gt; n and v &gt; min Append v to logs 10:</p><formula xml:id="formula_6">t ← t + 1 11:</formula><p>end if 12: end while return</p><formula xml:id="formula_7">k i=T wi (k−T +1)</formula><p>Despite its theoretical appeal, ASGD has found limited practical use in training of deep networks. This may be in part due to unclear tuning guidelines for the learning-rate schedule γ k and averaging trigger T . If the averaging is triggered too soon, the efficacy of the method is impacted, and if it is triggered too late, many additional iterations may be needed to converge to the solution. In this section, we describe a non-monotonically triggered variant of ASGD (NT-ASGD), which obviates the need for tuning T . Further, the algorithm uses a constant learning rate throughout the experiment and hence no further tuning is necessary for the decay scheduling.</p><p>Ideally, averaging needs to be triggered when the SGD iterates converge to a steady-state distribution <ref type="bibr" target="#b23">(Mandt et al., 2017)</ref>. This is roughly equivalent to the convergence of SGD to a neighborhood around a solution. In the case of SGD, certain learning-rate reduction strategies such as the step-wise strategy analogously reduce the learning rate by a fixed quantity at such a point. A common strategy employed in language modeling is to reduce the learning rates by a fixed proportion when the performance of the model's primary metric (such as perplexity) worsens or stagnates. Along the same lines, one could make a triggering decision based on the performance of the model on the validation set. However, instead of averaging immediately after the validation metric worsens, we propose a non-monotonic criterion that conservatively triggers the averaging when the validation metric fails to improve for multiple cycles; see Algorithm 1. Given that the choice of triggering is irreversible, this conservatism ensures that the randomness of training does not play a major role in the decision. Analogous strategies have also been proposed for learning-rate reduction in SGD <ref type="bibr" target="#b17">(Keskar &amp; Saon, 2015)</ref>.</p><p>While the algorithm introduces two additional hyperparameters, the logging interval L and non-monotone interval n, we found that setting L to be the number of iterations in an epoch and n = 5 worked well across various models and data sets. As such, we use this setting in all of our NT-ASGD experiments in the following section and demonstrate that it achieves better training outcomes as compared to SGD.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.">Extended regularization techniques</head><p>In addition to the regularization and optimization techniques above, we explored additional regularization techniques that aimed to improve data efficiency during training and to prevent overfitting of the RNN model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.">Variable length backpropagation sequences</head><p>Given a fixed sequence length that is used to break a data set into fixed length batches, the data set is not efficiently used. To illustrate this, imagine being given 100 elements to perform backpropagation through with a fixed backpropagation through time (BPTT) window of 10. Any element divisible by 10 will never have any elements to backprop into, no matter how many times you may traverse the data set. Indeed, the backpropagation window that each element receives is equal to i mod 10 where i is the element's index. This is data inefficient, preventing <ref type="bibr">1</ref> 10 of the data set from ever being able to improve itself in a recurrent fashion, and resulting in 8 10 of the remaining elements receiving only a partial backpropagation window compared to the full possible backpropagation window of length 10.</p><p>To prevent such inefficient data usage, we randomly select the sequence length for the forward and backward pass in two steps. First, we select the base sequence length to be seq with probability p and seq 2 with probability 1 − p, where p is a high value approaching 1. This spreads the starting point for the BPTT window beyond the base sequence length. We then select the sequence length according to N (seq, s), where seq is the base sequence length and s is the standard deviation. This jitters the starting point such that it doesn't always fall on a specific word divisible by seq or seq 2 . From these, the sequence length more efficiently uses the data set, ensuring that when given enough epochs all the elements in the data set experience a full BPTT window, while ensuring the average sequence length remains around the base sequence length for computational efficiency.</p><p>During training, we rescale the learning rate depending on the length of the resulting sequence compared to the original specified sequence length. The rescaling step is necessary as sampling arbitrary sequence lengths with a fixed learning rate favors short sequences over longer ones. This linear scaling rule has been noted as important for training large scale minibatch SGD without loss of accuracy ( <ref type="bibr" target="#b9">Goyal et al., 2017)</ref> and is a component of unbiased truncated backpropagation through time <ref type="bibr" target="#b36">(Tallec &amp; Ollivier, 2017</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.">Variational dropout</head><p>In standard dropout, a new binary dropout mask is sampled each and every time the dropout function is called. New dropout masks are sampled even if the given connection is repeated, such as the input x 0 to an LSTM at timestep t = 0 receiving a different dropout mask than the input x 1 fed to the same LSTM at t = 1. A variant of this, variational dropout ( <ref type="bibr" target="#b8">Gal &amp; Ghahramani, 2016)</ref>, samples a binary dropout mask only once upon the first call and then to repeatedly use that locked dropout mask for all repeated connections within the forward and backward pass.</p><p>While we propose using DropConnect rather than variational dropout to regularize the hidden-to-hidden transition within an RNN, we use variational dropout for all other dropout operations, specifically using the same dropout mask for all inputs and outputs of the LSTM within a given forward and backward pass. Each example within the minibatch uses a unique dropout mask, rather than a single dropout mask being used over all examples, ensuring diversity in the elements dropped out.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3.">Embedding dropout</head><p>Following <ref type="bibr" target="#b8">Gal &amp; Ghahramani (2016)</ref>, we employ embedding dropout. This is equivalent to performing dropout on the embedding matrix at a word level, where the dropout is broadcast across all the word vector's embedding. The remaining non-dropped-out word embeddings are scaled by 1 1−pe where p e is the probability of embedding dropout. As the dropout occurs on the embedding matrix that is used for a full forward and backward pass, this means that all occurrences of a specific word will disappear within that pass, equivalent to performing variational dropout on the connection between the one-hot embedding and the embedding lookup.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4.">Weight tying</head><p>Weight tying <ref type="bibr" target="#b13">(Inan et al., 2016;</ref><ref type="bibr" target="#b31">Press &amp; Wolf, 2016)</ref> shares the weights between the embedding and softmax layer, substantially reducing the total parameter count in the model. The technique has theoretical motivation <ref type="bibr" target="#b13">(Inan et al., 2016</ref>) and prevents the model from having to learn a one-to-one correspondence between the input and output, resulting in substantial improvements to the standard LSTM language model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5.">Independent embedding size and hidden size</head><p>In most natural language processing tasks, both pretrained and trained word vectors are of relatively low dimensionality-frequently between 100 and 400 dimensions in size. Most previous LSTM language models tie the dimensionality of the word vectors to the dimensionality of the LSTM's hidden state. Even if reducing the word embedding size was not beneficial in preventing overfitting, the easiest reduction in total parameters for a language model is reducing the word vector size. To achieve this, the first and last LSTM layers are modified such that their input and output dimensionality respectively are equal to the reduced embedding size.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.6.">Activation Regularization (AR) and Temporal</head><p>Activation Regularization (TAR) L 2 -regularization is often used on the weights of the network to control the norm of the resulting model and reduce overfitting. In addition, L 2 decay can be used on the individual unit activations and on the difference in outputs of an RNN at different time steps; these strategies labeled as activation regularization (AR) and temporal activation regularization (TAR) respectively (Merity et al., 2017). AR penalizes activations that are significantly larger than 0 as a means of regularizing the network. Concretely, AR is defined as</p><formula xml:id="formula_8">α L 2 (m ⊙ h t )</formula><p>where m is the dropout mask, L 2 (·) = ·· 2 , h t is the output of the RNN at timestep t, and α is a scaling coefficient. TAR falls under the broad category of slowness regularizers <ref type="bibr" target="#b12">(Hinton, 1989;</ref><ref type="bibr" target="#b7">Földiák, 1991;</ref><ref type="bibr" target="#b22">Luciw &amp; Schmidhuber, 2012;</ref><ref type="bibr" target="#b16">Jonschkowski &amp; Brock, 2015</ref>) which penalize the model from producing large changes in the hidden state.</p><p>Using the notation from AR, TAR is defined as</p><formula xml:id="formula_9">β L 2 (h t − h t+1 )</formula><p>where β is a scaling coefficient. As in <ref type="bibr" target="#b26">Merity et al. (2017)</ref>, the AR and TAR loss are only applied to the output of the final RNN layer as opposed to being applied to all layers.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.">Experiment Details</head><p>For ], where H is the hidden size.</p><p>For training the models, we use the NT-ASGD algorithm discussed in the previous section for 750 epochs with L equivalent to one epoch and n = 5. We use a batch size of 80 for WT2 and 40 for PTB. Empirically, we found relatively large batch sizes (e.g., 40-80) performed better than smaller sizes (e.g., 10-20) for NT-ASGD. After completion, we run ASGD with T = 0 and hot-started w 0 as a fine-tuning step to further improve the solution. For this fine-tuning step, we terminate the run using the same nonmonotonic criterion detailed in Algorithm 1.</p><p>We carry out gradient clipping with maximum norm 0.25 and use an initial learning rate of 30 for all experiments. We use a random BPTT length which is N (70, 5) with probability 0.95 and N (35, 5) with probability 0.05. The values used for dropout on the word vectors, the output between LSTM layers, the output of the final LSTM layer, and embedding dropout where (0.4, 0.3, 0.4, 0.1) respectively. For the weight-dropped LSTM, a dropout of 0.5 was applied to the recurrent weight matrices. For WT2, we increase the input dropout to 0.65 to account for the increased vocabulary size. For all experiments, we use AR and TAR values of 2 and 1 respectively, and tie the embedding and softmax weights. These hyperparameters were chosen through trial and error and we expect further improvements may be possible if a fine-grained hyperparameter search were to be conducted. In the results, we abbreviate our approach as AWD-LSTM for ASGD Weight-Dropped LSTM.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.">Experimental Analysis</head><p>We present the single-model perplexity results for both our models (AWD-LSTM) and other competitive models in <ref type="table">Ta- ble 1</ref> and 2 for PTB and WT2 respectively. On both data sets we improve the state-of-the-art, with our vanilla LSTM model beating the state of the art by approximately 1 unit on PTB and 0.1 units on WT2.</p><p>In comparison to other recent state-of-the-art models, our model uses a vanilla LSTM. <ref type="bibr" target="#b42">Zilly et al. (2016)</ref> propose the recurrent highway network, which extends the LSTM to allow multiple hidden state updates per timestep. <ref type="bibr" target="#b43">Zoph &amp; Le (2016)</ref> use a reinforcement learning agent to generate an RNN cell tailored to the specific task of language modeling, with the cell far more complex than the LSTM.</p><p>Independently of our work, <ref type="bibr" target="#b24">Melis et al. (2017)</ref> apply extensive hyperparameter search to an LSTM based language modeling implementation, analyzing the sensitivity of RNN based language models to hyperparameters. Unlike our work, they use a modified LSTM, which caps the input gate i t to be min(1 − f t , i t ), use Adam with β 1 = 0 rather than SGD or ASGD, use skip connections between LSTM layers, and use a black box hyperparameter tuner for exploring models and settings. Of particular interest is that their hyperparameters were tuned individually for each data set compared to our work which shared almost all hyperparameters between PTB and WT2, including the embedding and hidden size for both data sets. Due to this, they used less model parameters than our model and found shallow LSTMs of one or two layers worked best for WT2.</p><p>Like our work, <ref type="bibr" target="#b24">Melis et al. (2017)</ref> find that the underlying LSTM architecture can be highly effective compared to complex custom architectures when well tuned hyperparameters are used. The approaches used in our work and <ref type="bibr" target="#b24">Melis et al. (2017)</ref> may be complementary and would be worth exploration.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.">Pointer models</head><p>In past work, pointer based attention models have been shown to be highly effective in improving language modeling ( <ref type="bibr" target="#b25">Merity et al., 2016;</ref><ref type="bibr" target="#b10">Grave et al., 2016)</ref>. Given such  <ref type="table">Table 1</ref>. Single model perplexity on validation and test sets for the Penn Treebank language modeling task. Parameter numbers with ‡ are estimates based upon our understanding of the model and with reference to <ref type="bibr" target="#b25">Merity et al. (2016)</ref>. Models noting tied use weight tying on the embedding and softmax weights. Our model, AWD-LSTM, stands for ASGD Weight-Dropped LSTM.  substantial improvements to the underlying neural language model, it remained an open question as to how effective pointer augmentation may be, especially when improvements such as weight tying may act in mutually exclusive ways.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model Parameters Validation Test</head><p>The neural cache model ( <ref type="bibr" target="#b10">Grave et al., 2016)</ref> can be added on top of a pre-trained language model at negligible cost. The neural cache stores the previous hidden states in memory cells and then uses a simple convex combination of the probability distributions suggested by the cache and the language model for prediction. The cache model has three hyperparameters: the memory size (window) for the cache, the coefficient of the combination (which determines how the two distributions are mixed), and the flatness of the cache distribution. All of these are tuned on the validation set once a trained language model has been obtained and require no training by themselves, making it quite inexpensive to use. The tuned values for these hyperparameters were (2000, 0.1, 1.0) for PTB and (3785, 0.1279, 0.662) for WT2 respectively.</p><p>In <ref type="table" target="#tab_1">Tables 1 and 2</ref>, we show that the model further improves the perplexity of the language model by as much as 6 perplexity points for PTB and 11 points for WT2. While this is smaller than the gains reported in <ref type="bibr" target="#b10">Grave et al. (2016)</ref>, which used an LSTM without weight tying, this is still a substantial drop. Given the simplicity of the neural cache model, and the lack of any trained components, these results suggest that existing neural language models remain fundamentally lacking, failing to capture long term dependencies or remember recently seen words effectively.</p><p>To understand the impact the pointer had on the model, specifically the validation set perplexity, we detail the contribution that each word has on the cache model's overall perplexity in <ref type="table">Table 3</ref>. We compute the sum of the total difference in the loss function value (i.e., log perplexity) between the LSTM-only and LSTM-with-cache models for the target words in the validation portion of the WikiText-2 data set. We present results for the sum of the difference as opposed to the mean since the latter undesirably overemphasizes infrequently occurring words for which the cache helps significantly and ignores frequently occurring words for which the cache provides modest improvements that cumulatively make a strong contribution.</p><p>The largest cumulative gain is in improving the handling of &lt;unk&gt; tokens, though this is over 11540 instances. The second best improvement, approximately one fifth the gain given by the &lt;unk&gt; tokens, is for Meridian, yet this word only occurs 161 times. This indicates the cache still helps significantly even for relatively rare words, further demonstrated by Churchill, Blythe, or Sonic. The cache is not beneficial when handling frequent word categories, such as punctuation or stop words, for which the language model is  <ref type="table">Table 3</ref>. The sum total difference in loss (log perplexity) that a given word results in over all instances in the validation data set of WikiText-2 when the continuous cache pointer is introduced. The right column contains the words with the twenty best improvements (i.e., where the cache was advantageous), and the left column the twenty most deteriorated (i.e., where the cache was disadvantageous).</p><p>likely well suited. These observations motivate the design of a cache framework that is more aware of the relative strengths of the two models.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8.">Model Ablation Analysis</head><p>In <ref type="table" target="#tab_4">Table 4</ref>, we present the values of validation and testing perplexity for different variants of our best-performing LSTM model. Each variant removes a form of optimization or regularization.</p><p>The first two variants deal with the optimization of the language models while the rest deal with the regularization. For the model using SGD with learning rate reduced by 2 using the same nonmonotonic fashion, there is a significant degradation in performance. This stands as empirical evidence regarding the benefit of averaging of the iterates. Using a monotonic criterion instead also hampered performance. Similarly, the removal of the fine-tuning step expectedly also degrades the performance. This step helps improve the estimate of the minimizer by resetting the memory of the previous experiment. While this process of fine-tuning can be repeated multiple times, we found little benefit in repeating it more than once.  was pivotal in ensuring state-of-the-art performance. The most extreme perplexity jump was in removing the hiddento-hidden LSTM regularization provided by the weightdropped LSTM. Without such hidden-to-hidden regularization, perplexity rises substantially, up to 11 points. This is in line with previous work showing the necessity of recurrent regularization in state-of-the-art models <ref type="bibr" target="#b8">(Gal &amp; Ghahramani, 2016;</ref><ref type="bibr" target="#b13">Inan et al., 2016</ref>).</p><p>We also experiment with static sequence lengths which we had hypothesized would lead to inefficient data usage. This also worsens the performance by approximately one perplexity unit. Next, we experiment with reverting to matching the sizes of the embedding vectors and the hidden states. This significantly increases the number of parameters in the network (to 43M in the case of PTB and 70M for WT2) and leads to degradation by almost 8 perplexity points, which we attribute to overfitting in the word embeddings. While this could potentially be improved with more aggressive regularization, the computational overhead involved with substantially larger embeddings likely outweighs any advantages. Finally, we experiment with the removal of embedding dropout, AR/TAR and weight decay. In all of the cases, the model suffers a perplexity increase of 2-6 points which we hypothesize is due to insufficient regularization in the network.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9.">Conclusion</head><p>In this work, we discuss regularization and optimization strategies for neural language models. We propose the weight-dropped LSTM, a strategy that uses a DropConnect mask on the hidden-to-hidden weight matrices, as a means to prevent overfitting across the recurrent connections. Further, we investigate the use of averaged SGD with a nonmonontonic trigger for training language models and show that it outperforms SGD by a significant margin. We investigate other regularization strategies including the use of variable BPTT length and achieve a new state-of-the-art perplexity on the PTB and WikiText-2 data sets. Our models outperform custom-built RNN cells and complex regularization strategies that preclude the possibility of using optimized libraries such as the NVIDIA cuDNN LSTM. Finally, we explore the use of a neural cache in conjunction with our proposed model and show that this further improves the performance, thus attaining an even lower state-of-the-art perplexity. While the regularization and optimization strategies proposed are demonstrated on the task of language modeling, we anticipate that they would be generally applicable across other sequence learning tasks.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 .</head><label>2</label><figDesc></figDesc><table>Single model perplexity over WikiText-2. Models noting tied use weight tying on the embedding and softmax weights. Our 
+model, AWD-LSTM, stands for ASGD Weight-Dropped LSTM. </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 4 .</head><label>4</label><figDesc></figDesc><table>Model ablations for our best LSTM models reporting results over the validation and test set on Penn Treebank and WikiText-2. 
+Ablations are split into optimization and regularization variants, sorted according to the achieved validation perplexity on WikiText-2. 
+
+</table></figure>
+
+			<note place="foot" n="1"> Salesforce Research, Palo Alto, USA. Correspondence to: Stephen Merity &lt;smerity@salesforce.com&gt;.</note>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Unitary evolution recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Arjovsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Shah</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Machine Learning</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1120" to="1128" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Layer normalization. CoRR</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kiros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<idno>abs/1607.06450</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Balduzzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ghifary</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1602.02218</idno>
+		<title level="m">Strongly-typed recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Optimization methods for large-scale machine learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Bottou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">E</forename><surname>Curtis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Nocedal</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.04838</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01576</idno>
+		<title level="m">Quasi-Recurrent Neural Networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Recurrent batch normalization. CoRR</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Cooijmans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Laurent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">C</forename><surname>Courville</surname></persName>
+		</author>
+		<idno>abs/1603.09025</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Adaptive subgradient methods for online learning and stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Duchi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Hazan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Singer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="2121" to="2159" />
+			<date type="published" when="2011-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Learning invariance from transformation sequences</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Földiák</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="194" to="200" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">A theoretically grounded application of dropout in recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Gal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Ghahramani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Goyal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Dollár</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Girshick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Noordhuis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Wesolowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kyrola</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Tulloch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Jia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Accurate</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1706.02677</idno>
+		<title level="m">large minibatch sgd: Training imagenet in 1 hour</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Improving neural language models with a continuous cache</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Usunier</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1612.04426</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Train faster, generalize better: Stability of stochastic gradient descent</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hardt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Recht</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Singer</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1509.01240</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Connectionist learning procedures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Artificial intelligence</title>
+		<imprint>
+			<biblScope unit="volume">40</biblScope>
+			<biblScope unit="issue">1-3</biblScope>
+			<biblScope unit="page" from="185" to="234" />
+			<date type="published" when="1989" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Tying Word Vectors and Word Classifiers: A Loss Framework for Language Modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Inan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Khosravi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01462</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Batch normalization: Accelerating deep network training by reducing internal covariate shift</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ioffe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Szegedy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICML</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Jing</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Dubček</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Peurifoy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Skirlo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Tegmark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Soljači´soljači´c</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1612.05231</idno>
+		<title level="m">Tunable Efficient Unitary Neural Networks (EUNN) and their application to RNN</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Learning state representations with robotic priors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Jonschkowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Brock</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Auton. Robots</title>
+		<imprint>
+			<biblScope unit="volume">39</biblScope>
+			<biblScope unit="page" from="407" to="428" />
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">A nonmonotone learning rate strategy for sgd training of deep neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Keskar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Saon</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Acoustics, Speech and Signal Processing</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="4974" to="4978" />
+		</imprint>
+	</monogr>
+	<note>2015 IEEE International Conference on</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Characteraware neural language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Jernite</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Sontag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">M</forename><surname>Rush</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Thirtieth AAAI Conference on Artificial Intelligence</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Adam</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6980</idno>
+		<title level="m">A method for stochastic optimization</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Moses: Open source toolkit for statistical machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Koehn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Birch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Callison-Burch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Federico</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Bertoldi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Cowan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Moran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Zens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Bojar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Constantin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Herbst</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Krueger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Maharaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kramár</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pezeshki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Ke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Goyal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Larochelle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Courville</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.01305</idno>
+		<title level="m">Regularizing RNNss by randomly preserving hidden activations</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Low complexity protovalue function learning from sensory observations with incremental slow feature analysis. Artificial Neural Networks and Machine Learning-ICANN</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Luciw</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="279" to="287" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Stochastic gradient descent as approximate bayesian inference</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Mandt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">D</forename><surname>Hoffman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">M</forename><surname>Blei</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.04289</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">On the State of the Art of Evaluation in Neural Language Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Melis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Blunsom</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.05589</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.07843</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">Pointer Sentinel Mixture Models. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Revisiting activation regularization for language rnns</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Mccann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1708.01009</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Context dependent recurrent neural network language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Zweig</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="234" to="239" />
+		</imprint>
+		<respStmt>
+			<orgName>SLT</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Recurrent neural network based language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Karafiát</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Burget</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cernocký</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Khudanpur</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">INTERSPEECH</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+		<title level="m" type="main">Gradient descent converges to minimizers: The case of non-isolated critical points</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Panageas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Piliouras</surname></persName>
+		</author>
+		<idno>abs/1605.00405</idno>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Acceleration of stochastic approximation by averaging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Polyak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Juditsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIAM Journal on Control and Optimization</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="838" to="855" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">Using the output embedding to improve language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Press</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Wolf</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.05859</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Recurrent dropout without memory loss</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Semeniuta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Severyn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barth</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COLING</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">QueryReduction Networks for Question Answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Seo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Min</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Farhadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hajishirzi</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.04582</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Dropout: a simple way to prevent neural networks from overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">On the importance of initialization and momentum in deep learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Martens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Dahl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International conference on machine learning</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1139" to="1147" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+		<title level="m" type="main">Unbiasing truncated backpropagation through time</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Tallec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Ollivier</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.08209</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+		<title level="m" type="main">Lecture 6.5-rmsprop: Divide the gradient by a running average of its recent magnitude. COURSERA: Neural networks for machine learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Tieleman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Hinton</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="26" to="31" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Regularization of neural networks using dropconnect</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Wan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zeiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Lecun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fergus</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 30th international conference on machine learning (ICML-13)</title>
+		<meeting>the 30th international conference on machine learning (ICML-13)</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1058" to="1066" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+		<title level="m" type="main">The marginal value of adaptive gradient methods in machine learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">C</forename><surname>Wilson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Roelofs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Stern</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Srebro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Recht</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.08292</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Full-capacity unitary recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Wisdom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Powers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hershey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Le Roux</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Atlas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="4880" to="4888" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Zaremba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Vinyals</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.2329</idno>
+		<title level="m">Recurrent neural network regularization</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">G</forename><surname>Zilly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">K</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Koutník</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.03474</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+	<note>Recurrent highway networks</note>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Zoph</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><forename type="middle">V</forename><surname>Le</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01578</idno>
+		<title level="m">Neural architecture search with reinforcement learning</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

@@ -1,0 +1,1161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:06+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">IMPROVING NEURAL LANGUAGE MODELS WITH A CONTINUOUS CACHE</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edouard</forename><surname>Grave</surname></persName>
+							<email>egrave@fb.com</email>
+							<affiliation key="aff0">
+								<orgName type="department">Facebook AI Research</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+							<email>ajoulin@fb.com</email>
+							<affiliation key="aff0">
+								<orgName type="department">Facebook AI Research</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Usunier</surname></persName>
+							<email>usunier@fb.com</email>
+							<affiliation key="aff0">
+								<orgName type="department">Facebook AI Research</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">IMPROVING NEURAL LANGUAGE MODELS WITH A CONTINUOUS CACHE</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+					<note>Under review as a conference paper at ICLR 2017</note>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We propose an extension to neural network language models to adapt their prediction to the recent history. Our model is a simplified version of memory augmented networks, which stores past hidden activations as memory and accesses them through a dot product with the current hidden activation. This mechanism is very efficient and scales to very large memory sizes. We also draw a link between the use of external memory in neural network and cache models used with count based language models. We demonstrate on several language model datasets that our approach performs significantly better than recent memory augmented networks .</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Language modeling is a core problem in natural language processing, with many applications such as machine translation <ref type="bibr" target="#b4">(Brown et al., 1993)</ref>, speech recognition ( <ref type="bibr" target="#b1">Bahl et al., 1983</ref>) or dialogue agents ( <ref type="bibr" target="#b42">Stolcke et al., 2000</ref>). While traditional neural networks language models have obtained stateof-the-art performance in this domain ( <ref type="bibr" target="#b24">Jozefowicz et al., 2016;</ref><ref type="bibr" target="#b37">Mikolov et al., 2010)</ref>, they lack the capacity to adapt to their recent history, limiting their application to dynamic environments ( <ref type="bibr" target="#b9">Dodge et al., 2015)</ref>. A recent approach to solve this problem is to augment these networks with an external memory ( <ref type="bibr" target="#b16">Graves et al., 2014;</ref><ref type="bibr" target="#b23">Joulin &amp; Mikolov, 2015;</ref><ref type="bibr" target="#b43">Sukhbaatar et al., 2015</ref>). These models can potentially use their external memory to store new information and adapt to a changing environment.</p><p>While these networks have obtained promising results on language modeling datasets ( <ref type="bibr" target="#b43">Sukhbaatar et al., 2015)</ref>, they are quite computationally expensive. Typically, they have to learn a parametrizable mechanism to read or write to memory cells ( <ref type="bibr" target="#b16">Graves et al., 2014;</ref><ref type="bibr" target="#b23">Joulin &amp; Mikolov, 2015)</ref>. This may limit both the size of their usable memory as well as the quantity of data they can be trained on. In this work, we propose a very light-weight alternative that shares some of the properties of memory augmented networks, notably the capability to dynamically adapt over time. By minimizing the computation burden of the memory, we are able to use larger memory and scale to bigger datasets. We observe in practice that this allows us to surpass the perfomance of memory augmented networks on different language modeling tasks.</p><p>Our model share some similarities with a model proposed by <ref type="bibr" target="#b30">Kuhn (1988)</ref>, called the cache model. A cache model stores a simple representation of the recent past, often in the form of unigrams, and uses them for prediction <ref type="bibr" target="#b31">(Kuhn &amp; De Mori, 1990)</ref>. This contextual information is quite cheap to store and can be accessed efficiently. It also does not need any training and can be appplied on top of any model. This makes this model particularly interesting for domain adaptation <ref type="bibr" target="#b29">(Kneser &amp; Steinbiss, 1993)</ref>.</p><p>Our main contribution is to propose a continuous version of the cache model, called Neural Cache Model, that can be adapted to any neural network language model. We store recent hidden activations and use them as representation for the context. Using simply a dot-product with the current hidden activations, they turn out to be extremely informative for prediction. Our model requires no training and can be used on any pre-trained neural networks. It also scales effortlessly to thousands of memory cells. We demonstrate the quality of the Neural Cache models on several language model tasks and the LAMBADA dataset ( <ref type="bibr" target="#b40">Paperno et al., 2016</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">LANGUAGE MODELING</head><p>A language model is a probability distribution over sequences of words. Let V be the size of the vocabulary; each word is represented by a one-hot encoding vector x in R V = V, corresponding to its index in the vocabulary. Using the chain rule, the probability assigned to a sequence of words x 1 , . . . , x T can be factorized as</p><formula xml:id="formula_0">p(x 1 , ..., x T ) = T t=1 p(x t | x t−1 , ..., x 1 ).</formula><p>Language modeling is often framed as learning the conditional probability over words, given the history ( <ref type="bibr" target="#b1">Bahl et al., 1983)</ref>. This conditional probability is traditionally approximated with non-parameteric models based on counting statistics <ref type="bibr" target="#b13">(Goodman, 2001</ref>). In particular, smoothed N-gram models <ref type="bibr" target="#b26">(Katz, 1987;</ref><ref type="bibr" target="#b28">Kneser &amp; Ney, 1995)</ref> achieve good performance in practice <ref type="bibr" target="#b38">(Mikolov et al., 2011</ref>). Parametrized alternatives are either maximum entropy language models <ref type="bibr" target="#b41">(Rosenfeld, 1996)</ref>, feedforward networks ( <ref type="bibr" target="#b3">Bengio et al., 2003)</ref> or recurrent networks ( <ref type="bibr" target="#b37">Mikolov et al., 2010</ref>). In particular, recurrent networks are currently the best solution to approximate this conditional probability, achieving state-of-the-arts performance on standard language modeling benchmarks ( <ref type="bibr" target="#b24">Jozefowicz et al., 2016;</ref><ref type="bibr" target="#b49">Zilly et al., 2016)</ref>.</p><p>Recurrent networks. Assuming that we have a vector h t ∈ R d encoding the history x t , ..., x 1 , the conditional probability of a word w can be parametrized as</p><formula xml:id="formula_1">p vocab (w | x t , ..., x 1 ) ∝ exp(h t o w ).</formula><p>The history vector h t is computed by a recurrent network by recursively applying an equation of the form</p><formula xml:id="formula_2">h t = Φ (x t , h t−1 ) ,</formula><p>where Φ is a function depending on the architecture of the network. Several architecture for recurrent networks have been proposed, such as the Elman network <ref type="bibr" target="#b11">(Elman, 1990)</ref>, the long short-term memory (LSTM) <ref type="bibr" target="#b20">(Hochreiter &amp; Schmidhuber, 1997</ref>) or the gated recurrent unit (GRU) ( <ref type="bibr" target="#b6">Chung et al., 2014</ref>). One of the simplest recurrent networks is the Elman network <ref type="bibr" target="#b11">(Elman, 1990)</ref>, where</p><formula xml:id="formula_3">h t = σ (Lx t + Rh t−1 ) ,</formula><p>where σ is a non-linearity such as the logistic or tanh functions, L ∈ R d×V is a word embedding matrix and R ∈ R d×d is the recurrent matrix. The LSTM architecture is particularly interesting in the context of language modelling (Jozefowicz et al., 2016) and we refer the reader to <ref type="bibr" target="#b15">Graves et al. (2013)</ref> for details on this architecture.</p><p>The parameters of recurrent neural network language models are learned by minimizing the negative log-likelihood of the training data. This objective function is usually minimized by using the stochastic gradient descent algorithm, or variants such as Adagrad ( <ref type="bibr" target="#b10">Duchi et al., 2011</ref>). The gradient is computed using the truncated backpropagation through time algorithm <ref type="bibr" target="#b46">(Werbos, 1990;</ref><ref type="bibr" target="#b47">Williams &amp; Peng, 1990</ref>).</p><p>Cache model. After a word appears once in a document, it is much more likely to appear again.</p><p>As an example, the frequency of the word tiger on the Wikipedia page of the same name is 2.8%, compared to 0.0037% over the whole Wikipedia. Cache models exploit this simple observation to improve n-gram language models by capturing long-range dependencies in documents. More precisely, these models have a cache component, which contains the words that appeared in the recent history (either the document or a fixed number of words). A simple language model, such as a unigram or smoothed bigram model, is fitted on the words of the cache and interpolated with the static language model (trained over a larger dataset). This technique has many advantages. First, this is a very efficient way to adapt a language model to a new domain. Second, such models can predict out-of-vocabulary words (OOV words), after seeing them once. Finally, this helps capture long-range dependencies in documents, in order to generate more coherent text. <ref type="figure">Figure 1</ref>: The neural cache stores the previous hidden states in memory cells. They are then used as keys to retrieve their corresponding word, that is the next word. There is no transformation applied to the storage during writing and reading.</p><formula xml:id="formula_4">h 1 h 2 h 3 h 4 x 1 x 2 x 3 x 4 (h 1 , x 2 ) (h 2 , x 3 ) (h 3 , x 4 ) x 5 L L L L R R R Id Id Id O Id</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">NEURAL CACHE MODEL</head><p>The Neural Cache Model adds a cache-like memory to neural network language models. It exploits the hidden representations h t to define a probability distribution over the words in the cache. As illustrated <ref type="figure">Figure 1</ref>, the cache stores pairs (h i , x i+1 ) of a hidden representation, and the word which was generated based on this representation (we remind the reader that the vector h i encodes the history x i , ..., x 1 ). At time t, we then define a probability distribution over words stored in the cache based on the stored hidden representations and the current one h t as</p><formula xml:id="formula_5">p cache (w | h 1..t , x 1..t ) ∝ t−1 i=1 1 {w=xi+1} exp(θh t h i )</formula><p>where the scalar θ is a parameter which controls the flatness of the distribution. When θ is equal to zero, the probability distribution over the history is uniform, and our model is equivalent to a unigram cache model <ref type="bibr" target="#b31">(Kuhn &amp; De Mori, 1990</ref>).</p><p>From the point of view of memory-augmented neural networks, the probability p cache (w | h 1..t , x 1..t ) given by the neural cache model can be interpreted as the probability to retrieve the word w from the memory given the query h t , where the desired answer is the next word x t+1 . Using previous hidden states as keys for the words in the memory, the memory lookup operator can be implemented with simple dot products between the keys and the query. In contrast to existing memory-augmented neural networks, the neural cache model avoids the need to learn the memory lookup operator. Such a cache can thus be added to a pre-trained recurrent neural language model without fine tuning of the parameters, and large cache size can be used with negligible impact on the computational cost of a prediction.</p><p>Neural cache language model. Following the standard practice in n-gram cache-based language models, the final probability of a word is given by the linear interpolation of the cache language model with the regular language model, obtaining:</p><formula xml:id="formula_6">p(w | h 1..t , x 1..t ) = (1 − λ)p vocab (w | h t ) + λp cache (w | h 1..t , x 1..t ) .</formula><p>Instead of taking a linear interpolation between the two distribution with a fixed λ, we also consider a global normalization over the two distribution:</p><formula xml:id="formula_7">p(w | h 1..t , x 1..t ) ∝ exp(h t o w ) + t−1 i=1 1 {w=xi+1} exp(θh t h i + α) .</formula><p>This corresponds to taking a softmax over the vocabulary and the words in the cache. The parameter α controls the weight of the cache component, and is the counterpart of the λ parameter for linear interpolation.</p><p>The addition of the neural cache to a recurrent neural language model inherits the advantages of ngram caches in usual cache-based models: The probability distribution over words is updated online depending on the context, and out-of-vocabulary words can be predicted as soon as they have been seen at least once in the recent history. The neural cache also inherits the ability of the hidden states of recurrent neural networks to model longer-term contexts than small n-grams, and thus allows for a finer modeling of the current context than e.g., unigram caches.  Training procedure. For now, we first train the (recurrent) neural network language model, without the cache component. We only apply the cache model at test time, and choose the hyperparameters θ and λ (or α) on the validation set. A big advantage of our method is that it is very easy and cheap to apply, with already trained neural models. There is no need to perform backpropagation over large contexts, and we can thus apply our method with large cache sizes (larger than one thousand).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">RELATED WORK</head><p>Cache model. Adding a cache to a language model was intoducted in the context of speech recognition <ref type="bibr" target="#b30">(Kuhn, 1988;</ref><ref type="bibr" target="#b32">Kupiec, 1989;</ref><ref type="bibr" target="#b31">Kuhn &amp; De Mori, 1990</ref>). These models were further extended by <ref type="bibr" target="#b22">Jelinek et al. (1991)</ref> into a smoothed trigram language model, reporting reduction in both perplexity and word error rates. Della <ref type="bibr" target="#b8">Pietra et al. (1992)</ref> adapt the cache to a general n-gram model such that it satisfies marginal constraints obtained from the current document.    This approach has been successfully applied to question answering, when the answer is contained in a given paragraph <ref type="bibr" target="#b5">(Chen et al., 2016;</ref><ref type="bibr" target="#b25">Kadlec et al., 2016;</ref><ref type="bibr" target="#b43">Sukhbaatar et al., 2015</ref>). Similarly, <ref type="bibr" target="#b44">Vinyals et al. (2015)</ref> explores the use of this mechanism to reorder sequences of tokens. Their network uses an attention (or "pointer") over the input sequence to predict which element should be selected as the next output. <ref type="bibr" target="#b18">Gulcehre et al. (2016)</ref> have shown that a similar mechanism called pointer softmax could be used in the context of machine translation, to decide which word to copy from the source to target.</p><p>Independently of our work, <ref type="bibr" target="#b35">Merity et al. (2016)</ref> apply the same mechanism to recurrent network. Unlike our work, they uses the current hidden activation as a representation of the current input (while we use it to represent the output). This requires additional learning of a transformation between the current representation and those in the past. The advantage of our approach is that we can scale to very large caches effortlessly.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">EXPERIMENTS</head><p>In this section, we evaluate our method on various language modeling datasets, which have different sizes and characteristics. On all datasets, we train a static recurrent neural network language model with LSTM units. We then use the hidden representations from this model to obtain our cache, which is interpolated with the static LSTM model. We also evaluate a unigram cache model interpolated with the static model as another baseline.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">SMALL SCALE EXPERIMENTS</head><p>Datasets. In this section, we describe experiments performed on two small datasets: the Penn Tree Bank ( <ref type="bibr" target="#b34">Marcus et al., 1993</ref>) and the wikitext2 (Merity et al., 2016) datasets. The Penn Tree Bank dataset is made of articles from the Wall Street Journal, contains 929k training tokens and has a vocabulary size of 10k. The wikitext2 dataset is derived from Wikipedia articles, contains 2M training tokens and has a vocabulary size of 33k. These datasets contain non-shuffled documents, therefore requiring models to capture inter-sentences dependencies to perform well.  <ref type="figure">Figure 4</ref>: Test perplexity as a function of the number of words in the cache, for our method and a unigram cache baseline. We observe that our approach can uses larger caches than the baseline.</p><p>Implementation details. We train recurrent neural network language models with 1024 LSTM units, regularized with dropout (probability of dropping out units equals to 0.65). We use the Adagrad algorithm, with a learning rate of 0.2, a batchsize of 20 and initial weight uniformly sampled in the range [−0.05, 0.05]. We clip the norm of the gradient to 0.1 and unroll the network for 30 steps. We consider cache sizes on a logarithmic scale, from 50 to 10, 000, and fit the cache hyperparameters on the validation set.</p><p>Results. We report the perplexity on the validation sets in <ref type="figure" target="#fig_0">Figures 2 and 3</ref>, for various values of hyperparameters, for linear interpolation and global normalization. First, we observe that on both datasets, the linear interpolation method performs slightly better than the global normalization approach. It is also easier to apply in practice, and we thus use this method in the remainder of this paper. In <ref type="table" target="#tab_2">Tables 1 and 2</ref>, we report the test perplexity of our approach and state-of-the-art models. Our approach is competitive with previous models, in particular with the pointer sentinel LSTM model of <ref type="bibr" target="#b35">Merity et al. (2016)</ref>. On Penn Tree Bank, we note that the improvement over the base model is similar for both methods. On the wikitext2 dataset, both methods obtain similar results when using the same cache size (100 words). Since our method is computationally cheap, it is easy to increase the cache to larger values (2, 000 words), leading to dramatic improvements (30% over the baseline, 12% over a small cache of 100 words).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">MEDIUM SCALE EXPERIMENTS</head><p>Datasets and implementation details. In this section, we describe experiments performed over two medium scale datasets: text8 and wikitext103. Both datasets are derived from Wikipedia, but different pre-processing were applied. The text8 dataset contains 17M training tokens and has a vocabulary size of 44k words, while the wikitext103 dataset has a training set of size 103M, and a vocabulary size of 267k words. We use the same setting as in the previous section, except for the batchsize (we use 128) and dropout parameters (we use 0.45 for text8 and 0.25 for wikitext103). Since both datasets have large vocabularies, we use the adaptive softmax ( <ref type="bibr" target="#b14">Grave et al., 2016</ref>) for faster training.</p><p>Results. We report the test perplexity as a function of the cache size in <ref type="figure">Figure 4</ref>, for the neural cache model and a unigram cache baseline. We observe that our approach can exploits larger cache sizes, compared to the baseline. In <ref type="table" target="#tab_2">Table 2</ref>, we observe that the improvement in perplexity of our method over the LSTM baseline on wikitext103 is smaller than for wikitext2 (approx. 16% v.s. 30%). The fact that improvements obtained with more advanced techniques decrease when the size of training data increases has already been observed by <ref type="bibr" target="#b13">Goodman (2001)</ref>. Both wikitext datasets sharing the same test set, we also observe that the LSTM baseline, trained on 103M tokens (wikitext103), strongly outperforms more sophisticated methods, trained on 2M tokens (wikitext2). For these two reasons, we believe that it is important to evaluate and compare methods on relatively large datasets.   </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">EXPERIMENTS ON THE LAMBADA DATASET</head><p>Finally, we report experiments carried on the lambada dataset, introduced by <ref type="bibr" target="#b40">Paperno et al. (2016)</ref>. This is a dataset of short passages extracted from novels. The goal is to predict the last word of the excerpt. This dataset was built so that human subjects solve the task perfectly when given the full context (approx. 4.6 sentences), but fail to do so when only given the sentence with the target word. Thus, most state-of-the-art language models fail on this dataset. The lambada training set contains approximately 200M tokens and has a vocabulary size of 93, 215. We report results for our method in <ref type="table" target="#tab_5">Table 3</ref>, as well the performance of baselines from <ref type="bibr" target="#b40">Paperno et al. (2016)</ref>. Adding a neural cache model to the LSTM baseline strongly improves the performance on the lambada dataset. We also observe in <ref type="figure" target="#fig_3">Figure 5</ref> that the best interpolation parameter between the static model and the cache is not the same for the development and control sets. This is due to the fact that more than 83% of passages of the development set include the target word, while this is true for only 14% of the control set. Ideally, a model should have strong results on both sets. One possible generalization of our model would be to adapt the interpolation parameter based on the current vector representation of the history h t .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">CONCLUSION</head><p>We presented the neural cache model to augment neural language models with a longer-term memory that dynamically updates the word probablilities based on the long-term context. A neural cache can be added on top of a pre-trained language model at negligible cost. Our experiments on both language modeling tasks and the challenging LAMBADA dataset shows that significant performance gains can be expected by adding this external memory component.</p><p>Technically, the neural cache models is similar to some recent memory-augmented neural networks such as pointer networks. However, its specific design makes it possible to avoid learning the memory lookup component. This makes the neural cache appealing since it can use larger cache sizes than memory-augment networks and can be applied as easily as traditional count-based caches.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Perplexity on the validation set of Penn Tree Bank for linear interpolation (left) and global normalization (right), for various values of hyperparameters θ, λ and α. We use a cache model of size 500. The base model has a validation perplexity of 86.9. The best linear interpolation has a perplexity of 74.6, while the best global normalization has a perplexity of 74.9.</figDesc><graphic url="image-1.png" coords="4,163.83,104.33,109.44,79.92" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Adaptive language models.</head><label></label><figDesc>Other adaptive language models have been proposed in the past: Kneser &amp; Steinbiss (1993) and Iyer &amp; Ostendorf (1999) dynamically adapt the parameters of their model to the recent history using different weight interpolation schemes. Bellegarda (2000) and Coccaro &amp; Jurafsky (1998) use latent semantic analysis to adapt their models to the current context. Similarly, topic features have been used with either maximum entropy models (Khudanpur &amp; Wu, 2000) or recurrent networks (Mikolov &amp; Zweig, 2012; Wang &amp; Cho, 2015). Finally, Lau et al. (1993) proposes to use pairs of distant of words to capture long-range dependencies. Memory augmented neural networks. In the context of sequence prediction, several memory augmented neural networks have obtained promising results (Sukhbaatar et al., 2015; Graves et al., 2014; Grefenstette et al., 2015; Joulin &amp; Mikolov, 2015). In particular, Sukhbaatar et al. (2015) stores a representation of the recent past and accesses it using an attention mechanism Bahdanau et al. (2014). Sukhbaatar et al. (2015) shows that this reduces the perplexity for language modeling.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Perplexity on the validation set of wikitext2 for linear interpolation (left) and global normalization (right), for various values of hyperparameters θ, λ and α. We use a cache model of size 2000. The base model has a validation perplexity of 104.2. The best linear interpolation has a perplexity of 72.1, while the best global normalization has a perplexity of 73.5.</figDesc><graphic url="image-3.png" coords="5,159.59,104.33,109.44,79.92" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 5 :</head><label>5</label><figDesc>Figure 5: Perplexity on the development and control sets of lambada, as a function of the interpolation parameters λ.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 2 :</head><label>2</label><figDesc>Test perplexity on the wikitext datasets. The two datasets share the same validation and test sets, making all the results comparable.</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Perplexity on the text8 and lambada datasets. WB5 stands for 5-gram language model 
+with Witten-Bell smoothing. 
+
+</table></figure>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Neural machine translation by jointly learning to align and translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.0473</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">A maximum likelihood approach to continuous speech recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Lalit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Frederick</forename><surname>Bahl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert L</forename><surname>Jelinek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mercer</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1983" />
+			<publisher>PAMI</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Exploiting latent semantic information in statistical language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Jerome R Bellegarda</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE</title>
+		<meeting>the IEEE</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">A neural probabilistic language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Réjean</forename><surname>Ducharme</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pascal</forename><surname>Vincent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Jauvin</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003" />
+			<publisher>JMLR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">The mathematics of statistical machine translation: Parameter estimation. Computational linguistics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent J Della</forename><surname>Peter F Brown</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen A Della</forename><surname>Pietra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert L</forename><surname>Pietra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mercer</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">A thorough examination of the cnn/daily mail reading comprehension task</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Bolton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher D</forename><surname>Manning</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.02858</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Empirical evaluation of gated recurrent neural networks on sequence modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junyoung</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caglar</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.3555</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Towards better integration of semantic predictors in statistical language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><surname>Coccaro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Jurafsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICSLP. Citeseer</title>
+		<imprint>
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Adaptive language modeling using minimum discriminant estimation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vincent</forename><forename type="middle">Della</forename><surname>Stephen Della Pietra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert</forename><forename type="middle">L</forename><surname>Pietra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Salim</forename><surname>Mercer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Roukos</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the workshop on Speech and Natural Language</title>
+		<meeting>the workshop on Speech and Natural Language</meeting>
+		<imprint>
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Evaluating prerequisite qualities for learning end-to-end dialog systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jesse</forename><surname>Dodge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andreea</forename><surname>Gane</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiang</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><surname>Miller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arthur</forename><surname>Szlam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.06931</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Adaptive subgradient methods for online learning and stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Duchi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Elad</forename><surname>Hazan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoram</forename><surname>Singer</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2011" />
+			<publisher>JMLR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Finding structure in time</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Jeffrey L Elman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Cognitive science</title>
+		<imprint>
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">A theoretically grounded application of dropout in recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yarin</forename><surname>Gal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zoubin</forename><surname>Ghahramani</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1512.05287</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">A bit of progress in language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Joshua T Goodman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Speech &amp; Language</title>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Efficient softmax approximation for gpus</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edouard</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Moustapha</forename><surname>Cissé</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Grangier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hervé</forename><surname>Jégou</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.04309</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Speech recognition with deep recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mohamed</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICASSP</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Wayne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ivo</forename><surname>Danihelka</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1410.5401</idno>
+		<title level="m">Neural turing machines</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Learning to transduce with unbounded memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karl</forename><forename type="middle">Moritz</forename><surname>Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mustafa</forename><surname>Suleyman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1828" to="1836" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title level="m" type="main">Pointing the unknown words</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caglar</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sungjin</forename><surname>Ahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ramesh</forename><surname>Nallapati</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.08148</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Teaching machines to read and comprehend</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karl</forename><surname>Moritz Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Kocisky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lasse</forename><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Will</forename><surname>Kay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mustafa</forename><surname>Suleyman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Modeling long distance dependence in language: Topic mixtures versus dynamic cache models. IEEE Transactions on speech and audio processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Rukmini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mari</forename><surname>Iyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ostendorf</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">A dynamic language model for speech recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Frederick</forename><surname>Jelinek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bernard</forename><surname>Merialdo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Salim</forename><surname>Roukos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Strauss</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">HLT</title>
+		<imprint>
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Inferring algorithmic patterns with stack-augmented recurrent nets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="190" to="198" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">Exploring the limits of language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Wu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1602.02410</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Text understanding with the attention sum reader network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rudolf</forename><surname>Kadlec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Schmid</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ondrej</forename><surname>Bajgar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Kleindienst</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.01547</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Estimation of probabilities from sparse data for the language model component of a speech recognizer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Slava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Katz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ICASSP</title>
+		<imprint>
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Maximum entropy techniques for exploiting syntactic, semantic and collocational dependencies in language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sanjeev</forename><surname>Khudanpur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Speech &amp; Language</title>
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Improved backing-off for m-gram language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Reinhard</forename><surname>Kneser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hermann</forename><surname>Ney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICASSP</title>
+		<imprint>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">On the dynamic adaptation of stochastic language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Reinhard</forename><surname>Kneser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Volker</forename><surname>Steinbiss</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICASSP</title>
+		<imprint>
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Speech recognition and the frequency of recently used words: A modified markov model for natural language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roland</forename><surname>Kuhn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 12th conference on Computational linguistics</title>
+		<meeting>the 12th conference on Computational linguistics</meeting>
+		<imprint>
+			<date type="published" when="1988" />
+			<biblScope unit="volume">1</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">A cache-based natural language model for speech recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roland</forename><surname>Kuhn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Renato</forename><forename type="middle">De</forename><surname>Mori</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1990" />
+			<publisher>PAMI</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Probabilistic models of short and long distance word dependencies in running text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julien</forename><surname>Kupiec</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the workshop on Speech and Natural Language</title>
+		<meeting>the workshop on Speech and Natural Language</meeting>
+		<imprint>
+			<date type="published" when="1989" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Trigger-based language models: A maximum entropy approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raymond</forename><surname>Lau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronald</forename><surname>Rosenfeld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Salim</forename><surname>Roukos</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICASSP</title>
+		<imprint>
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<monogr>
+		<title level="m" type="main">Building a large annotated corpus of english: The penn treebank. Computational linguistics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mary</forename><forename type="middle">Ann</forename><surname>Mitchell P Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Beatrice</forename><surname>Marcinkiewicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Santorini</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title level="m" type="main">Pointer sentinel mixture models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.07843</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Context dependent recurrent neural network language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Zweig</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SLT</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Cernock`Cernock`y, and Sanjeev Khudanpur. Recurrent neural network based language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Karafiát</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukas</forename><surname>Burget</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">INTERSPEECH</title>
+		<imprint>
+			<date type="published" when="2010-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Cernock`y. Empirical evaluation and combination of advanced language modeling techniques</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anoop</forename><surname>Deoras</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Kombrink</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukas</forename><surname>Burget</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Cernock</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">INTERSPEECH</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Mathieu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marc&amp;apos;aurelio</forename><surname>Ranzato</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.7753</idno>
+		<title level="m">Learning longer memory in recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Denis</forename><surname>Paperno</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Germán</forename><surname>Kruszewski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Angeliki</forename><surname>Lazaridou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ngoc</forename><surname>Quan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raffaella</forename><surname>Pham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sandro</forename><surname>Bernardi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marco</forename><surname>Pezzelle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gemma</forename><surname>Baroni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raquel</forename><surname>Boleda</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Fernández</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.06031</idno>
+		<title level="m">The lambada dataset: Word prediction requiring a broad discourse context</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<monogr>
+		<title level="m" type="main">A maximum entropy approach to adaptive statistical language modeling. Computer, Speech and Language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronald</forename><surname>Rosenfeld</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Dialogue act modeling for automatic tagging and recognition of conversational speech</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andreas</forename><surname>Stolcke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><surname>Coccaro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rebecca</forename><surname>Bates</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Taylor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carol</forename><surname>Van Ess-Dykema</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Ries</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Elizabeth</forename><surname>Shriberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Jurafsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rachel</forename><surname>Martin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marie</forename><surname>Meteer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational linguistics</title>
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">End-to-end memory networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sainbayar</forename><surname>Sukhbaatar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Szlam</forename><surname>Arthur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rob</forename><surname>Fergus</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">Pointer networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Meire</forename><surname>Fortunato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Navdeep</forename><surname>Jaitly</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tian</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.03729</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">Larger-context language modelling. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<monogr>
+		<title level="m" type="main">Backpropagation through time: what it does and how to do it</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Paul J Werbos</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">An efficient gradient-based algorithm for on-line training of recurrent network trajectories</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ronald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jing</forename><surname>Williams</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Peng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wojciech</forename><surname>Zaremba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.2329</idno>
+		<title level="m">Ilya Sutskever, and Oriol Vinyals. Recurrent neural network regularization</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julian</forename><surname>Georg Zilly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh</forename><forename type="middle">Kumar</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Koutník</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.03474</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">Recurrent highway networks. arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

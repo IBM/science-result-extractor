@@ -1,0 +1,771 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:04+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Simple and Effective Multi-Paragraph Reading Comprehension</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Clark</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">Allen Institute for Artificial Intelligence</orgName>
+								<orgName type="institution">University of Washington</orgName>
+							</affiliation>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matt</forename><surname>Gardner</surname></persName>
+							<email>mattg@allenai.org</email>
+							<affiliation key="aff0">
+								<orgName type="department">Allen Institute for Artificial Intelligence</orgName>
+								<orgName type="institution">University of Washington</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Simple and Effective Multi-Paragraph Reading Comprehension</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>We consider the problem of adapting neural paragraph-level question answering models to the case where entire documents are given as input. Our proposed solution trains models to produce well calibrated confidence scores for their results on individual paragraphs. We sample multiple paragraphs from the documents during training, and use a shared-normalization training objective that encourages the model to produce globally correct output. We combine this method with a state-of-the-art pipeline for training models on document QA data. Experiments demonstrate strong performance on several document QA datasets. Overall, we are able to achieve a score of 71.3 F1 on the web portion of Triv-iaQA, a large improvement from the 56.7 F1 of the previous best system.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Teaching machines to answer arbitrary usergenerated questions is a long-term goal of natural language processing. For a wide range of questions, existing information retrieval methods are capable of locating documents that are likely to contain the answer. However, automatically extracting the answer from those texts remains an open challenge. The recent success of neural models at answering questions given a related paragraph ( <ref type="bibr" target="#b25">Wang et al., 2017b;</ref><ref type="bibr" target="#b21">Tan et al., 2017</ref>) suggests neural models have the potential to be a key part of a solution to this problem. Training and testing neural models that take entire documents as input is extremely computationally expensive, so typically this requires adapting a paragraph-level model to process document-level input.</p><p>There are two basic approaches to this task. Pipelined approaches select a single paragraph * Work completed while interning at the Allen Institute for Artificial Intelligence from the input documents, which is then passed to the paragraph model to extract an answer ( <ref type="bibr" target="#b13">Joshi et al., 2017;</ref><ref type="bibr" target="#b24">Wang et al., 2017a</ref>). Confidence based methods apply the model to multiple paragraphs and returns the answer with the highest confidence ( <ref type="bibr" target="#b3">Chen et al., 2017)</ref>. Confidence methods have the advantage of being robust to errors in the (usually less sophisticated) paragraph selection step, however they require a model that can produce accurate confidence scores for each paragraph. As we shall show, naively trained models often struggle to meet this requirement.</p><p>In this paper we start by proposing an improved pipelined method which achieves state-of-the-art results. Then we introduce a method for training models to produce accurate per-paragraph confidence scores, and we show how combining this method with multiple paragraph selection further increases performance.</p><p>Our pipelined method focuses on addressing the challenges that come with training on documentlevel data. We propose a TF-IDF heuristic to select which paragraphs to train and test on. Since annotating entire documents is very expensive, data of this sort is typically distantly supervised, meaning only the answer text, not the answer spans, are known. To handle the noise this creates, we use a summed objective function that marginalizes the model's output over all locations the answer text occurs. We apply this approach with a model design that integrates some recent ideas in reading comprehension models, including selfattention ( <ref type="bibr" target="#b4">Cheng et al., 2016</ref>) and bi-directional attention ( <ref type="bibr" target="#b20">Seo et al., 2016)</ref>.</p><p>Our confidence method extends this approach to better handle the multi-paragraph setting. Previous approaches trained the model on questions paired with paragraphs that are known a priori to contain the answer. This has several downsides: the model is not trained to produce low confidence scores for paragraphs that do not contain an answer, and the training objective does not require confidence scores to be comparable between paragraphs. We resolve these problems by sampling paragraphs from the context documents, including paragraphs that do not contain an answer, to train on. We then use a shared-normalization objective where paragraphs are processed independently, but the probability of an answer candidate is marginalized over all paragraphs sampled from the same document. This requires the model to produce globally correct output even though each paragraph is processed independently.</p><p>We evaluate our work on TriviaQA web <ref type="bibr" target="#b13">(Joshi et al., 2017)</ref>, a dataset of questions paired with web documents that contain the answer. We achieve 71.3 F1 on the test set, a 15 point absolute gain over prior work. We additionally perform an ablation study on our pipelined method, and we show the effectiveness of our multi-paragraph methods on TriviaQA unfiltered and a modified version of SQuAD ( <ref type="bibr" target="#b19">Rajpurkar et al., 2016)</ref> where only the correct document, not the correct paragraph, is known. We also build a demonstration of our method by combining our model with a reimplementation of the retrieval mechanism used in TriviaQA to build a prototype end-to-end general question answering system 1 . We release our code 2 to facilitate future work in this field.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Pipelined Method</head><p>In this section we propose an approach to training pipelined question answering systems, where a single paragraph is heuristically extracted from the context document(s) and passed to a paragraphlevel QA model. We suggest using a TF-IDF based paragraph selection method and argue that a summed objective function should be used to handle noisy supervision. We also propose a refined model that incorporates some recent modeling ideas for reading comprehension systems.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Paragraph Selection</head><p>Our paragraph selection method chooses the paragraph that has the smallest TF-IDF cosine distance with the question. Document frequencies are computed using just the paragraphs within the relevant documents, not the entire corpus. The advantage of this approach is that if a question word is prevalent in the context, for example if the word "tiger" is prevalent in the document(s) for the question "What is the largest living subspecies of the tiger?", greater weight will be given to question words that are less common, such as "largest" or "sub-species". Relative to selecting the first paragraph in the document, this improves the chance of the selected paragraph containing the correct answer from 83.1% to 85.1% on TriviaQA web. We also expect this approach to do a better job of selecting paragraphs that relate to the question since it is explicitly selecting paragraphs that contain question words.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Handling Noisy Labels</head><p>Question: Which British general was killed at Khartoum in 1885? Answer: Gordon Context: In February 1885 Gordon returned to the Sudan to evacuate Egyptian forces. Khartoum came under siege the next month and rebels broke into the city, killing Gordon and the other defenders. The British public reacted to his death by acclaiming 'Gordon of Khartoum', a saint. However, historians have suggested that Gordon defied orders and refused to evacuate... <ref type="figure">Figure 1</ref>: Noisy supervision causes many spans of text that contain the answer, but are not situated in a context that relates to the question, to be labelled as correct answer spans (highlighted in red). This risks distracting the model from learning from more relevant spans (highlighted in green).</p><p>In a distantly supervised setup we label all text spans that match the answer text as being correct. This can lead to training the model to select unwanted answer spans. <ref type="figure">Figure 1</ref> contains an example. To handle this difficulty, we use a summed objective function similar to the one from <ref type="bibr" target="#b14">Kadlec et al. (2016)</ref>, that optimizes the sum of the probabilities of all answer spans. The models we consider here work by independently predicting the start and end token of the answer span, so we take this approach for both predictions. Thus the objective for the span start boundaries becomes:</p><formula xml:id="formula_0">− log k∈A e s k n i=1 e s i</formula><p>where A is the set of tokens that start an answer span, n is the number of context tokens, and s i is a scalar score computed by the model for span i. This optimizes the negative log-likelihood of selecting any correct start token. This objective is agnostic to how the model distributes probability mass across the possible answer spans, thus the model can "choose" to focus on only the more relevant spans. We use a model with the following layers (shown in <ref type="figure" target="#fig_0">Figure 2</ref>):</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Model</head><p>Embedding: We embed words using pretrained word vectors. We also embed the characters in each word into size 20 vectors which are learned, and run a convolution neural network followed by max-pooling to get character-derived embeddings for each word. The character-level and word-level embeddings are then concatenated and passed to the next layer. We do not update the word embeddings during training.</p><p>Pre-Process: A shared bi-directional GRU ( <ref type="bibr" target="#b5">Cho et al., 2014</ref>) is used to map the question and passage embeddings to contextaware embeddings.</p><p>Attention: The bi-directional attention mechanism from the Bi-Directional Attention Flow (BiDAF) model ( <ref type="bibr" target="#b20">Seo et al., 2016</ref>) is used to build a query-aware context representation. Let h i be the vector for context word i, q j be the vector for question word j, and n q and n c be the lengths of the question and context respectively. We compute attention between context word i and question word j as:</p><formula xml:id="formula_1">a ij = w 1 · h i + w 2 · q j + w 3 · (h i q j )</formula><p>where w 1 , w 2 , and w 3 are learned vectors and is element-wise multiplication. We then compute an attended vector c i for each context token as:</p><formula xml:id="formula_2">p ij = e a ij nq j=1 e a ij c i = nq j=1 q j p ij</formula><p>We also compute a query-to-context vector q c :</p><formula xml:id="formula_3">m i = max 1≤j≤nq a ij p i = e m i nc i=1 e m i q c = nc i=1 h i p i</formula><p>The final vector computed for each token is built by concatenating h i , c i , h i c i , and q c c i . In our model we subsequently pass the result through a linear layer with ReLU activations.</p><p>Self-Attention: Next we use a layer of residual self-attention. The input is passed through another bi-directional GRU. Then we apply the same attention mechanism, only now between the passage and itself. In this case we do not use query-tocontext attention and we set a ij = −inf if i = j.</p><p>As before, we pass the concatenated output through a linear layer with ReLU activations. This layer is applied residually, so this output is additionally summed with the input.</p><p>Prediction: In the last layer of our model a bidirectional GRU is applied, followed by a linear layer that computes answer start scores for each token. The hidden states of that layer are concatenated with the input and fed into a second bidirectional GRU and linear layer to predict answer end scores. The softmax operation is applied to the start and end scores to produce start and end probabilities, and we optimize the negative loglikelihood of selecting correct start and end tokens.</p><p>Dropout: We also employ variational dropout, where a randomly selected set of hidden units are set to zero across all time steps during training ( <ref type="bibr" target="#b7">Gal and Ghahramani, 2016)</ref>. We dropout the input to all the GRUs, including the word embeddings, as well as the input to the attention mechanisms, at a rate of 0.2.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Confidence Method</head><p>We adapt this model to the multi-paragraph setting by using the un-normalized and un-exponentiated (i.e., before the softmax operator is applied) score given to each span as a measure of the model's confidence. For the boundary-based models we use here, a span's score is the sum of the start and end score given to its start and end token. At test time we run the model on each paragraph and select the answer span with the highest confidence. This is the approach taken by <ref type="bibr" target="#b3">Chen et al. (2017)</ref>.</p><p>Applying this approach without altering how the model is trained is, however, a gamble; the training objective does not require these confidence scores to be comparable between paragraphs. Our experiments in Section 5 show that in practice these models can be very poor at providing good confidence scores. <ref type="table">Table 1</ref> shows some qualitative examples of this phenomenon.</p><p>We hypothesize that there are two key reasons a model's confidence scores might not be well calibrated. First, for models trained with the softmax objective, the pre-softmax scores for all spans can be arbitrarily increased or decreased by a constant value without changing the resulting softmax probability distribution. As a result, nothing prevents models from producing scores that are arbitrarily all larger or all smaller for one paragraph than another. Second, if the model only sees paragraphs that contain answers, it might become too confident in heuristics or patterns that are only effective when it is known a priori that an answer exists. For example, in <ref type="table">Table 1</ref> we observe that the model will assign high confidence values to spans that strongly match the category of the answer, even if the question words do not match the context. This might work passably well if an answer is present, but can lead to highly over-confident extractions in other cases. Similar kinds of errors have been observed when distractor sentences are added to the context ( <ref type="bibr" target="#b12">Jia and Liang, 2017)</ref>.</p><p>We experiment with four approaches to training models to produce comparable confidence scores, shown in the follow subsections. In all cases we will sample paragraphs that do not contain an answer as additional training points.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Shared-Normalization</head><p>In this approach all paragraphs are processed independently as usual. However, a modified objective function is used where the normalization factor in the softmax operation is shared between all paragraphs from the same context. Therefore, the probability that token a from paragraph p starts an answer span is computed as:</p><formula xml:id="formula_4">e sap j∈P n j i=1 e s ij</formula><p>where P is the set of paragraphs that are from the same context as p, and s ij is the score given to token i from paragraph j. We train on this objective by including multiple paragraphs from the same context in each mini-batch. This is similar to simply feeding the model multiple paragraphs from each context concatenated together, except that each paragraph is processed independently until the normalization step. The key idea is that this will force the model to produce scores that are comparable between paragraphs, even though it does not have access to information about the other paragraphs being considered.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Merge</head><p>As an alternative to the previous method, we experiment with concatenating all paragraphs sampled from the same context together during training. A paragraph separator token with a learned embedding is added before each paragraph. Our motive is to test whether simply exposing the model to more text will teach the model to be more adept at ignoring irrelevant text.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">No-Answer Option</head><p>We also experiment with allowing the model to select a special "no-answer" option for each paragraph. First, note that the independent-bounds objective can be re-written as:</p><formula xml:id="formula_5">− log e sa n i=1 e s i − log e g b n j=1 e g j = − log e sag b n i=1 n j=1 e s i g j</formula><p>where s j and g j are the scores for the start and end bounds produced by the model for token j, and a and b are the correct start and end tokens. We have the model compute another score, z, to represent</p><note type="other">Question Low Confidence Correct Extraction High Confidence Incorrect Extraction</note><p>When is the Members Debate held?</p><p>Immediately after Decision Time a "Members Debate" is held, which lasts for 45 minutes...</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>...majority of the Scottish electorate voted for it in a referendum to be held on 1 March</head><p>1979 that represented at least...</p><p>How many tree species are in the rainforest?</p><p>...plant species is the highest on Earth with one 2001 study finding a quarter square kilometer (62 acres) of Ecuadorian rainforest supports more than 1,100 tree species</p><p>The affected region was approximately 1,160,000 square miles (3,000,000 km2) of rainforest, compared to 734,000 square miles Who was Warsz?</p><p>....In actuality, Warsz was a 12th/13th century nobleman who owned a village located at the modern....</p><p>One of the most famous people born in Warsaw was Maria Sklodowska -Curie, who achieved international... ...many species of lobates have four auricles, gelatinous projections edged with cilia that produce water currents that help direct microscopic prey toward the mouth...</p><p>The Cestida are ribbon -shaped planktonic animals, with the mouth and aboral organ aligned in the middle of opposite edges of the ribbon <ref type="table">Table 1</ref>: Examples from SQuAD where a paragraph-level model was less confident in a correct extraction from one paragraph (left) than in an incorrect extraction from another (right). Even if the passage has no correct answer, the model still assigns high confidence to phrases that match the category the question is asking about. Because the confidence scores are not well-calibrated, this confidence is often higher than the confidence assigned to the correct answer span.</p><p>the weight given to a "no-answer" possibility. Our revised objective function becomes:</p><formula xml:id="formula_6">− log (1 − δ)e z + δe sag b e z + n i=1 n j=1 e s i g j</formula><p>where δ is 1 if an answer exists and 0 otherwise. If there are multiple answer spans we use the same objective, except the numerator includes the summation over all answer start and end tokens. We compute z by adding an extra layer at the end of our model. We compute a soft attention over the span start scores, p i = e s i n j=1 e s j , and then take the weighted sum of the hidden states from the GRU used to generate those scores, h i , giving</p><formula xml:id="formula_7">v 1 = n i=1 h i p i .</formula><p>We compute a second vector, v 2 in the same way using the end scores. Finally, a step of learned attention is performed on the output of the Self-Attention layer that computes:</p><formula xml:id="formula_8">a i = w · h i p i = e a i n j=1 e a j v 3 = n i=1 h i p i</formula><p>where w is a learned weight vector and h i is the vector for token i. We concatenate these three vectors and use them as input to a two layer network with an 80 dimensional hidden layer and ReLU activations that produces z as its only output.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Sigmoid</head><p>As a final baseline, we consider training models with the sigmoid loss objective function. That is, we compute a start/end probability for each token in the context by applying the sigmoid function to the start/end scores of each token. A cross entropy loss is used on each individual probability. The intuition is that, since the scores are being evaluated independently of one another, they will be comparable between different paragraphs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Experimental Setup</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Datasets</head><p>We evaluate our approach on three datasets: TriviaQA unfiltered ( <ref type="bibr" target="#b13">Joshi et al., 2017)</ref>, a dataset of questions from trivia databases paired with documents found by completing a web search of the questions; TriviaQA web, a dataset derived from TriviaQA unfiltered by treating each questiondocument pair where the document contains the question answer as an individual training point; and SQuAD ( <ref type="bibr" target="#b19">Rajpurkar et al., 2016)</ref>, a collection of Wikipedia articles and crowdsourced questions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Preprocessing</head><p>We note that for TriviaQA web we do not subsample as was done by <ref type="bibr" target="#b13">Joshi et al. (2017)</ref>, instead training on the full 530k question-document training pairs. We also observed that the metrics for TriviaQA are computed after applying a small amount of text normalization (stripping punctuation, removing articles, ect.) to both the ground truth text and the predicted text. As a result, some spans of text that would have been considered an exact match after normalization were not marked as answer spans during preprocessing, which only detected exact string matches. We fix this issue by labeling all spans of text that would have been considered an exact match by the official evaluation script as an answer span.</p><p>In TriviaQA, documents often contain many small paragraphs, so we merge paragraphs together as needed to get paragraphs of up to a target size. We use a maximum size of 400 unless stated otherwise. Paragraph separator tokens with learned embeddings are added between merged paragraphs to preserve formatting information.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Sampling</head><p>Our confidence-based approaches are all trained by sampling paragraphs, including paragraphs that do not contain an answer, during training. For SQuAD and TriviaQA web we take the top four paragraphs ranked by TF-IDF score for each question-document pair. We then sample two different paragraphs from this set each epoch. Since we observe that the higher-ranked paragraphs are much more likely to contain the context needed to answer the question, we sample the highest ranked paragraph that contains an answer twice as often as the others. For the merge and shared-norm approaches, we additionally require that at least one of the paragraphs contains an answer span.</p><p>For TriviaQA unfiltered, where we have multiple documents for each question, we find it beneficial to use a more sophisticated paragraph ranking function. In particular, we use a linear function with five features: the TF-IDF cosine distance, whether the paragraph was the first in its document, how many tokens occur before it, and the number of case insensitive and case sensitive matches with question words. The function is trained on the distantly supervised objective of selecting paragraphs that contain at least one answer span. We select the top 16 paragraphs for each question and sample pairs of paragraphs as before.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Implementation</head><p>We train the model with the Adadelta optimizer <ref type="bibr" target="#b28">(Zeiler, 2012</ref>) with a batch size 60 for TriviaQA and 45 for SQuAD. At test time we select the most probable answer span of length less than Model EM F1 baseline ( <ref type="bibr" target="#b13">Joshi et al., 2017)</ref>   <ref type="table">Table 2</ref>: Results on TriviaQA web using our pipelined method. We significantly improve upon the baseline by combining the preprocessing procedures, TF-IDF paragraph selection, the sum objective, and our model <ref type="bibr">de- sign.</ref> or equal to 8 for TriviaQA and 17 for SQuAD. The GloVe 300 dimensional word vectors released by <ref type="bibr" target="#b18">Pennington et al. (2014)</ref> are used for word embeddings. On SQuAD, we use a dimensionality of size 100 for the GRUs and of size 200 for the linear layers employed after each attention mechanism. We find for TriviaQA, likely because there is more data, using a larger dimensionality of 140 for each GRU and 280 for the linear layers is beneficial. During training, we maintain an exponential moving average of the weights with a decay rate of 0.999. We use the weight averages at test time.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Results</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">TriviaQA Web</head><p>First, we do an ablation study on TriviaQA web to show the effects of our proposed methods for our pipeline model. We start with an implementation of the baseline from ( <ref type="bibr" target="#b13">Joshi et al., 2017)</ref>. Their system selects paragraphs by taking the first 400 tokens of each document, uses BiDAF ( <ref type="bibr" target="#b20">Seo et al., 2016</ref>) as the paragraph model, and selects a random answer span from each paragraph each epoch to be used in BiDAF's cross entropy loss function during training. Paragraphs of size 800 are used at test time. As shown in <ref type="table">Table 2</ref>, our implementation of this approach outperforms the results reported by <ref type="bibr" target="#b13">Joshi et al. (2017)</ref> significantly, likely because we are not subsampling the data. We find both TF-IDF ranking and the sum objective to be effective; even without changing the model we achieve state-of-the-art results. Using our refined model increases the gain by another 4 points.</p><p>Next we show the results of our confidencebased approaches. In this setting we group each document's text into paragraphs of at most 400 tokens and rank them using our TF-IDF heuristic. Then we measure the performance of our proposed  <ref type="figure">Figure 3</ref>: Results on TriviaQA web (left) and verified TriviaQA web (right) when applying our models to multiple paragraphs from each document. The shared-norm, merge, and no-answer training methods improve the model's ability to utilize more text, with the shared-norm method being significantly ahead of the others on the verified set and tied with the merge approach on the general set.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>All  approaches as the model is used to independently process an increasing number of these paragraphs and the model's most confident answer is returned. We additionally measure performance on the verified portion of TriviaQA, a small subset of the question-document pairs in TriviaQA web where humans have manually verified that the document contains sufficient context to answer the question.</p><p>The results are shown in <ref type="figure">Figure 3</ref>.</p><p>On these datasets even the model trained without any of the proposed training methods ("none") improves as it is allowed to use more text, showing it does a passable job at focusing on the correct paragraph. The no-answer option training approach lead to a significant improvement, and the shared-norm and merge approach are even better. On the verified set, the shared-norm approach is solidly ahead of the other options. This suggests the shared-norm model is better at extracting answers when it is clearly stated in the text, but worse at guessing the answer in other cases.</p><p>We use the shared-norm approach for evaluation on the TriviaQA test set. We found that increasing the paragraph size to 800 at test time, and re-training the model on paragraphs of size 600, was slightly beneficial, allowing our model to reach 66.04 EM and 70.98 F1 on the dev set. We submitted this model to be evaluated on the TriviaQA test set and achieved 66.37 EM and 71.32 F1, firmly ahead of prior work, as shown in Table 3. Note that human annotators have estimated that only 75.4% of the question-document pairs contain sufficient evidence to answer the question ( <ref type="bibr" target="#b13">Joshi et al., 2017)</ref>, which suggests we are approaching the upper bound for this task. However, the score of 83.7 F1 on the verified set suggests that there is still room for improvement.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">TriviaQA Unfiltered</head><p>Next we apply our confidence methods to TriviaQA unfiltered. This dataset is of particular interest because the system is not told which document contains the answer, so it provides a plausible simulation of attempting to answer a question using a document retrieval system. We show the same graph as before for this dataset in <ref type="figure">Figure 4</ref>. On this dataset it is more important to train the model to produce well calibrated confidence scores. Note the base model starts to lose performance as more paragraphs are used, showing that errors are being caused by the model being overly confident in incorrect extractions.  <ref type="table">Table 4</ref>: Results on the standard SQuAD dataset. The test scores place our model as 8th on the SQuAD leader board among non-ensemble models <ref type="bibr">3</ref> . Training with the proposed multi-paragraph approaches only leads to a marginal drop in performance in this setting.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">SQuAD</head><p>We additionally evaluate our model on SQuAD. SQuAD questions were not built to be answered independently of their context paragraph, which makes it unclear how effective of an evaluation tool they can be for document-level question answering. To assess this we manually label 500 random questions from the training set. We categorize questions as:</p><p>1. Context-independent, meaning it can be understood independently of the paragraph.</p><p>2. Document-dependent, meaning it can be understood given the article's title. For example, "What individual is the school named after?" for the document "Harvard University".</p><p>3. Paragraph-dependent, meaning it can only be understood given its paragraph. For example, "What was the first step in the reforms?".  <ref type="figure">Figure 5</ref>: Results for our confidence methods on document-level SQuAD. The base model does poorly in this case, rapidly losing performance once more than two paragraphs are used. While all our approaches had some benefit, the shared-norm model is the strongest, and is the only one to not lose performance as large numbers of paragraphs are used.</p><p>We find 67.4% of the questions to be contextindependent, 22.6% to be document-dependent, and the remaining 10% to be paragraphdependent. The many document-dependent questions stem from the fact that questions are frequently about the subject of the document, so the article's title is often sufficient to resolve coreferences or ambiguities that appear in the question. Since a reasonably high fraction of the questions can be understood given the document they are from, and to isolate our analysis from the retrieval mechanism used, we choose to evaluate on the document-level. We build documents by concatenating all the paragraphs in SQuAD from the same article together into a single document.</p><p>The performance of our models given the correct paragraph (i.e., in the standard SQuAD setting), is shown in <ref type="table">Table 4</ref>. Our paragraph-level model is competitive on this task, and our variations to handle the multi-paragraph setting only cause a minor loss of performance.</p><p>We graph the document-level performance in <ref type="figure">Figure 5</ref>. For SQuAD, we find it crucial to employ one of the suggested confidence training techniques. The base model starts to drop in performance once more than two paragraphs are used. However, the shared-norm approach is able to reach a peak performance of 72.37 F1 and 64.08 EM given 15 paragraphs. Given our estimate that 10% of the questions are ambiguous if the paragraph is unknown, our approach appears to have adapted to the document-level task very well.</p><p>Finally, we compare the shared-norm model with the document-level result reported by <ref type="bibr" target="#b3">Chen et al. (2017)</ref>. We re-evaluate our model using the documents used by <ref type="bibr" target="#b3">Chen et al. (2017)</ref>, which consist of the same Wikipedia articles SQuAD was built from, but downloaded at different dates. The advantage of this dataset is that it does not allow the model to know a priori which paragraphs were filtered out during the construction of SQuAD. The disadvantage is that some of the articles have been edited since the questions were written, so some questions may no longer be answerable. Our model achieves 59.14 EM and 67.34 F1 on this dataset, which significantly outperforms the 49.7 EM reported by <ref type="bibr" target="#b3">Chen et al. (2017)</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Discussion</head><p>We found that models that have only been trained on answer-containing paragraphs can perform very poorly in the multi-paragraph setting. The results were particularly bad for SQuAD, we think this is partly because the paragraphs are shorter, so the model had less exposure to irrelevant text. In general, we found the shared-norm approach to be the most effective way to resolve this problem. The no-answer and merge approaches were moderately effective, but we note that they do not resolve the scaling problem inherent to the softmax objective we discussed in Section 3, which might be why they lagged behind. The sigmoid objective function reduces the paragraph-level performance considerably, especially on the TriviaQA datasets. We suspect this is because it is vulnerable to label noise, as discussed in Section 2.2.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Related Work</head><p>Reading Comprehension Datasets. The state of the art in reading comprehension has been rapidly advanced by neural models, in no small part due to the introduction of many large datasets. The first large scale datasets for training neural reading comprehension models used a Cloze-style task, where systems must predict a held out word from a piece of text ( <ref type="bibr" target="#b8">Hermann et al., 2015;</ref><ref type="bibr" target="#b10">Hill et al., 2015)</ref>. Additional datasets including SQuAD <ref type="bibr">(Ra- jpurkar et al., 2016)</ref>, <ref type="bibr">WikiReading (Hewlett et al., 2016)</ref>, MS Marco ( <ref type="bibr" target="#b16">Nguyen et al., 2016)</ref> and TriviaQA ( <ref type="bibr" target="#b13">Joshi et al., 2017</ref>) provided more realistic questions. Another dataset of trivia questions, Quasar-T ( <ref type="bibr" target="#b6">Dhingra et al., 2017)</ref>, was introduced recently that uses <ref type="bibr">ClueWeb09 (Callan et al., 2009)</ref> as its source for documents. In this work we choose to focus on SQuAD and TriviaQA.</p><p>Neural Reading Comprehension. Neural reading comprehension systems typically use some form of attention ( <ref type="bibr" target="#b23">Wang and Jiang, 2016)</ref>, although alternative architectures exist <ref type="bibr" target="#b3">(Chen et al., 2017;</ref><ref type="bibr" target="#b27">Weissenborn et al., 2017b</ref>). Our model follows this approach, but includes some recent advances such as variational dropout ( <ref type="bibr" target="#b7">Gal and Ghahramani, 2016)</ref> and bi-directional attention ( <ref type="bibr" target="#b20">Seo et al., 2016)</ref>. Self-attention has been used in several prior works <ref type="bibr" target="#b4">(Cheng et al., 2016;</ref><ref type="bibr" target="#b25">Wang et al., 2017b;</ref><ref type="bibr" target="#b17">Pan et al., 2017)</ref>. Our approach to allowing a reading comprehension model to produce a per-paragraph no-answer score is related to the approach used in the BiDAF-T ( <ref type="bibr" target="#b15">Min et al., 2017</ref>) model to produce per-sentence classification scores, although we use an attentionbased method instead of max-pooling.</p><p>Open QA. Open question answering has been the subject of much research, especially spurred by the TREC question answering track ( <ref type="bibr" target="#b22">Voorhees et al., 1999</ref>). Knowledge bases can be used, such as in ( <ref type="bibr" target="#b1">Berant et al., 2013)</ref>, although the resulting systems are limited by the quality of the knowledge base. Systems that try to answer questions using natural language resources such as YodaQA <ref type="bibr" target="#b0">(Baudiš, 2015)</ref> typically use pipelined methods to retrieve related text, build answer candidates, and pick a final output.</p><p>Neural Open QA. Open question answering with neural models was considered by <ref type="bibr" target="#b3">Chen et al. (2017)</ref>, where researchers trained a model on SQuAD and combined it with a retrieval engine for Wikipedia articles. Our work differs because we focus on explicitly addressing the problem of applying the model to multiple paragraphs. A pipelined approach to QA was recently proposed by <ref type="bibr" target="#b24">Wang et al. (2017a)</ref>, where a ranker model is used to select a paragraph for the reading comprehension model to process.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Conclusion</head><p>We have shown that, when using a paragraph-level QA model across multiple paragraphs, our training method of sampling non-answer containing paragraphs while using a shared-norm objective function can be very beneficial. Combining this with our suggestions for paragraph selection, using the summed training objective, and our model design allows us to advance the state of the art on TriviaQA by a large stride. As shown by our demo, this work can be directly applied to building deep learning powered open question answering systems.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: High level outline of our model.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head></head><label></label><figDesc>How much did the ini- tial LM weight in kg? The initial LM model weighed approximately 33,300 pounds (15,000 kg), and... The module was 11.42 feet (3.48 m) tall, and weighed approximately 12,250 pounds (5,560 kg) What do the auricles do?</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head></head><label></label><figDesc>41.08 47.40 BiDAF 50.21 56.86 BiDAF + TF-IDF 53.41 59.18 BiDAF + sum 56.22 61.48 BiDAF + TF-IDF + sum 57.20 62.44 our model + TF-IDF + sum 61.10 66.04</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 3 :</head><label>3</label><figDesc>Published TriviaQA results. We advance the state of the art by about 15 points both test sets.</figDesc><table></table></figure>
+
+			<note place="foot" n="1"> documentqa.allenai.org 2 github.com/allenai/document-qa</note>
+
+			<note place="foot" n="3"> as of 10/23/2017</note>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">YodaQA: A Modular Question Answering System Pipeline</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Petr</forename><surname>Baudiš</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">POSTER 2015-19th International Student Conference on Electrical Engineering</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1156" to="1165" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Semantic Parsing on Freebase from Question-Answer Pairs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename><surname>Berant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Chou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roy</forename><surname>Frostig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jamie</forename><surname>Callan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Hoy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Changkuk</forename><surname>Yoo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Le</forename><surname>Zhao</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+	<note>Clueweb09 Data Set</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Reading Wikipedia to Answer Open-Domain Questions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Danqi</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Fisch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.00051</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Long Short-Term Memory-Networks for Machine Reading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianpeng</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Dong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mirella</forename><surname>Lapata</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1601.06733</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Learning phrase representations using rnn encoder-decoder for statistical machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bart</forename><surname>Van Merriënboer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caglar</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fethi</forename><surname>Bougares</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Holger</forename><surname>Schwenk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1406.1078</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Quasar: Datasets for Question Answering by Search and Reading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bhuwan</forename><surname>Dhingra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kathryn</forename><surname>Mazaitis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William W</forename><surname>Cohen</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.03904</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">A Theoretically Grounded Application of Dropout in Recurrent Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yarin</forename><surname>Gal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zoubin</forename><surname>Ghahramani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Teaching Machines to Read and Comprehend</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karl</forename><surname>Moritz Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Kocisky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lasse</forename><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Will</forename><surname>Kay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mustafa</forename><surname>Suleyman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Hewlett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexandre</forename><surname>Lacoste</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Llion</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Illia</forename><surname>Polosukhin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><surname>Fandrianto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jay</forename><surname>Han</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Kelcey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Berthelot</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.03542</idno>
+		<title level="m">Wikireading: A Novel Large-scale Language Understanding Task over Wikipedia</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Felix</forename><surname>Hill</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antoine</forename><surname>Bordes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.02301</idno>
+		<title level="m">The Goldilocks Principle: Reading Children&apos;s Books with Explicit Memory Representations</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Mnemonic Reader: Machine Comprehension with Iterative Aligning and Multi-hop Answer Pointing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minghao</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuxing</forename><surname>Peng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xipeng</forename><surname>Qiu</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Adversarial Examples for Evaluating Reading Comprehension Systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robin</forename><surname>Jia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.07328</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">TriviaQA: A Large Scale Distantly Supervised Challenge Dataset for Reading Comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mandar</forename><surname>Joshi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eunsol</forename><surname>Choi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Daniel S Weld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zettlemoyer</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.03551</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rudolf</forename><surname>Kadlec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Schmid</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ondrej</forename><surname>Bajgar</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.01547</idno>
+		<title level="m">Text understanding with the attention sum reader network</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Question Answering through Transfer Learning from Large Fine-grained Supervision Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minjoon</forename><surname>Sewon Min</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hannaneh</forename><surname>Seo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hajishirzi</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1702.02171</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tri</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mir</forename><surname>Rosenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xia</forename><surname>Song</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jianfeng</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Saurabh</forename><surname>Tiwary</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rangan</forename><surname>Majumder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Deng</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.09268</idno>
+		<title level="m">MS MARCO: A Human Generated MAchine Reading COmprehension Dataset</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Bin Cao, Deng Cai, and Xiaofei He</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Boyuan Pan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhou</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zhao</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.09098</idno>
+	</analytic>
+	<monogr>
+		<title level="m">MEMEN: Multi-layer Embedding with Memory Networks for Machine Comprehension</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">GloVe: Global Vectors for Word Representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Empirical Methods in Natural Language Processing (EMNLP)</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">SQuAD: 100,000+ Questions for Machine Comprehension of Text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pranav</forename><surname>Rajpurkar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Konstantin</forename><surname>Lopyrev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Percy</forename><surname>Liang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.05250</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Bidirectional Attention Flow for Machine Comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Min Joon</forename><surname>Seo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aniruddha</forename><surname>Kembhavi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ali</forename><surname>Farhadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hannaneh</forename><surname>Hajishirzi</surname></persName>
+		</author>
+		<idno>CoRR abs/1611.01603</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">S-net: From answer extraction to answer generation for machine reading comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chuanqi</forename><surname>Tan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Furu</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nan</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Weifeng</forename><surname>Lv</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Zhou</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1706.04815</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">The TREC-8 Question Answering Track Report</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ellen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Voorhees</surname></persName>
+		</author>
+		<editor>Trec</editor>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shuohang</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jing</forename><surname>Jiang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.07905</idno>
+		<title level="m">Machine Comprehension Using Match-LSTM and Answer Pointer</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shuohang</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mo</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaoxiao</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiguo</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Klinger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shiyu</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gerald</forename><surname>Tesauro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jing</forename><surname>Jiang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1709.00023</idno>
+		<title level="m">R: Reinforced Reader-Ranker for Open-Domain Question Answering</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Gated self-matching networks for reading comprehension and question answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenhui</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nan</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Furu</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Baobao</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Zhou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="189" to="198" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Dynamic Integration of Background Knowl</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dirk</forename><surname>Weissenborn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tom</forename><surname>Koisk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1706.02596</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Neural NLU Systems</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">FastQA: A Simple and Efficient Neural Architecture for Question Answering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dirk</forename><surname>Weissenborn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Georg</forename><surname>Wiese</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Laura</forename><surname>Seiffe</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1703.04816</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Matthew D Zeiler</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1212.5701</idno>
+		<title level="m">Adadelta: an adaptive learning rate method</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

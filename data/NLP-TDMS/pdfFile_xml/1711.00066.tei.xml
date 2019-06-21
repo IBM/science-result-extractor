@@ -1,0 +1,878 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:03+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Published as a conference paper at ICLR 2018 FRATERNAL DROPOUT</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Konrad</forename><forename type="middle">˙</forename><surname>Zołna</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Jagiellonian University</orgName>
+							</affiliation>
+							<affiliation key="aff1">
+								<orgName type="laboratory">MILA</orgName>
+								<orgName type="institution">Université de Montréal</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Devansh</forename><surname>Arpit</surname></persName>
+							<affiliation key="aff1">
+								<orgName type="laboratory">MILA</orgName>
+								<orgName type="institution">Université de Montréal</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dendi</forename><surname>Suhubdy</surname></persName>
+							<affiliation key="aff1">
+								<orgName type="laboratory">MILA</orgName>
+								<orgName type="institution">Université de Montréal</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+							<affiliation key="aff1">
+								<orgName type="laboratory">MILA</orgName>
+								<orgName type="institution">Université de Montréal</orgName>
+							</affiliation>
+							<affiliation key="aff2">
+								<orgName type="institution">CIFAR Senior Fellow</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Published as a conference paper at ICLR 2018 FRATERNAL DROPOUT</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Recurrent neural networks (RNNs) form an important class of architectures among neural networks useful for language modeling and sequential prediction. However, optimizing RNNs is known to be harder compared to feed-forward neu-ral networks. A number of techniques have been proposed in literature to address this problem. In this paper we propose a simple technique called fraternal dropout that takes advantage of dropout to achieve this goal. Specifically, we propose to train two identical copies of an RNN (that share parameters) with different dropout masks while minimizing the difference between their (pre-softmax) predictions. In this way our regularization encourages the representations of RNNs to be invariant to dropout mask, thus being robust. We show that our regularization term is upper bounded by the expectation-linear dropout objective which has been shown to address the gap due to the difference between the train and inference phases of dropout. We evaluate our model and achieve state-of-the-art results in sequence modeling tasks on two benchmark datasets-Penn Treebank and Wikitext-2. We also show that our approach leads to performance improvement by a significant margin in image captioning (Microsoft COCO) and semi-supervised (CIFAR-10) tasks.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Recurrent neural networks (RNNs) like long short-term memory <ref type="bibr">(LSTM;</ref><ref type="bibr">Hochreiter &amp; Schmidhu- ber (1997)</ref>) networks and gated recurrent unit (GRU; <ref type="bibr" target="#b0">Chung et al. (2014)</ref>) are popular architectures for sequence modeling tasks like language generation, translation, speech synthesis, and machine comprehension. However, they are harder to optimize compared to feed-forward networks due to challenges like variable length input sequences, repeated application of the same transition operator at each time step, and largely-dense embedding matrix that depends on the vocabulary size. Due to these optimization challenges in RNNs, the application of batch normalization and its variants (layer normalization, recurrent batch normalization, recurrent normalization propagation) have not been as successful as their counterparts in feed-forward networks ), although they do considerably provide performance gains. Similarly, naive application of dropout ( <ref type="bibr" target="#b24">Srivastava et al., 2014</ref>) has been shown to be ineffective in RNNs ( <ref type="bibr" target="#b28">Zaremba et al., 2014</ref>). Therefore, regularization techniques for RNNs is an active area of research.</p><p>To address these challenges, <ref type="bibr" target="#b28">Zaremba et al. (2014)</ref> proposed to apply dropout only to the nonrecurrent connections in multi-layer RNNs. Variational dropout <ref type="bibr" target="#b2">(Gal &amp; Ghahramani (2016)</ref>) uses the same dropout mask throughout a sequence during training. DropConnect ( <ref type="bibr" target="#b26">Wan et al., 2013)</ref> applies the dropout operation on the weight matrices. Zoneout ( <ref type="bibr" target="#b8">Krueger et al. (2016)</ref>), in a similar spirit with dropout, randomly chooses to use the previous time step hidden state instead of using the current one. Similarly as a substitute for batch normalization, layer normalization normalizes the hidden units within each sample to have zero mean and unit standard deviation. Recurrent batch normalization applies batch normalization but with unshared mini-batch statistics for each time step <ref type="bibr" target="#b1">(Cooijmans et al., 2016)</ref>.</p><p>In this paper we propose a simple regularization based on dropout that we call fraternal dropout, where we minimize an equally weighted sum of prediction losses from two identical copies of the same LSTM with different dropout masks, and add as a regularization the 2 difference between the predictions (pre-softmax) of the two networks. We analytically show that our regularization objective is equivalent to minimizing the variance in predictions from different i.i.d. dropout masks; thus encouraging the predictions to be invariant to dropout masks. We also discuss how our regularization is related to expectation linear dropout <ref type="bibr" target="#b11">Ma et al. (2016)</ref>, Π-model <ref type="bibr" target="#b9">Laine &amp; Aila (2016)</ref> and activity regularization <ref type="bibr" target="#b17">Merity et al. (2017b)</ref>, and empirically show that our method provides non-trivial gains over these related methods which we explain furthermore in our ablation study (Section 5).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">FRATERNAL DROPOUT</head><p>Dropout is a powerful regularization for neural networks. It is usually more effective on densely connected layers because they suffer more from overfitting compared with convolution layers where the parameters are shared. For this reason dropout is an important regularization for RNNs. However, dropout has a gap between its training and inference phase since the latter phase assumes linear activations to correct for the factor by which the expected value of each activation would be different <ref type="bibr" target="#b11">Ma et al. (2016)</ref>. In addition, the prediction of models with dropout generally vary with different dropout mask. However, the desirable property in such cases would be to have final predictions be invariant to dropout masks.</p><p>As such, the idea behind fraternal dropout is to train a neural network model in a way that encourages the variance in predictions under different dropout masks to be as small as possible. Specifically, consider we have an RNN model denoted by M(θ) that takes as input X, where θ denotes the model parameters. Let p t (z t , s t i ; θ) ∈ R m be the prediction of the model for input sample X at time t, for dropout mask s t i and current input z t , where z t is a function of X and the hidden states corresponding to the previous time steps. Similarly, let t (p t (z t , s t i ; θ), Y) be the corresponding t th time step loss value for the overall input-target sample pair (X, Y).</p><p>Then in fraternal dropout, we simultaneously feed-forward the input sample X through two identical copies of the RNN that share the same parameters θ but with different dropout masks s t i and s t j at each time step t. This yields two loss values at each time step t given by t (p t (z t , s t i ; θ), Y), and t (p t (z t , s t j ; θ), Y). Then the overall loss function of fraternal dropout is given by,</p><formula xml:id="formula_0">F D (X, Y) = T t=1 1 2 t (p t (z t , s t i ; θ), Y) + t (p t (z t , s t j ; θ), Y) + κ mT T t=1 R F D (z t ; θ)<label>(1)</label></formula><p>where κ is the regularization coefficient, m is the dimensions of p t (z t , s t i ; θ) and R F D (z t ; θ) is the fraternal dropout regularization given by,</p><formula xml:id="formula_1">R F D (z t ; θ) := E s t i ,s t j p t (z t , s t i ; θ) − p t (z t , s t j ; θ) 2 2 .<label>(2)</label></formula><p>We use Monte Carlo sampling to approximate R F D (z t ; θ) where p t (z t , s t i ; θ) and p t (z t , s t j ; θ) are the same as the one used to calculate t values. Hence, the additional computation is negligible.</p><p>We note that the regularization term of our objective is equivalent to minimizing the variance in the prediction function with different dropout masks as shown below (proof in the appendix).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Remark 1. Let s t</head><p>i and s t j be i.i.d. dropout masks and p t (z t , s t i ; θ) ∈ R m be the prediction function as described above. Then,</p><formula xml:id="formula_2">R F D (z t ; θ) = E s t i ,s t j p t (z t , s t i ; θ) − p t (z t , s t j ; θ) 2 2 = 2 m q=1 var s t i (p t q (z t , s t i ; θ)). (3)</formula><p>Note that a generalization of our approach would be to minimize the difference between the predictions of the two networks with different data/model augmentations. However, in this paper we focus on using different dropout masks and experiment mainly with RNNs 2 .</p><p>3 RELATED WORK 3.1 RELATION TO EXPECTATION LINEAR DROPOUT (ELD) <ref type="bibr" target="#b11">Ma et al. (2016)</ref> analytically showed that the expected error (over samples) between a model's expected prediction over all dropout masks, and the prediction using the average mask, is upper bounded. Based on this result, they propose to explicitly minimize the difference (we have adapted their regularization to our notations),</p><formula xml:id="formula_3">R ELD (z t ; θ) = E s p t (z t , s; θ) − p t (z t , E s [s]; θ) 2 (4)</formula><p>where s is the dropout mask. However, due to feasibility consideration, they instead propose to use the following regularization in practice,</p><formula xml:id="formula_4">˜ R ELD (z t ; θ) = E si p t (z t , s i ; θ) − p t (z t , E s [s]; θ) 2 2 .<label>(5)</label></formula><p>Specifically, this is achieved by feed-forwarding the input twice through the network, with and without dropout mask, and minimizing the main network loss (with dropout) along with the regularization term specified above (but without back-propagating the gradients through the network without dropout). The goal of <ref type="bibr" target="#b11">Ma et al. (2016)</ref> is to minimize the network loss along with the expected difference between the prediction from individual dropout mask and the prediction from the expected dropout mask. We note that our regularization objective is upper bounded by the expectation-linear dropout regularization as shown below (proof in the appendix).</p><formula xml:id="formula_5">Proposition 1. R F D (z t ; θ) ≤ 4 ˜ R ELD (z t ; θ).</formula><p>This result shows that minimizing the ELD objective indirectly minimizes our regularization term. Finally as indicated above, they apply the target loss only on the network with dropout. In fact, in our own ablation studies (see Section 5) we find that back-propagating target loss through the network (without dropout) makes optimizing the model harder. However, in our setting, simultaneously backpropagating target loss through both networks yields both performance gain as well as convergence gain. We believe convergence is faster for our regularization because network weights are more likely to get target based updates from back-propagation in our case. This is especially true for weight dropout ( <ref type="bibr" target="#b26">Wan et al., 2013)</ref> since in this case dropped weights do not get updated in the training iteration.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">RELATION TO Π-MODEL</head><p>Laine &amp; Aila (2016) propose Π-model with the goal of improving performance on classification tasks in the semi-supervised setting. They propose a model similar to ours (considering the equivalent deep feed-forward version of our model) except they apply target loss only on one of the networks and use time-dependent weighting function ω(t) (while we use constant κ mT ). The intuition in their case is to leverage unlabeled data by using them to minimize the difference in prediction between the two copies of the network with different dropout masks. Further, they also test their model in the supervised setting but fail to explain the improvements they obtain by using this regularization.</p><p>We note that in our case we analytically show that minimizing our regularizer (also used in Π-model) is equivalent to minimizing the variance in the model predictions (Remark 1). Furthermore, we also show the relation of our regularizer to expectation linear dropout (Proposition 1). In Section 5, we study the effects of target based loss on both networks, which is not used in the Π-model. We find that applying target loss on both the networks leads to significantly faster convergence. Finally, we bring to attention that temporal embedding (another model proposed by <ref type="bibr" target="#b9">Laine &amp; Aila (2016)</ref>, claimed to be a better version of Π-model for semi-supervised, learning) is intractable in natural language processing applications because storing averaged predictions over all of the time steps would be memory exhaustive (since predictions are usually huge -tens of thousands values). On a final note, we argue that in the supervised case, using a time-dependent weighting function ω(t) instead of a constant value κ mT is not needed. Since the ground truth labels are known, we have not observed the problem mentioned by <ref type="bibr" target="#b9">Laine &amp; Aila (2016)</ref>, that the network gets stuck in a degenerate solution when ω(t) is too large in earlier epochs of training. We note that it is much easier to search for an optimal constant value, which is true in our case, as opposed to tuning the time-dependent function.</p><p>Similarity to Π-model makes our method related to other semi-supervised works, mainly <ref type="bibr" target="#b21">Rasmus et al. (2015)</ref> and <ref type="bibr" target="#b22">Sajjadi et al. (2016)</ref>. Since semi-supervised learning is not a primary focus of this paper, we refer to <ref type="bibr" target="#b9">Laine &amp; Aila (2016)</ref> for more details.</p><p>We note that the idea of adding a penalty encouraging the representation to be similar for two different masks was previously implemented <ref type="bibr">3</ref> by the authors of a Multi-Prediction Deep Boltzmann Machines ( <ref type="bibr" target="#b3">Goodfellow et al., 2013)</ref>. Nevertheless, the idea is not discussed in their paper.</p><p>Another way to address the gap between the train and evaluation mode of dropout is to perform Monte Carlo sampling of masks and average the predictions during evaluation, and this has been used for feed-forward networks. We find that this technique does not work well for RNNs. The details of these experiments can be found in the appendix.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">EXPERIMENTS</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">LANGUAGE MODELS</head><p>In the case of language modeling we test our model 4 on two benchmark datasets -Penn Tree-bank (PTB) dataset <ref type="bibr" target="#b13">(Marcus et al., 1993)</ref> and WikiText-2 (WT2) dataset ( <ref type="bibr" target="#b15">Merity et al., 2016</ref>). We use preprocessing as specified by <ref type="bibr" target="#b18">Mikolov et al. (2010)</ref> (for PTB corpus) and Moses tokenizer <ref type="bibr" target="#b7">Koehn et al. (2007)</ref> (for the WT2 dataset).</p><p>For both datasets we use the AWD-LSTM 3-layer architecture described in <ref type="bibr" target="#b16">Merity et al. (2017a)</ref>  <ref type="bibr">5</ref> which we call the baseline model. The number of parameters in the model used for PTB is 24 million as compared to 34 million in the case of WT2 because WT2 has a larger vocabulary size for which we use a larger embedding matrix. Apart from those differences, the architectures are identical. When we use fraternal dropout, we simply add our regularization on top of this baseline model.</p><p>Word level Penn Treebank (PTB). Influenced by <ref type="bibr" target="#b14">Melis et al. (2017)</ref>, our goal here is to make sure that fraternal dropout outperforms existing methods not simply because of extensive hyperparameter grid search but rather due to its regularization effects. Hence, in our experiments we leave a vast majority of hyper-parameters used in the baseline model ( <ref type="bibr" target="#b14">Melis et al., 2017</ref>) unchanged i.e. embedding and hidden states sizes, gradient clipping value, weight decay and the values used for all dropout layers (dropout on the word vectors, the output between LSTM layers, the output of the final LSTM, and embedding dropout). However, a few changes are necessary:</p><p>• the coefficients for AR and TAR needed to be altered because fraternal dropout also affects RNNs activation (as explained in Subsection 5.3) -we did not run grid search to obtain the best values but simply deactivated AR and TAR regularizers; • since fraternal dropout needs twice as much memory, batch size is halved so the model needs approximately the same amount of memory and hence fits on the same GPU.   . We run a grid search on n ∈ {5, 25, 40, 50, 60} and obtain very similar results for the largest values (40, 50 and 60) in the candidate set. Hence, our model is trained longer using ordinary SGD optimizer as compared to the baseline model ( <ref type="bibr" target="#b14">Melis et al., 2017)</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model Parameters Validation Test</head><p>We evaluate our model using the perplexity metric and compare the results that we obtain against the existing state-of-the-art results. The results are reported in <ref type="table">Table 1</ref>. Our approach achieves the state-of-the-art performance compared with existing benchmarks.</p><p>To confirm that the gains are robust to initialization, we run ten experiments for the baseline model with different seeds (without fine-tuning) for PTB dataset to compute confidence intervals. The average best validation perplexity is 60.64 ± 0.15 with the minimum value equals 60.33. The same for test perplexity is 58.32 ± 0.14 and 58.05, respectively. Our score (59.8 validation and 58.0 test perplexity) beats ordinal dropout minimum values.</p><p>We also perform experiments using fraternal dropout with a grid search on all the hyper-parameters and find that it leads to further improvements in performance. The details of this experiment can be found in section 5.5.</p><p>Word level WikiText-2 (WT2). In the case of WikiText-2 language modeling task, we outperform the current state-of-the-art using the perplexity metric by a significant margin. Due to the lack of computational power, we run a single training procedure for fraternal dropout on WT2 dataset because it is larger than PTB. In this experiment, we use the best hyper-parameters found for PTB dataset (κ = 0.1, non-monotone interval n = 60 and halved batch size; the rest of the hyperparameters are the same as described in <ref type="bibr" target="#b14">Melis et al. (2017)</ref> for WT2). The final results are presented in <ref type="table" target="#tab_1">Table 2</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">IMAGE CAPTIONING</head><p>We also apply fraternal dropout on an image captioning task. We use the well-known show and tell model as a baseline <ref type="bibr">6 (Vinyals et al., 2014</ref>). We emphasize that in the image captioning task, the Model BLEU-1 BLEU-2 BLEU-3 BLEU-4 Show and Tell <ref type="bibr" target="#b27">Xu et al. (2015)</ref> 66   <ref type="table" target="#tab_3">Table 3</ref>.</p><p>We argue that in this task smaller κ values are optimal because the image captioning encoder is given all information in the beginning and hence the variance of consecutive predictions is smaller that in unconditioned natural language processing tasks. Fraternal dropout may benefits here mainly due to averaging gradients for different mask and hence updating weights more frequently.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">ABLATION STUDIES</head><p>In this section, the goal is to study existing methods closely related to ours -expectation linear dropout </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">EXPECTATION-LINEAR DROPOUT (ELD)</head><p>The relation with expectation-linear dropout <ref type="bibr" target="#b11">Ma et al. (2016)</ref> has been discussed in Section 2. Here we perform experiments to study the difference in performance when using the ELD regularization versus our regularization (FD). In addition to ELD, we also study a modification (ELDM) of ELD which applies target loss to both copies of LSTMs in ELD similar to FD (notice in their case they only have dropout on one LSTM). Finally we also evaluate a baseline model without any of these regularizations. The learning dynamics curves are shown in <ref type="figure" target="#fig_2">Figure 1</ref>. Our regularization performs better in terms of convergence compared with other methods. In terms of generalization, we find that FD is similar to ELD, but baseline and ELDM are much worse. Interestingly, looking at the train and validation curves together, ELDM seems to be suffering from optimization problems.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Π-MODEL</head><p>Since Π-model <ref type="bibr" target="#b9">Laine &amp; Aila (2016)</ref> is similar to our algorithm (even though it is designed for semi-supervised learning in feed-forward networks), we study the difference in performance with Π-model 8 both qualitatively and quantitatively to establish the advantage of our approach. First, we run both single layer LSTM and 3-layer AWD-LSTM on PTB task to check how their model compares with ours in the case of language modeling. The results are shown in <ref type="figure" target="#fig_2">Figure 1</ref> and 2. We find that our model converges significantly faster than Π-model. We believe this happens because we <ref type="bibr">7</ref> We use a batch size of 64, truncated back-propagation with 35 time steps, a constant zero state is provided as the initial state with probability 0.01 (similar to <ref type="bibr" target="#b14">Melis et al. (2017)</ref>), SGD with learning rate 30 (no momentum) which is multiplied by 0.1 whenever validation performance does not improve ever during 20 epochs, weight dropout on the hidden to hidden matrix 0.5, dropout every word in a mini-batch with probability 0.1, embedding dropout 0.65, output dropout 0.4 (final value of LSTM), gradient clipping of 0.25, weight decay 1.2 × 10 −6 , input embedding size of 655, the input/output size of LSTM is the same as embedding size <ref type="formula" target="#formula_4">(655)</ref> and the embedding weights are tied <ref type="bibr" target="#b6">(Inan et al., 2016;</ref><ref type="bibr" target="#b20">Press &amp; Wolf, 2016)</ref>. <ref type="bibr">8</ref> We use a constant function ω(t) = κ mT as a coefficient for Π-model (similar to our regularization term). Hence, the focus of our experiment is to evaluate the difference in performance when target loss is backpropagated through one of the networks (Π-model) vs. both (ours). Additionally, we find that tuning a function instead of using a constant coefficient is infeasible.    back-propagate the target loss through both networks (in contrast to Π-model) that leads to weights getting updated using target-based gradients more often.</p><p>Even though we designed our algorithm specifically to address problems in RNNs, to have a fair comparison, we compare with Π-model on a semi-supervised task which is their goal. Specifically, we use the CIFAR-10 dataset that consists of 32 × 32 images from 10 classes. Following the usual splits used in semi-supervised learning literature, we use 4 thousand labeled and 41 thousand unlabeled samples for training, 5 thousand labeled samples for validation and 10 thousand labeled samples for test set. We use the original ResNet-56 ( <ref type="bibr" target="#b4">He et al., 2015)</ref> architecture. We run grid search on κ ∈ {0.05, 0.1, 0.15, 0.2}, dropout rates in {0.05, 0.1, 0.15, 0.2} and leave the rest of the hyperparameters unchanged. We additionally check importance of using unlabeled data. The results are reported in <ref type="table">Table 4</ref>. We find that our algorithm performs at par with Π-model. When unlabeled data is not used, fraternal dropout provides slightly better results as compared to traditional dropout.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">ACTIVITY REGULARIZATION AND TEMPORAL ACTIVITY REGULARIZATION ANALYSIS</head><p>The authors of Merity et al. (2017b) study the importance of activity regularization (AR) <ref type="bibr">9</ref> and temporal activity regularization (TAR) in LSTMs given as, <ref type="bibr">9</ref> We used m · h t 2 2 , where m is the dropout mask, in our actual experiments with AR because it was implemented as such in the original paper's Github repository <ref type="bibr" target="#b16">Merity et al. (2017a)</ref>.</p><formula xml:id="formula_6">R AR (z t ; θ) = α d h t 2 2 (6) R T AR (z t ; θ) = β d h t − h t−1 2 2<label>(7)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>Dropout rate Unlabeled data Validation Test Traditional dropout 0.1 No 78.4 (± 0.25) 76.9 (± 0.31) No dropout 0.0 No 78.8 (± 0.59) 77.1 (± 0.3) Fraternal dropout (κ = 0.05) 0.05 No 79.3 (± 0.38) 77.6 (± 0.35) Traditional dropout + Π-model 0.1 Yes 80.2 (± 0.33) 78.5 (± 0.46) Fraternal dropout (κ = 0.15) 0.1 Yes 80.5 (± 0.18) 79.1 (± 0.37) <ref type="table">Table 4</ref>: Ablation study: Accuracy on altered (semi-supervised) CIFAR-10 dataset for ResNet-56 based models. We find that our algorithm performs at par with Π-model. When unlabeled data is not used traditional dropout hurts performance while fraternal dropout provides slightly better results. It means that our methods may be beneficial when we lack data and have to use additional regularizing methods. . These curves study the learning dynamics of the baseline model, temporal activity regularization (TAR), prediction regularization (PR), activity regularization (AR) and fraternal dropout (FD, our algorithm). We find that FD both converges faster and generalizes better than the regularizers in comparison.</p><p>where h t ∈ R d is the LSTM's output activation at time step t (hence depends on both current input z t and the model parameters θ). Notice that AR and TAR regularizations are applied on the output of the LSTM, while our regularization is applied on the pre-softmax output p t (z t , s t i ; θ) of the LSTM. However, since our regularization can be decomposed as</p><formula xml:id="formula_7">R F D (z t ; θ) = E si,sj p t (z t , s t i ; θ) − p t (h t , s t j ; θ) 2 2 (8) = E si,sj p t (z t , s t i ; θ) 2 2 + p t (z t , s t j ; θ) 2 2 − 2p t (z t , s t i ; θ) T p t (z t , s t j ; θ)<label>(9)</label></formula><p>and encapsulates an 2 term along with the dot product term, we perform experiments to confirm that the gains in our approach is not due to the 2 regularization alone. A similar argument goes for the TAR objective. We run a grid search on α ∈ {1, 2, . . . , 12}, β ∈ {1, 2, . . . , 12}, which include the hyper-parameters mentioned in <ref type="bibr" target="#b16">Merity et al. (2017a)</ref>. For our regularization, we use κ ∈ {0.05, 0.1, . . . , 0.4}. Furthermore, we also compare with a regularization (PR) that regularizes p t (z t , s t i ; θ) 2 2 to further rule-out any gains only from 2 regularization. Based on this grid search, we pick the best model on the validation set for all the regularizations, and additionally report a baseline model without any of these four mentioned regularizations. The learning dynamics is shown in <ref type="figure" target="#fig_6">Figure 4</ref>. Our regularization performs better both in terms of convergence and generalization compared with other methods. Average hidden state activation is reduced when any of the regularizer described is applied (see <ref type="figure" target="#fig_4">Figure 3)</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">IMPROVEMENTS USING FINE-TUNING</head><p>We confirm that models trained with fraternal dropout benefit from the NT-ASGD fine-tuning step (as also used in <ref type="bibr" target="#b16">Merity et al. (2017a)</ref>). However, this is a very time-consuming practice and since different hyper-parameters may be used in this additional part of the learning procedure, the probability of obtaining better results due to the extensive grid search is higher. Hence, in our experiments we   use the same fine-tuning procedure as implemented in the official repository (even fraternal dropout was not used). We present the importance of fine-tuning in <ref type="table">Table 5</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.5">FRATERNAL DROPOUT AND EXPECTATION LINEAR DROPOUT COMPARISON</head><p>We perform extensive grid search for the baseline model from Subsection 4.1 (an AWD-LSTM 3-layer architecture) trained with either fraternal dropout or expectation linear dropout regularizations, to further contrast the performance of these two methods. The experiments are run without fine-tuning on the PTB dataset.</p><p>In each run, all five dropout rates are randomly altered (they are set to their original value, as in <ref type="bibr" target="#b16">Merity et al. (2017a)</ref>, multiplied by a value drawn from the uniform distribution on the interval [0.5, 1.5]) and the rest of the hyper-parameters are drawn as shown in <ref type="table">Table 6</ref>. As in Subsection 4.1, AR and TAR regularizers are deactivated.</p><p>Together we run more than 400 experiments. The results are presented in <ref type="table">Table 7</ref>. Both FD and ELD perform better than the baseline model that instead uses AR and TAR regularizers. Hence, we confirm our previous finding (see Subsection 5.3) that both FD and ELD are better. However, as found previously for smaller model in Subsection 5.1, the convergence of FD is faster than that of ELD. Additionally, fraternal dropout is more robust to different hyper-parameters choice (more runs performing better than the baseline and better average for top performing runs).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">CONCLUSION</head><p>In this paper we propose a simple regularization method for RNNs called fraternal dropout that acts as a regularization by reducing the variance in model predictions across different dropout masks. We show that our model achieves state-of-the-art results on benchmark language modeling tasks along with faster convergence. We also analytically study the relationship between our regularization and expectation linear dropout <ref type="bibr" target="#b11">Ma et al. (2016)</ref>. We perform a number of ablation studies to evaluate APPENDIX MONTE CARLO EVALUATION A well known way to address the gap between the train and evaluation mode of dropout is to perform Monte Carlo sampling of masks and average the predictions during evaluation (MC-eval), and this has been used for feed-forward networks. Since fraternal dropout addresses the same problem, we would like to clarify that it is not straight-forward and feasible to apply MC-eval for RNNs. In feed-forward networks, we average the output prediction scores from different masks. However, in the case RNNs (for next step predictions), there is more than one way to perform such evaluation, but each one is problematic. They are as follows:</p><p>1. Online averaging</p><p>Consider that we first make the prediction at time step 1 using different masks by averaging the prediction score. Then we use this output to feed as input to the time step 2, then use different masks at time step 2 to generate the output at time step 2, and so on. But in order to do so, because of the way RNNs work, we also need to feed the previous time hidden state to time step 2. One way would be to average the hidden states over different masks at time step 1. But the hidden space can in general be highly nonlinear, and it is not clear if averaging in this space is a good strategy. This approach is not justified.</p><p>Besides, this strategy as a whole is extremely time consuming because we would need to sequentially make predictions with multiple masks at each time step.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">Sequence averaging</head><p>Let's consider that we use a different mask each time we want to generate a sequence, and then we average the prediction scores, and compute the argmax (at each time step) to get the actual generated sequence.</p><p>In this case, notice it is not guaranteed that the predicted word at time step t due to averaging the predictions would lead to the next word (generated by the same process) if we were to feed the time step t output as input to the time step t + 1. For example, with different dropout masks, if the probability of 1 st time step outputs are: I 40%), he (30%), she (30%), and the probability of the 2nd time step outputs are: am (30%), is (60%), was (10%). Then the averaged prediction score followed by argmax will result in the prediction "I is", but this would be incorrect. A similar concern applies for output predictions varying in temporal length.</p><p>Hence, this approach can not be used to generate a sequence (it has to be done by by sampling a mask and generating a single sequence). However, this approach may be used to estimate the probability assigned by the model to a given sequence.</p><p>Nonetheless, we run experiments on the PTB dataset using MC-eval (the results are summarized in <ref type="table" target="#tab_6">Table 8</ref>). We start with a simple comparison that compares fraternal dropout with the averaged mask and the AWD-LSTM 3-layer baseline with a single fixed mask that we call MC1. The MC1 model performs much worse than fraternal dropout. Hence, it would be hard to use MC1 model in practice because a single sample is inaccurate. We also check MC-eval for a larger number of models (MC50) (50 models were used since we were not able to fit more models simultaneously on a single GPU). The final results for MC50 are worse than the baseline which uses the averaged mask. For comparison, we also evaluate MC10. Note that no fine-tuning is used for the above experiments. <ref type="table">Validation  Test  MC1</ref> 92.2 (± 0.5) 89.2 (± 0.5) MC10</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model</head><p>66.2 (± 0.2) 63.7 (± 0.2) MC50</p><p>64.4 (± 0.1) 62.1 (± 0.1) Baseline (average mask) 60.7 58.8 Fraternal dropout 59.8 58.0 </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>REASONS FOR FOCUSING ON RNNS</head><p>The fraternal dropout method is general and may be applied in feed-forward architectures (as shown in Subsection 5.2 for CIFAR-10 semisupervised example). However, we believe that it is more powerful in the case of RNNs because:</p><p>1. Variance in prediction accumulates among time steps in RNNs and since we share parameters for all time steps, one may use the same κ value at each step. In feed-forward networks the layers usually do not share parameters and hence one may want to use different κ values for different layers (which may be hard to tune). The simple way to alleviate this problem is to apply the regularization term on the pre-softmax predictions only (as shown in the paper) or use the same κ value for all layers. However, we believe that it may limit possible gains.</p><p>2. The best performing RNN architectures (state-of-the-art) usually use some kind of dropout (embedding dropout, word dropout, weight dropout etc.), very often with high dropout rates (even larger than 50% for input word embedding in NLP tasks). However, this is not true for feed-forward networks. For instance, ResNet architectures very often do not use dropout at all (probably because batch normalization is often better to use). It can be seen in the paper (Subsection 5.2, semisupervised CIFAR-10 task) that when unlabeled data is not used the regular dropout hurts performance and using fraternal dropout seems to improve just a little.</p><p>3. On a final note, the Monte Carlo sampling (a well known method that adresses the gap betweem the train and evaluation mode of dropout) can not be easily applied for RNNs and fraternal dropout may be seen as an alternative.</p><p>To conclude, we believe that when the use of dropout benefits in a given architecture, applying fraternal dropout should improve performance even more.</p><p>As mentioned before, in image recognition tasks, one may experiment with something what we would temporarily dub fraternal augmentation (even though dropout is not used, one can use random data augmentation such as random crop or random flip). Hence, one may force a given neural network to have the same predictions for different augmentations.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head></head><label></label><figDesc>The final change in hyper-parameters is to alter the non-monotone interval n used in non- monotonically triggered averaged SGD (NT-ASGD) optimizer Polyak &amp; Juditsky (1992); Mandt et al. (2017); Melis et al. (2017)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Ma et al. ( 2016 )</head><label>2016</label><figDesc>, Π-model Laine &amp; Aila (2016) and activity regularization Merity et al. (2017b). All of our experiments for ablation studies, which apply a single layer LSTM, use the same hyper-parameters and model architecture 7 as Melis et al. (2017).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: Ablation study: Train (left) and validation (right) perplexity on PTB word level modeling with single layer LSTM (10M parameters). These curves study the learning dynamics of the baseline model, Π-model, Expectation-linear dropout (ELD), Expectation-linear dropout with modification (ELDM) and fraternal dropout (FD, our algorithm). We find that FD converges faster than the regularizers in comparison, and generalizes at par.</figDesc><graphic url="image-1.png" coords="7,108.00,79.59,190.08,118.80" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Ablation study: Validation perplexity on PTB word level modeling for Π-model and fraternal dropout. We find that FD converges faster and generalizes at par.</figDesc><graphic url="image-3.png" coords="7,108.00,267.43,190.08,118.80" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Ablation study: Average hidden state activation is reduced when any of the regularizer described is used. The y-axis is the value of</figDesc><graphic url="image-4.png" coords="7,311.43,267.28,190.08,118.80" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Ablation study: Train (left) and validation (right) perplexity on PTB word level modeling with single layer LSTM (10M parameters). These curves study the learning dynamics of the baseline model, temporal activity regularization (TAR), prediction regularization (PR), activity regularization (AR) and fraternal dropout (FD, our algorithm). We find that FD both converges faster and generalizes better than the regularizers in comparison.</figDesc><graphic url="image-5.png" coords="8,108.00,227.09,190.08,118.80" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>5 :</head><label>5</label><figDesc>Ablation study: Importance of fine-tuning for AWD-LSTM 3-layer model. Perplexity for the Penn Treebank and WikiText-2 language modeling tasks.× 10 −6 , 2.4 × 10 −6 ) Table 6: Ablation study: Candidate hyper-parameters possible used in the grid search for comparing fraternal dropout and expectation linear dropout. U (a, b) is the uniform distribution on the interval [a, b]. For finite sets, each value is drawn with equal probability. Model Best Top5 avg Top10 avg Beating baseline runs (out of) Expectation linear dropout 59.Fraternal dropout and expectation linear dropout comparison. Perplex- ity on the Penn Treebank validation dateset. Fraternal dropout is more robust to different hyper- parameters choice as twice as much runs finished performing better than the baseline model (60.7).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Perplexity on WikiText-2 word level language modeling task. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>BLEU scores for the Microsoft COCO image captioning task. Using fraternal dropout is 
+the only difference between models. The rest of hyper-parameters are the same. 
+
+image encoder and sentence decoder architectures are usually learned together. Since we want to 
+focus on the benefits of using fraternal dropout in RNNs we use frozen pretrained ResNet-101 (He 
+et al., 2015) model as our image encoder. It means that our results are not directly comparable with 
+other state-of-the-art methods, however we report results for the original methods so readers can see 
+that our baseline performs well. The final results are presented in </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table</head><label></label><figDesc></figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 8 :</head><label>8</label><figDesc></figDesc><table>Appendix: Monte Carlo evaluation. Perplexity on Penn Treebank word level language 
+modeling task using Monte Carlo sampling, fraternal dropout or average mask. </table></figure>
+
+			<note place="foot" n="1"> TAR and Zoneout are similar in their motivations because both leads to adjacent time step hidden states to be close on average.</note>
+
+			<note place="foot" n="2"> The reasons of our focus on RNNs are described in the appendix.</note>
+
+			<note place="foot" n="3"> The implementation is freely available as part of a LISA lab library, Pylearn2. For more details see github.com/lisa-lab/pylearn2/blob/master/pylearn2/costs/dbm.py#L1175 . 4 Our code is available at github.com/kondiz/fraternal-dropout . 5 We used the official GitHub repository code for this paper github.com/salesforce/ awd-lstm-lm .</note>
+
+			<note place="foot" n="6"> We used PyTorch implementation with default hyper-parameters from github.com/ruotianluo/ neuraltalk2.pytorch .</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>The authors would like to acknowledge the support of the following agencies for research funding and computing support: NSERC, CIFAR, and IVADO. We would like to thank Rosemary Nan Ke and Philippe Lacaille for their thoughts and comments throughout the project. We would also like to thank Stanisław Jastrz˛ ebski † and Evan Racah † for useful discussions.</p></div>
+			</div>
+
+			<div type="annex">
+			</div>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Empirical evaluation of gated recurrent neural networks on sequence modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Junyoung</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caglar</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.3555</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Recurrent batch normalization. CoRR, abs/1603.09025</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Cooijmans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">César</forename><surname>Laurent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><forename type="middle">C</forename><surname>Courville</surname></persName>
+		</author>
+		<ptr target="http://arxiv.org/abs/1603.09025" />
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">A theoretically grounded application of dropout in recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yarin</forename><surname>Gal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zoubin</forename><surname>Ghahramani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1019" to="1027" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Multi-prediction deep boltzmann machines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ian</forename><surname>Goodfellow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mehdi</forename><surname>Mirza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="548" to="556" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Deep residual learning for image recognition. CoRR, abs/1512.03385</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kaiming</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiangyu</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shaoqing</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Sun</surname></persName>
+		</author>
+		<ptr target="http://arxiv.org/abs/1512.03385" />
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Tying word vectors and word classifiers: A loss framework for language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Khashayar</forename><surname>Hakan Inan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Khosravi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01462</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Open source toolkit for statistical machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philipp</forename><surname>Koehn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hieu</forename><surname>Hoang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexandra</forename><surname>Birch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Callison-Burch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marcello</forename><surname>Federico</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicola</forename><surname>Bertoldi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Brooke</forename><surname>Cowan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wade</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christine</forename><surname>Moran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Zens</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 45th annual meeting of the ACL on interactive poster and demonstration sessions</title>
+		<meeting>the 45th annual meeting of the ACL on interactive poster and demonstration sessions</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="177" to="180" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Krueger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tegan</forename><surname>Maharaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">János</forename><surname>Kramár</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mohammad</forename><surname>Pezeshki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nan</forename><forename type="middle">Rosemary</forename><surname>Ke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anirudh</forename><surname>Goyal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hugo</forename><surname>Larochelle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><surname>Courville</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.01305</idno>
+		<title level="m">Regularizing rnns by randomly preserving hidden activations</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Temporal ensembling for semi-supervised learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samuli</forename><surname>Laine</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timo</forename><surname>Aila</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1610.02242</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Batch normalized recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">César</forename><surname>Laurent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gabriel</forename><surname>Pereyra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philémon</forename><surname>Brakel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ying</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Acoustics, Speech and Signal Processing</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2657" to="2661" />
+		</imprint>
+	</monogr>
+	<note>2016 IEEE International Conference on</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Dropout with expectation-linear regularization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuezhe</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yingkai</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiting</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yaoliang</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuntian</forename><surname>Deng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.08017</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephan</forename><surname>Mandt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David M</forename><surname>Matthew D Hoffman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Blei</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.04289</idno>
+		<title level="m">Stochastic gradient descent as approximate bayesian inference</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Building a large annotated corpus of english: The penn treebank</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mary</forename><forename type="middle">Ann</forename><surname>Mitchell P Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Beatrice</forename><surname>Marcinkiewicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Santorini</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational linguistics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page">10</biblScope>
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">On the state of the art of evaluation in neural language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gábor</forename><surname>Melis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.05589</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Pointer sentinel mixture models. CoRR</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caiming</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno>abs/1609.07843</idno>
+		<ptr target="http://arxiv.org/abs/1609.07843" />
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Regularizing and optimizing lstm language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Shirish Keskar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1708.02182</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Revisiting activation regularization for language rnns</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bryan</forename><surname>Mccann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1708.01009</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Cernock`Cernock`y, and Sanjeev Khudanpur. Recurrent neural network based language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Karafiát</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukas</forename><surname>Burget</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In Interspeech</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page">3</biblScope>
+			<date type="published" when="2010-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Acceleration of stochastic approximation by averaging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Boris</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Polyak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Anatoli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Juditsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIAM Journal on Control and Optimization</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="838" to="855" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Using the output embedding to improve language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ofir</forename><surname>Press</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lior</forename><surname>Wolf</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.05859</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Semisupervised learning with ladder network. CoRR, abs/1507.02672</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Antti</forename><surname>Rasmus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Harri</forename><surname>Valpola</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mikko</forename><surname>Honkala</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mathias</forename><surname>Berglund</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tapani</forename><surname>Raiko</surname></persName>
+		</author>
+		<ptr target="http://arxiv.org/abs/1507.02672" />
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Regularization with stochastic transformations and perturbations for deep semi-supervised learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mehdi</forename><surname>Sajjadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mehran</forename><surname>Javanmardi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tolga</forename><surname>Tasdizen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1163" to="1171" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Twin networks: Matching the future for sequence generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dmitriy</forename><surname>Serdyuk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nan</forename><forename type="middle">Rosemary</forename><surname>Ke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alessandro</forename><surname>Sordoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Trischler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Pal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Dropout: a simple way to prevent neural networks from overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of machine learning research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Show and tell: A neural image caption generator. CoRR, abs/1411</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oriol</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><surname>Toshev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samy</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dumitru</forename><surname>Erhan</surname></persName>
+		</author>
+		<ptr target="http://arxiv.org/abs/1411" />
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="volume">4555</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Regularization of neural networks using dropconnect</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Wan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Zeiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sixin</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rob</forename><surname>Yann L Cun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Fergus</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 30th international conference on machine learning (ICML-13)</title>
+		<meeting>the 30th international conference on machine learning (ICML-13)</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1058" to="1066" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Show, attend and tell: Neural image caption generation with visual attention</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kelvin</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Ba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryan</forename><surname>Kiros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aaron</forename><forename type="middle">C</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><forename type="middle">S</forename><surname>Zemel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno>abs/1502.03044</idno>
+		<ptr target="http://arxiv.org/abs/1502.03044" />
+		<imprint>
+			<date type="published" when="2015" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wojciech</forename><surname>Zaremba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.2329</idno>
+		<title level="m">Ilya Sutskever, and Oriol Vinyals. Recurrent neural network regularization</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julian</forename><surname>Georg Zilly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rupesh</forename><forename type="middle">Kumar</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Koutník</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.03474</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">Recurrent highway networks. arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

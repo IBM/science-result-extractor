@@ -1,0 +1,1229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:44+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Character-Level Language Modeling with Deeper Self-Attention</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rami</forename><surname>Al-Rfou</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Noah Constant * Google AI Language</orgName>
+							</affiliation>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dokook</forename><surname>Choe</surname></persName>
+							<email>choed@google.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Noah Constant * Google AI Language</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mandy</forename><surname>Guo</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Noah Constant * Google AI Language</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Llion</forename><surname>Jones</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Noah Constant * Google AI Language</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Character-Level Language Modeling with Deeper Self-Attention</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>LSTMs and other RNN variants have shown strong performance on character-level language modeling. These models are typically trained using truncated backpropagation through time, and it is common to assume that their success stems from their ability to remember long-term contexts. In this paper, we show that a deep (64-layer) transformer model (Vaswani et al. 2017) with fixed context outperforms RNN variants by a large margin, achieving state of the art on two popular benchmarks: 1.13 bits per character on text8 and 1.06 on enwik8. To get good results at this depth, we show that it is important to add auxiliary losses, both at intermediate network layers and intermediate sequence positions.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Introduction</head><p>Character-level modeling of natural language text is challenging, for several reasons. First, the model must learn a large vocabulary of words "from scratch". Second, natural text exhibits dependencies over long distances of hundreds or thousands of time steps. Third, character sequences are longer than word sequences and thus require significantly more steps of computation.</p><p>In recent years, strong character-level language models typically follow a common template ( <ref type="bibr" target="#b29">Mikolov et al. 2010;</ref><ref type="bibr" target="#b30">2011;</ref><ref type="bibr" target="#b38">Sundermeyer, Schlüter, and Ney 2012)</ref>. A recurrent neural net (RNN) is trained over mini-batches of text sequences, using a relatively short sequence length (e.g. 200 tokens). To capture context longer than the batch sequence length, training batches are provided in sequential order, and the hidden states from the previous batch are passed forward to the current batch. This procedure is known as "truncated backpropagation through time" (TBTT), because the gradient computation doesn't proceed further than a single batch <ref type="bibr" target="#b41">(Werbos 1990)</ref>. A range of methods have arisen for unbiasing and improving TBTT ( <ref type="bibr" target="#b39">Tallec and Ollivier 2017;</ref><ref type="bibr" target="#b18">Ke et al. 2017)</ref>.</p><p>While this technique gets good results, it adds complexity to the training procedure, and recent work suggests that models trained in this manner don't actually make "strong" use of long-term context. For example <ref type="bibr" target="#b20">Khandelwal et al. (2018)</ref> find that a word-based LSTM language model only effectively uses around 200 tokens of context (even if more is provided), and that word order only has an effect within approximately the last 50 tokens.</p><p>In this paper, we show that a non-recurrent model can achieve strong results on character-level language modeling. Specifically, we use a deep network of transformer self-attention layers ( <ref type="bibr" target="#b40">Vaswani et al. 2017</ref>) with causal (backward-looking) attention to process fixed-length inputs and predict upcoming characters. The model is trained on mini-batches of sequences from random positions in the training corpus, with no information passed from one batch to the next.</p><p>Our primary finding is that the transformer architecture is well-suited to language modeling over long sequences and could replace RNNs in this domain. We speculate that the transformer's success here is due to its ability to "quickly" propagate information over arbitrary distances; by comparison, RNNs need to learn to pass relevant information forward step by step.</p><p>We also find that some modifications to the basic transformer architecture are beneficial in this domain. Most importantly, we add three auxiliary losses, requiring the model to predict upcoming characters (i) at intermediate sequence positions, (ii) from intermediate hidden representations, and (iii) at target positions multiple steps in the future. These losses speed up convergence, and make it possible to train deeper networks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Character Transformer Model</head><p>Language models assign a probability distribution over token sequences t 0:L by factoring out the joint probability as follows, where L is the sequence length:</p><formula xml:id="formula_0">Pr(t 0:L ) = P (t 0 ) L i=1 Pr(t i |t 0:i−1 ),<label>(1)</label></formula><p>To model the conditional probability Pr(t i |t 0:i−1 ), we train a transformer network to process the character sequence t 0:i−1 . Transformer networks have recently showed significant gains in tasks that require processing sequences accurately and efficiently.</p><p>Our character-level transformer architecture has 64 transformer layers. Following <ref type="bibr" target="#b40">Vaswani et al. (2017)</ref>, by "transformer layer" we mean a block containing a multihead self-attention sub-layer followed by a feed-forward network of two fully connected sub-layers. For more details on the transformer architecture, refer to <ref type="bibr" target="#b40">Vaswani et al. (2017)</ref> and the tensor2tensor library 1 . To ensure that the model's predictions are only conditioned on past characters, we mask our attention layers with a causal attention, so each position can only attend leftward. This is the same as the "masked attention" in the decoder component of the original transformer architecture used for sequence-to-sequence problems ( <ref type="bibr" target="#b40">Vaswani et al. 2017)</ref>. <ref type="figure">Figure 1</ref> shows our initial model with the causal attention mask limiting information flow from left to right. Each character prediction is conditioned only on the characters that appeared earlier.</p><formula xml:id="formula_1">t 0 t 1 t 2 t 3 t 4</formula><p>Transformer Layers <ref type="figure">Figure 1</ref>: Character transformer network of two layers processing a four character sequence to predict t 4 . The causal attention mask limits information to left-to-right flow. Red arrows highlight the prediction task the network has to learn.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Auxiliary Losses</head><p>Our network is, to our knowledge, deeper than any transformer network discussed in previous work. In initial experiments, we found training a network deeper than ten layers to be challenging, with slow convergence and poor accuracy. We were able to deepen the network to better effect through the addition auxiliary losses, which sped up convergence of the training significantly.</p><p>We add several types of auxiliary losses, corresponding to intermediate positions, intermediate layers, and nonadjacent targets. We hypothesize that these losses not only speed up convergence but also serve as an additional regularizer. During training, the auxiliary losses get added to the total loss of the network with discounted weights. Each type of auxiliary loss has its own schedule of decay. During evaluation and inference time, only the prediction of the final position at the final layer is used.</p><p>One consequence of this approach is that a number of the network parameters are only used during training-specifically, the parameters in the output classification layers associated with predictions made from intermediate layers and predictions over non-adjacent targets. Thus, when listing the number of parameters in our models, we distinguish between "training parameters" and "inference parameters".</p><p>Multiple Positions First, we add prediction tasks for each position in the final layer, extending our predictions from one per example to |L| (sequence length). Note, predicting over all sequence positions is standard practice in RNNbased approaches. However in our case, since no information is passed forward across batches, this is forcing the model to predict given smaller contexts-sometimes just one or two characters. It is not obvious whether these secondary training tasks should help on the primary task of predicting with full context. However, we find that adding this auxiliary loss speeds up training and gives better results (see Ablation Experiments below). <ref type="figure" target="#fig_0">Figure 2</ref> illustrates the task of predicting across all sequence positions. We add these losses during training without decaying their weights. Intermediate Layer Losses In addition to the final prediction layer, we add predictions made from the output of each intermediate transformer layer. As with the final layer, we add predictions for all intermediate positions in the sequence (see <ref type="figure">Figure 3</ref>). Lower layers are weighted to contribute less and less to the loss as training progresses. If there are n layers total, then the l th intermediate layer stops contributing any loss after finishing l/2n of the training. This schedule drops all intermediate losses after half of the training is done.</p><p>Multiple Targets At each position in the sequence, the model makes two (or more) predictions of future characters. For each new target we introduce a separate classifier. The losses of the extra targets get weighted by a multiplier of 0.5 before being added to their corresponding layer loss.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Positional Embeddings</head><p>In the basic transformer network described in <ref type="bibr" target="#b40">Vaswani et al. (2017)</ref>, a sinusoidal timing signal is added to the input sequence prior to the first transformer layer. However, as our network is deeper (64 layers), we hypothesize that the timing information may get lost during the propagation through the layers. To address this, we replace the timing signal with a learned per-layer positional embedding added to the input sequence before each transformer layer. Specifically, the model learns a unique 512-dimensional embedding vector for each of the L context positions within each of N layers, giving a total of L × N × 512 additional parameters. We are able to safely use positional embeddings for our task, as we don't require the model to generalize to longer contexts than those seen during training.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Experimental Setup Datasets</head><p>For evaluation we focus mainly on text8 (Mahoney 2009). This dataset consists of English Wikipedia articles, with superfluous content removed (tables, links to foreign language versions, citations, footnotes, markup, punctuation). The remaining text is processed to use a minimal character vocabulary of 27 unique characters-lowercase letters a through z, and space. Digits are replaced by their spelled-out equivalents, so "20" becomes "two zero". Character sequences not in the range [a-zA-Z] are converted to a single space. Finally, the text is lowercased. The size of the corpus is 100M characters. Following <ref type="bibr" target="#b31">Mikolov et al. (2012)</ref> and <ref type="bibr" target="#b44">Zhang et al. (2016)</ref>, we split the data into 90M characters for train, 5M characters for dev, and 5M characters for test.</p><p>To aid in comparison with other recent approaches, we also evaluate our model on enwik8 (Mahoney 2009) which is 100M bytes of unprocessed Wikipedia text, including markup and non-Latin characters. There are 205 unique bytes in the dataset. Following <ref type="bibr" target="#b5">Chung et al. (2015)</ref>, and as in text8, we split the data into 90M, 5M and 5M for training, dev and test respectively.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Training</head><p>Compared to most models based on transformers ( <ref type="bibr" target="#b40">Vaswani et al. 2017;</ref><ref type="bibr" target="#b35">Salimans et al. 2018</ref>), our model is very deep, with 64 transformer layers and each layer using two attention heads. Each transformer layer has a hidden size of 512 and a filter size of 2048. We feed our model sequences of length 512. Each item in the sequence represents a single byte (or equivalently, one character in text8) which gets replaced by its embedding, a vector of size 512. We add to the byte embeddings a separate learned positional embedding for each of the 512 token positions, as described in the Positional Embeddings section above. We do the same addition at each layer activation throughout the network. The positional embeddings are not shared across the layers. With two predictions per position, each layer learns to predict 1024 characters. Because we are primarily interested in predicting the immediately following character (one step away), we halve the loss of predicting characters two steps away. The prediction layers are logistic regression layers over the full 256 outputs (the number of unique bytes). To demonstrate the generality of the model, we always train and predict over all 256 labels, even on datasets that cover a smaller vocabulary. Despite this, we found that in practice the model never predicted a byte value outside of the ones observed in the training dataset.</p><p>The model has approximately 235 million parameters, which is larger than the number of characters in the text8 training corpus. To regularize the model, we apply dropout in the attention and ReLU layers with a probability of 0.55. We use the momentum optimizer with 0.99 momentum. The learning rate is fixed during training to 0.003. We train our model for 4 million steps, with each step processing a batch of 16 randomly selected sequences. We drop the intermediate layer losses consecutively, as described in the Intermediate Layer Losses section above. Starting from the first layer, after every 62.5K (= 4M× 1 2 * 64 ) steps, we drop the losses introduced by the next layer. According to this schedule, after training is halfway complete, only the final layer losses are present.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Evaluation</head><p>At inference time, we use the model's prediction at the final position of the final layer to compute the probability of a character given a context of 512 characters. There is no state passed between predictions as would be the case with RNN models, so for each character predicted we have to process the context from scratch. Because there is no reused  computation from previous steps, our model requires expensive computational resources for evaluation and inference. We measure the performance of training checkpoints (roughly every 10,000 steps) by evaluating bits per character (bpc) over the entire the validation set, and save the parameters that perform the best. Our best model is achieved after around 2.5 million steps of training, which takes 175 hours on a single Google Cloud TPU v2.</p><note type="other">Parameters (×10 6 ) Model train inference bpc LSTM (</note></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Results</head><p>We report the performance of our best model (T64) on the validation and test sets.   <ref type="table" target="#tab_1">Table 2</ref> shows the performance of our model given different context sizes. We are able to achieve state-of-the-art results once the context increases beyond 128 characters, with the best performance of 1.06 bpc at 512 characters. As expected, the model performs better when it is given more context. However this trend levels off after 512 characters; we do not see better results using a context of 1024.</p><p>Using the same hyperparameters and training procedure for text8, we also train and evaluate the T12 and T64 architectures on enwik8 (see <ref type="table" target="#tab_3">Table 3</ref>). Note, several previous authors discuss "bits per character" on enwik8 but are in fact reporting bits per byte. Without retuning for this dataset, our models still achieve state-of-the-art performance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Ablation Experiments</head><p>To better understand the relative importance of the several modifications we proposed, we run an ablation analysis. We start from our best model T64 and then remove one modification at a time. For example, when we disable Multiple Positions, the model gets trained with only the last position loss for each layer. This corresponds to calculating {L(t 4 | t 0:3 ), L(t 5 | t 0:3 )} in the example shown in <ref type="figure" target="#fig_1">Figure 4</ref> for both the first and the second layers. When disabling Positional Embeddings, we add the default transformer sinusoidal timing signal before the first layer.  Finally, we replace momentum with SGD as our optimizer, using a range of learning rates (0.3, 0.1, 0.03, 0.01, 0.003, 0.001). This ablation shows that SGD produces competitive models, with learning rate 0.1 giving the best performance. Despite the depth of our network, SGD is able to train the network efficiently with the help of our auxiliary losses.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Description</head><p>Type Model bpb ppl Word <ref type="bibr">Józefowicz et al. (2016)</ref> -23.7 Byte T64 1.03 40.6 <ref type="table">Table 5</ref>: Performance of T64 on the lm1b test set.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Comparison with Word-Level Models</head><p>To understand how byte-level language models perform in comparison to word-level language models, we train T64 on the lm1b corpus ( <ref type="bibr" target="#b2">Chelba et al. 2013</ref>). For lm1b, we use the standard train/test split of the preprocessed corpus, where out-of-vocab words have been replaced with UNK, to allow comparison to previous work on word and word-piece models. We report word perplexity (ppl) by converting bitsper-byte (bpb) into ppl 2 . During training we use the second shard (01) of the heldout dataset as a dev set, as the first shard (00) is the test. Given this is a significantly larger dataset than text8, we set all dropouts to zero. <ref type="table">Table 5</ref> shows a gap in performance between the two classes of language models. This comparison can serve as a starting point for researching possible ways to bridge the gap.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Qualitative Analysis</head><p>To probe the strengths and weaknesses of our best model (T64), we run the model forward, starting with the seed sequence of 512 characters in <ref type="figure">Figure 5</ref>, taken from the text8 test set. <ref type="figure" target="#fig_2">Figure 6</ref> shows several per-character metrics for the model's predictions over the true continuation of this seed text. At each position, we measure i) the model's prediction entropy in bits across all 256 output classes, ii) its lossthe negative log probability of the target label, i.e. the "bits per character" for this position, and iii) the rank of the target in the list of output classes sorted by likelihood. Unsurprisingly, the model is least certain when predicting the first character of a word, and becomes progressively more confident and correct as subsequent characters are seen. To investigate the degree to which our model prefers actual English words over non-existent words, we compute the likelihood the model assigns to all continuations after the seed. We cut off continuations when they reach a space character, or when the total probability of the continuation falls below 0.001. <ref type="figure">Figure 5</ref> shows the entire set of word completions, in order of probability, where the initial pr-from the seed is repeated for readability. Note that these are all real or plausible (proofed) English words, and that even short but bad continuations like prz are assigned a lower cumulative probability than long realistic word completions like predictable.</p><p>We expect that the transformer self-attention should make it easy for our model to copy sequences observed in the context over long distances (up to the context size of 512 characters). To test this expectation, we corrupt the seed and continuation from above by introducing a fake name zjakdmu bmijwxn. Specifically, we change the first occurrence of elizabeth in the seed to zjakdmu bmijwxn, and the Seed mary was not permitted to see them or to speak in her own defence at the tribunal she refused to offer a written defence unless elizabeth would guarantee a verdict of not guilty which elizabeth would not do although the casket letters were accepted by the inquiry as genuine after a study of the handwriting and of the information contained therein and were generally held to be certain proof of guilt if authentic the inquiry reached the conclusion that nothing was proven from the start this could have been pr <ref type="bibr">proven, proved, proof, prevented, presented, problematic, probably, provided, practical, provoked, preceded, predicted, previously, presumed, praised, proposed, practicable, pro- duced, present, preserved, precisely, prior, protected, probable, prompted, proofed, properly, practiced, prohibited, profound, preferable, proceeded, precise, predictable, practically, prevalent</ref> Figure 5: A seed sequence of 512 characters taken from the text8 test set, and all word completions assigned cumulative probability above 0.001 to follow the seed, in order from most likely (0.529) to least likely (0.001).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Word Completions</head><p>second occurrence to she. Similarly, in the continuation, we change elizabeth to zjakdmu bmijwxn. The resulting distance between the two occurrences of the fake name is 434 characters. <ref type="figure" target="#fig_4">Figure 7a</ref> confirms that the model can successfully copy over this long distance. While the initial z in zjakdmu is unexpected, the model immediately chooses to copy the remainder of this word from the context, as opposed to predicting any real z-words learned during training. Similarly, while the model is somewhat unsure whether the fake surname bmijwxn will appear (assigning the initial b a rank of two), it immediately picks up on the correspondence after the b is observed, correctly predicting the remainder of the fake surname.</p><p>For comparison, <ref type="figure" target="#fig_4">Figure 7b</ref> shows how the model would rank the targets in our fake continuation if the original seed with elizabeth were used. This confirms that the fake name is not predictable based on knowledge gained through training, and is indeed being copied from the preceding context.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Generation</head><p>For generating samples using our language model, we train on a larger and less processed dataset, enwik9 (Mahoney 2009). We split enwik9 into 900M, 50M and 50M for training, dev and test. Using the dev dataset to tune our dropout, we find that dropout=0.1 performs the best. On the test dataset, T64 achieves 0.85 bpb. <ref type="table" target="#tab_6">Table 6</ref> shows different generated samples following the seed text, using a sampling temperature of 1.0.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Related Work</head><p>Character-level modeling has shown promise in many areas such as sentiment analysis (Radford, Józefowicz, and   <ref type="bibr" target="#b45">(Zhang, Zhao, and LeCun 2015)</ref>, and is an exciting area due to its simplicity and the ability to easily adapt to other languages. Neural network based language modeling has been heavily researched since its effectiveness was shown by <ref type="bibr" target="#b1">Bengio et al. (2003)</ref>. By far, the most popular architecture in this area is the RNN and variants, first studied in <ref type="bibr" target="#b29">Mikolov et al. (2010)</ref>.</p><p>Much of the progress in this area has been made by mitigating the vanishing gradients problem <ref type="bibr">(Hochreiter et al. 2001</ref>) by architectures such as LSTMs (Hochreiter and Schmidhuber 1997), GRU ( <ref type="bibr" target="#b3">Cho et al. 2014</ref>), Recurrent Highway Networks ( <ref type="bibr" target="#b46">Zilly et al. 2016</ref>), Unitary RNNs (Arjovsky, Shah, and Bengio 2015) and others. This is an issue that transformers do not have, due to attention allowing short paths to all inputs. Methods of normalizing activation functions, such as Batch Normalization <ref type="bibr" target="#b15">(Ioffe and Szegedy 2015;</ref><ref type="bibr" target="#b28">Merity, Keskar, and Socher 2017)</ref> and Layer Normalization <ref type="bibr" target="#b25">(Lei Ba, Kiros, and Hinton 2016)</ref> have also demonstrated improvements on language modeling tasks. As with this work, progress has been made with discovering ways to regularize sequential architectures, with techniques such as Recurrent Dropout (Zaremba, Sutskever, and Vinyals 2014; Gal and Ghahramani 2015) and Zoneout ( <ref type="bibr" target="#b24">Krueger et al. 2016;</ref><ref type="bibr" target="#b34">Rocki 2016)</ref>.</p><p>A closely related architecture is the Neural Cache Model <ref type="bibr" target="#b11">(Grave, Joulin, and Usunier 2016)</ref>, where the RNN is allowed to attend to all of its previous hidden states at each step. Another similar model is used in <ref type="bibr" target="#b8">(Daniluk et al. 2017</ref>) where a key-value attention mechanism similar to transformers is used. Both approaches show improvements on word level language modeling. Memory Networks <ref type="bibr">(We- ston, Chopra, and Bordes 2014)</ref> have a similarity to the transformer model in design as it also has layers of attention for processing a fix memory representing the input doc-  Per-character rank assigned by T64 to a fake continuation, after being seeded on either (a) the fake context where elizabeth is replaced with zjakdmu bmijwxn, or (b) the original context. ument and has been shown to be effective for language modeling in ( <ref type="bibr" target="#b37">Sukhbaatar et al. 2015</ref>). ByteNet ( <ref type="bibr" target="#b17">Kalchbrenner et al. 2016)</ref>, which is related but uses layers of dilated convolutions rather than attention, showed promising results on byte level language modeling. Gated Convolutional Networks ( <ref type="bibr" target="#b9">Dauphin et al. 2016</ref>) was an early non-recurrent model to show superior performance on word level language modeling.</p><p>Language models are not usually very deep due to computational constraints of training RNNs, and this also limits the number of parameters. The transformer architecture allowed us to build very deep (64 layer) models with a large number of parameters. A recent CNN model for text classification ( <ref type="bibr" target="#b6">Conneau et al. 2016</ref>) at 29 layers is considered deep in the NLP community. A Sparsely-Gated Mixture-ofExperts Layer ( <ref type="bibr" target="#b36">Shazeer et al. 2017</ref>) allowed language modeling experiments with a greatly increased number of parameters by only accessing a small portion of parameters every time step, showing a reduction in bits per word. In Exploring the Limits of Language Modeling <ref type="bibr">(Józefowicz et al. 2016)</ref>, an increase in the number of parameters was achieved by mixing character-level and word level models, using specialized softmaxes and using a large amount of computational resources to train. IndRNN ( <ref type="bibr" target="#b26">Li et al. 2018</ref>) uses a simplified RNN architecture that allows deeper stacking with 21-layers, achieving near SOTA character-level language modeling. Fast-Slow Recurrent Neural Networks (Mujika, Meier, and Steger 2017) also achieved near SOTA by increasing the number of recurrent steps for each character processed.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Conclusion</head><p>Character language modeling has been dominated by recurrent network approaches. In this paper, we show that a network of 12 stacked transformer layers achieves state-ofthe-art results on this task. We gain further improvements in quality by deepening the network to 64 layers, utilizing capacity and depth efficiently. The use of auxiliary losses at intermediate layers and positions is critical for reaching this performance, and these losses allow us to train much deeper transformer networks. Finally, we analyze the behavior of our network and find that it is able to exploit dependencies in structure and content over long distances, over 400 characters apart.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Adding the intermediate positions prediction tasks to our network. Now, we predict the final character t 4 and all intermediate characters t 0:3 . t 3 has access only to t 0:2 because of the causal attention masks. All of these losses contribute equally during training.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Our example network after adding two predictions per position.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 6 :</head><label>6</label><figDesc>Figure 6: Per-character entropy, loss and rank assigned by T64 after seeding on the 512 character sequence from Figure 5.</figDesc><graphic url="image-1.png" coords="6,54.00,54.00,503.99,257.34" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>(</head><label></label><figDesc>a) Continuing after the modified seed (including the fake name 434 characters away). (b) Continuing after the original seed from Figure 5.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 7 :</head><label>7</label><figDesc>Figure 7: Per-character rank assigned by T64 to a fake continuation, after being seeded on either (a) the fake context where elizabeth is replaced with zjakdmu bmijwxn, or (b) the original context.</figDesc><graphic url="image-3.png" coords="7,54.00,156.19,503.97,85.26" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Bits per character (bpc) and accuracy of our best 
+model on text8 dev and test, for different context lengths. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 1 compares</head><label>1</label><figDesc></figDesc><table>our models against 
+several recent results. On the test set, we achieve a new state 
+of the art, 1.13 bpc. This model is 5x larger than previous 
+models, which necessitated aggressive dropout rates of 0.55. 
+For better comparison with smaller models, we also train a 
+smaller model (T12) with 41M parameters. This model con-
+sists of 12 layers, and trained for 8M steps, with a reduced 
+dropout rate of 0.2. All other settings were left the same as 
+T64. Our smaller model still outperforms previous models, 
+achieving 1.18 bpc on the test dataset. Increasing the depth 
+of the network from 12 layers to 64 improved the results sig-
+nificantly, with the auxiliary losses enabling the training to 
+better utilize the depth of the network. Note, our models do 
+not use dynamic evaluation (Krause et al. 2017), a technique 
+that adjusts model weights at test time by training on test 
+
+Parameters (×10 6 ) 
+Model 
+train 
+inference bpb 
+FS-LSTM-4 (Mujika, Meier, and Steger 2017) 
+47 
+-1.25 
+mLSTM (Krause et al. 2016) 
+46 
+-1.24 
+cmix v13 (Knol 2017) 
+-
+-1.23 
+T12 (ours) 
+44 
+41 1.11 
+T64 (ours) 
+235 
+219 1.06 
+
+mLSTM + dynamic eval (Krause et al. 2017) 
+46 
+-1.08 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Comparison of various models on enwik8 test. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 4 :</head><label>4</label><figDesc>Evaluation of T64 on text8 dev with context set to 512. Disabling each feature or loss lowers the quality of the model. The biggest win comes from adding multiple po- sitions and intermediate layers losses. For the ablation experiments, we reuse the hyperparame- ters from our best model to avoid a prohibitively expensive parameter search for each ablation. The only exception is the SGD experiment, where we vary the learning rate. The analysis shows that the biggest advantage comes from mul- tiple positions and intermediate layers losses. Predicting all the intermediate positions leads to significant speed up in convergence, since the model sees more effective training examples per batch. Adding losses at the intermediate lay- ers acts in the same spirit by forcing more predictions per training step.</figDesc><table></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 6 :</head><label>6</label><figDesc></figDesc><table>Samples generated by T64, seeded with text from 
+the enwik9 dev set, using a sampling temperature of 1.0. 
+
+Sutskever 2017), question answering (Kenter, Jones, and 
+Hewlett 2018) and classification </table></figure>
+
+			<note place="foot" n="1"> https://github.com/tensorflow/tensor2tensor</note>
+
+			<note place="foot">t 0 t 1 t 2 t 3 t 1 t 2 t 3 t 4 Transformer Layers</note>
+
+			<note place="foot">t 0 t 1 t 2 t 3 t 1 t 2 t 3 t 4 t 1 t 2 t 3 t 4 Transformer Layers Figure 3: Our network after adding prediction tasks for the intermediate layers. For this example of two layers, the losses of the intermediate layer prediction tasks will be absent after finishing 25% of the training. t 0 t 1 t 2 t 3 t 1 t 2 t 2 t 3 t 3 t 4 t 4 t 5 t 1 t 2 t 2 t 3 t 3 t 4 t 4 t 5 Transformer Layers</note>
+
+			<note place="foot" n="2"> For this test set, ppl = 2 bpb * 826189/159658 , where 826,189 is the number of bytes and 159,658 is the number of tokens.</note>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Unitary evolution recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Arjovsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Shah</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno>CoRR abs/1511.06464</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">A neural probabilistic language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Ducharme</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Vincent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Janvin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Mach. Learn. Res</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="1137" to="1155" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">One billion word benchmark for measuring progress in statistical language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Chelba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><surname>Ge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Brants</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Koehn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robinson</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename></persName>
+		</author>
+		<idno type="arXiv">arXiv:1312.3005</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Learning phrase representations using RNN encoder-decoder for statistical machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Van Merrienboer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">¸</forename><surname>Gülçehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Bougares</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Schwenk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+	<note>CoRR abs/1406.1078</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.01704</idno>
+		<title level="m">Hierarchical multiscale recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Gated feedback recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Machine Learning</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="2067" to="2075" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Very deep convolutional networks for natural language processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Conneau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Schwenk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Barrault</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Lecun</surname></persName>
+		</author>
+		<idno>CoRR abs/1606.01781</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Recurrent batch normalization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Cooijmans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Laurent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">C</forename><surname>Courville</surname></persName>
+		</author>
+		<idno>CoRR abs/1603.09025</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Frustratingly short attention spans in neural language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Daniluk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Rocktäschel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Welbl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Riedel</surname></persName>
+		</author>
+		<idno>CoRR abs/1702.04521</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Language modeling with gated convolutional networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><forename type="middle">N</forename><surname>Dauphin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Fan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Auli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Grangier</surname></persName>
+		</author>
+		<idno>CoRR abs/1612.08083</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">A Theoretically Grounded Application of Dropout in Recurrent Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Gal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ghahramani</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Improving neural language models with a continuous cache</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Usunier</surname></persName>
+		</author>
+		<idno>CoRR abs/1612.04426</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="page" from="1735" to="80" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Frasconi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Gradient flow in recurrent nets: the difficulty of learning long-term dependencies</title>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Batch normalization: Accelerating deep network training by reducing internal covariate shift</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ioffe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Szegedy</surname></persName>
+		</author>
+		<idno>CoRR abs/1502.03167</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Exploring the limits of language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Józefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+		<idno>CoRR abs/1602.02410</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Simonyan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">V</forename><surname>Oord</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Kavukcuoglu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1610.10099</idno>
+		<title level="m">Neural machine translation in linear time</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">R</forename><surname>Ke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Goyal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Bilaniuk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Binas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Charlin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Pal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1711.02326</idno>
+		<title level="m">Sparse attentive backtracking: Longrange credit assignment in recurrent networks</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Byte-level machine reading across morphologically varied languages</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Kenter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Hewlett</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Sharp nearby, fuzzy far away: How neural language models use context</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename><surname>Khandelwal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Qi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jurafsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Association for Computational Linguistics (ACL)</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Knol</surname></persName>
+		</author>
+		<ptr target="http://www.byronknoll.com/cmix.html" />
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Multiplicative lstm for sequence modelling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Krause</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Murray</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Renals</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.07959</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Dynamic evaluation of neural sequence models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Krause</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Kahembwe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Murray</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Renals</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1709.07432</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Krueger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Maharaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kramár</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pezeshki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">R</forename><surname>Ke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Goyal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Pal</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.01305</idno>
+		<title level="m">Zoneout: Regularizing rnns by randomly preserving hidden activations</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Layer Normalization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lei</forename><surname>Ba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kiros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">R</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note>ArXiv e-prints</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Independently recurrent neural network (indrnn): Building A longer and deeper RNN</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Cook</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Gao</surname></persName>
+		</author>
+		<idno>CoRR abs/1803.04831</idno>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Large text compression benchmark</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Mahoney</surname></persName>
+		</author>
+		<ptr target="http://www.mattmahoney.net/text/text.html" />
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">Regularizing and optimizing LSTM language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">S</forename><surname>Keskar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<idno>CoRR abs/1708.02182</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+		<title level="m" type="main">Recurrent neural network based language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Karafit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Burget</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cernock</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Khudanpur</surname></persName>
+		</author>
+		<editor>Kobayashi, T.</editor>
+		<editor>Hirose, K.</editor>
+		<editor>and Nakamura, S.</editor>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+	<note>INTER-SPEECH, 1045-1048. ISCA</note>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Extensions of recurrent neural network language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kombrink</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Burget</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ernock</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Khudanpur</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">2011 IEEE International Conference on Acoustics, Speech and Signal Processing</title>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="5528" to="5531" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">Subword language modeling with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Deoras</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-S</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kombrink</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cernocky</surname></persName>
+		</author>
+		<ptr target="http://www.fit.vutbr.cz/imikolov/rnnlm/char.pdf)8" />
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+<note type="report_type">preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Fast-slow recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mujika</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Meier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Steger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="5915" to="5924" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">Learning to generate reviews and discovering sentiment</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Radford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Józefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<idno>CoRR abs/1704.01444</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">M</forename><surname>Rocki</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.06027</idno>
+		<title level="m">Surprisal-driven feedback in recurrent networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title level="m" type="main">Improving gans using optimal transport</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Salimans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Radford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">N</forename><surname>Metaxas</surname></persName>
+		</author>
+		<idno>CoRR abs/1803.05573</idno>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+		<title level="m" type="main">Outrageously large neural networks: The sparsely-gated mixture-of-experts layer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mirhoseini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Maziarz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><forename type="middle">V</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Dean</surname></persName>
+		</author>
+		<idno>CoRR abs/1701.06538</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">End-to-end memory networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Sukhbaatar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Fergus</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="2440" to="2448" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Lstm neural networks for language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Sundermeyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Schlüter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Ney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Thirteenth annual conference of the international</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+	<note>speech communication association</note>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+		<title level="m" type="main">Unbiasing truncated backpropagation through time</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Tallec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Ollivier</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.08209</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Attention is all you need</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Vaswani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Parmar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Uszkoreit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">N</forename><surname>Gomez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Polosukhin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<publisher>Curran Associates, Inc</publisher>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="page" from="5998" to="6008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Backpropagation through time: what it does and how to do it</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">J</forename><surname>Werbos</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings of the IEEE</title>
+		<imprint>
+			<biblScope unit="volume">78</biblScope>
+			<biblScope unit="issue">10</biblScope>
+			<biblScope unit="page" from="1550" to="1560" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<monogr>
+		<title level="m" type="main">Memory networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bordes</surname></persName>
+		</author>
+		<idno>CoRR abs/1410.3916</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<monogr>
+		<title level="m" type="main">Recurrent neural network regularization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Zaremba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Vinyals</surname></persName>
+		</author>
+		<idno>CoRR abs/1409.2329</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">Architectural complexity measures of recurrent neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Che</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Memisevic</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">R</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1822" to="1830" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<monogr>
+		<title level="m" type="main">Characterlevel convolutional networks for text classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">J</forename><surname>Zhao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Lecun</surname></persName>
+		</author>
+		<idno>CoRR abs/1509.01626</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<monogr>
+		<title level="m" type="main">Recurrent highway networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">G</forename><surname>Zilly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">K</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Koutník</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<idno>CoRR abs/1607.03474</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

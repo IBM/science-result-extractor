@@ -1,0 +1,1389 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T08:50+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Neural Cross-Lingual Entity Linking</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Avirup</forename><surname>Sil</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">IBM Research AI</orgName>
+								<address>
+									<addrLine>1101 Kitchawan Road Yorktown Heights</addrLine>
+									<postCode>10598</postCode>
+									<region>NY</region>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gourab</forename><surname>Kundu</surname></persName>
+							<email>gkundu@us.ibm.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">IBM Research AI</orgName>
+								<address>
+									<addrLine>1101 Kitchawan Road Yorktown Heights</addrLine>
+									<postCode>10598</postCode>
+									<region>NY</region>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Radu</forename><surname>Florian</surname></persName>
+							<email>raduf@us.ibm.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">IBM Research AI</orgName>
+								<address>
+									<addrLine>1101 Kitchawan Road Yorktown Heights</addrLine>
+									<postCode>10598</postCode>
+									<region>NY</region>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wael</forename><surname>Hamza</surname></persName>
+							<email>whamza@us.ibm.com</email>
+							<affiliation key="aff0">
+								<orgName type="institution">IBM Research AI</orgName>
+								<address>
+									<addrLine>1101 Kitchawan Road Yorktown Heights</addrLine>
+									<postCode>10598</postCode>
+									<region>NY</region>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Neural Cross-Lingual Entity Linking</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>A major challenge in Entity Linking (EL) is making effective use of contextual information to disambiguate mentions to Wikipedia that might refer to different entities in different contexts. The problem exacerbates with cross-lingual EL which involves linking mentions written in non-English documents to entries in the English Wikipedia: to compare textual clues across languages we need to compute similarity between textual fragments across languages. In this paper , we propose a neural EL model that trains fine-grained similarities and dissimilarities between the query and candidate document from multiple perspectives, combined with convolution and tensor networks. Further, we show that this English-trained system can be applied, in zero-shot learning, to other languages by making surprisingly effective use of multilingual embeddings. The proposed system has strong empirical evidence yielding state-of-the-art results in English as well as cross-lingual: Spanish and Chinese TAC 2015 datasets.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Introduction</head><p>Entity Linking (EL) is the task of associating a specific textual mention of an entity (henceforth query entity) in a given document (henceforth query document) with an entry in a large target catalog of entities, often called a knowledge base or KB, and is one of the major tasks in the Knowledge-Base Population (KBP) track at the Text Analysis Conference (TAC) ( <ref type="bibr" target="#b15">Ji et al. 2014;</ref>. Most of the previous EL research <ref type="bibr" target="#b5">(Cucerzan 2007;</ref><ref type="bibr" target="#b30">Ratinov et al. 2011;</ref><ref type="bibr" target="#b32">Sil and Yates 2013)</ref> have used Wikipedia as the target catalog of entities, because of its coverage and frequent updates made by the community of users.</p><p>Some ambiguous cases for entity linking require computing fine-grained similarity between the context of the query mention and the title page of the disambiguation candidate. Consider the following examples: e 1 : Alexander Douglas Smith is an American football quarterback for the Kansas City Chiefs of the National Football League (NFL). e 2 : Edwin Alexander "Alex" Smith is an American football tight end who was drafted by the Tampa Bay Buccaneers in the third round of the 2005 NFL Draft. e 3 : Alexander Smith was a Scottish-American professional golfer who played in the late 19th and early 20th century. q: Last year, while not one of the NFL's very best quarterbacks, Alex Smith did lead the team to a strong 12-4 season.</p><p>Here, e 1 , e 2 and e 3 refer to the Wikipedia pages of three sportsmen (only first sentence is shown), known as "Alex Smith"; q refers to the sentence for the query mention "Alex Smith". Since words in e 3 belong to a different domain (golf) than q (American football), simple similarity based methods e.g. TF-IDF based cosine similarity will have no difficulty in discarding e 3 as disambiguation for q. But words in e 1 and e 2 contain significant overlap (both are American football players) even in key terms like NFL. Since "Alex Smith" in q is a quarterback, correct disambiguation for q is e 1 . This requires fine-grained similarity computation between q and the title page of e 1 . In this paper, we propose training state-of-the-art (SOTA) similarity models between the context of the query mention and the page of the disambiguation candidate from Wikipedia such that the similarity models can learn to correctly resolve such ambiguous cases. We investigate several ways of representing both the similarity and coherence between the query document and candidate Wikipedia pages. For this purpose, we extract contextual information at different levels of granularity using the entity coreference chain, as well as surrounding mentions in the query document, then use a combination of convolutional neural networks (CNN), <ref type="bibr">LSTMs (Hochreiter and Schmidhuber 1997)</ref>, <ref type="bibr">Lexical Composition and Decomposition (Wang, Mi, and Ittycheriah 2016)</ref>, Multi-Perspective Context Matching (MPCM) ( , and Neural Tensor Networks ( <ref type="bibr" target="#b34">Socher et al. 2013a;</ref><ref type="bibr" target="#b36">2013c)</ref> to encode this information and ultimately perform EL.</p><p>The TAC community is also interested in cross-lingual EL <ref type="bibr" target="#b38">(Tsai and Roth 2016;</ref><ref type="bibr" target="#b31">Sil and Florian 2016)</ref>: given a mention in a foreign language document e.g. Spanish or Chinese, one has to find its corresponding link in the English Wikipedia. The main motivation of the task is to do Information Extraction (IE) from a foreign language for which we have extremely limited (or possibly even no) linguistic resources and no machine translation technology. The TAC 2017 pilot evaluation 1 targets really low-resource lan-guages like Northern Sotho or Kikuyu which only have about 4000 Wikipedia pages which is a significantly smaller size than the English Wikipedia. Recently, for cross-lingual EL, <ref type="bibr" target="#b38">(Tsai and Roth 2016)</ref> proposed a cross-lingual wikifier that uses multi-lingual embeddings. However, their model needs to be re-trained for every new language and hence is not entirely suitable/convenient for the TAC task. We propose a zero shot learning technique ( <ref type="bibr" target="#b27">Palatucci et al. 2009;</ref><ref type="bibr" target="#b35">Socher et al. 2013b</ref>) for our neural EL model: once trained in English, it is applied for cross-lingual EL without the need for re-training. We also compare three popular multilingual embeddings strategies and perform experiments to show which ones work best for the task of zero-shot crosslingual EL. The results show that our methods not only obtain results that are better than published SOTA results on English, but it can also be applied on cross-lingual EL on Spanish and Chinese standard datasets, also yielding SOTA results.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Entity Linking Formulation</head><p>We formalize the problem as follows: we are given a document D in any language, a set of mentions M D = m 1 ; . . . ; m n in D, and the English Wikipedia. For each mention in the document, the goal is to retrieve the English Wikipedia link that the mention refers to. If the corresponding entity or concept does not exist in the English Wikipedia, "NIL" should be the answer. Given a mention m ∈ M D , the first step is to generate a set of link candidates L m . The goal of this step is to use a fast match procedure to obtain a list of links which hopefully include the correct answer. We only look at the surface form of the mention in this step, and use no contextual information. The second essential step is the ranking step where we calculate a score for each title candidate l (m) j ∈ L m , which indicates how relevant it is to the given mention. We represent the mention using various contextual clues and compute several similarity scores between the mention and the English title candidates based on multilingual word and title embeddings. A ranking model learned from Wikipedia documents is used to combine these similarity scores and output the final score for each candidate. We then select the candidate with the highest score as the answer, or output NIL if there is no appropriate candidate.</p><p>Formally, we assume that we have access to a snapshot of Wikipedia, in some language en 2 , where en ∈ X, X being the set of all languages in Wikipedia, as our knowledgebase KB en with titles also known as links denoted by L 1 , . . . , L N . We can define the goal of Entity Linking (EL) as, given a textual mention m and a document D, m ∈ D and m, D ∈ en, to identify the best link l i :</p><formula xml:id="formula_0">ˆ l (m) = arg max j P (l (m) j |m, D)<label>(1)</label></formula><p>Since computing P 񮽙 l (m) j |m, D 񮽙 can be prohibitive over <ref type="bibr">2</ref> Deliberately using the symbol en as it is the most widely chosen language in EL research. large datasets, we change the problem into computingî</p><formula xml:id="formula_1">computingî m = arg max j P (C|m, D, l (m) j ) (2)</formula><p>where C is a Boolean variable that measures how "consistent" the pairs (m, D) and l (m) j are. As a further simplification, given (m, D), we perform an Information Retrieval (IR)-flavored fast match to identify the most likely candidate links l</p><formula xml:id="formula_2">(m) j1 , . . . , l (m)</formula><p>jm for the input (m, D), then find the arg max over this subset.</p><p>In cross-lingual EL, we assume that m, D ∈ tr, where tr is some foreign language like Spanish or Chinese. However, we need to link m to some target link l</p><formula xml:id="formula_3">(m) i , where l (m) i ∈ KB en .</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Fast Match Search</head><p>The goal of the fast match search is to provide a set of candidates that can be re-scored to compute the arg max in Equation (2). To be able to do this, we prepare an anchor-title index, computed from our Wikipedia snapshot, that maps each distinct hyper-link anchor text to its target Wikipedia titles e.g. the anchor text "Titanic" is used in Wikipedia to refer both to the famous ship and to the movie. To retrieve the disambiguation candidates l i for a query mention m, we query the anchor-title index that we constructed. l i is taken to be the set of titles most frequently linked to with anchor text m in Wikipedia. For cross-lingual EL, in addition to using the English Wikipedia index (built from the English snapshot), we also build an anchor-title index from the respective target language Wikipedia. Once we have that index, we rely on the inter-language links in Wikipedia to map all the non-English titles back to English. Hence, we have an additional anchor-title index where we have foreign hyperlinks as surface forms but English titles as the targets e.g. the surface form "Estados Unidos" will have the candidate title United States which is a title in the English Wikipedia.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Embeddings</head><p>Before delving into the model architecture, we briefly describe the word embeddings used in this work. Since we are interested in performing cross-lingual EL, we make use of multi-lingual word embeddings, as shown below.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Monolingual Word Embeddings</head><p>We use the widely used CBOW word2vec model ( ) to generate English mono-lingual word embeddings.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Multi-lingual Embeddings</head><p>Canonical Correlation Analysis (CCA): This technique is based on (Faruqui and Dyer 2014) who learn vectors by first performing SVD on text in different languages, then applying CCA on pairs of vectors for the words that align in parallel corpora. For cross-lingual EL, we use the embeddings provided by <ref type="bibr" target="#b38">(Tsai and Roth 2016)</ref>, built using the title mapping obtained from inter-language links in Wikipedia.</p><p>MultiCCA: Introduced by ( <ref type="bibr" target="#b0">Ammar et al. 2016</ref>) this technique builds upon CCA and uses a linear operator to project pre-trained monolingual embeddings in each language (except English) to the vector space of pre-trained English word embeddings. Weighted Least Squares (LS): Introduced by (Mikolov, Le, and Sutskever 2013), the foreign language embeddings are directly projected onto English, with the mapping being constructed through multivariate regression.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Wikipedia Link Embeddings</head><p>We are also interested in embedding entire Wikipedia pages (links). In previous work, (Francis-Landau, Durrett, and Klein 2016) run CNNs over the entire article and output one fixed-size vector. However, we argue that this operation is too expensive, and it becomes more expensive for some very long pages (based on our experiments on the validation data). We propose a simpler, less expensive route of modeling the Wikipedia page of a target entity. For every Wikipedia title and using pre-trained word embeddings (obtained in Section ), we compute a weighted average of all the words in the Wikipedia page text. We use the inverse document frequency (IDF) of each word as a weight for its vector, to reduce the influence of frequent words. We compute the Wikipedia page embedding for page p (e p ) as:</p><formula xml:id="formula_4">e p = 񮽙 w∈p e w idf w 񮽙 w∈p idf w (3)</formula><p>where e w and idf w are the embedding vector and the IDF for word w respectively. We further apply (and train) a fully connected tanh activation layer to the embedding obtained this way, in order to allow the model to bring the mention context and the Wikipedia link embedding to a similar space before further processing.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Modeling Contexts</head><p>In this Section, we will describe how we build the subnetworks that encode the representation of query mention m in the given query document D. This representation is then compared with the page embedding (through cosine similarity) and the result is fed into the higher network ( <ref type="figure" target="#fig_2">Figure  2</ref>).</p><p>Noting that the entire document D might not be useful 3 for disambiguating m, we choose to represent the mention m based only on the surrounding sentences of m in D, in contrast to ( <ref type="bibr" target="#b10">He et al. 2013;</ref><ref type="bibr" target="#b6">Francis-Landau, Durrett, and Klein 2016)</ref>, which chose to use the entire document for modeling.</p><p>Hence, following similar ideas in ( <ref type="bibr" target="#b1">Barrena et al. 2014;</ref><ref type="bibr" target="#b18">Lee et al. 2012</ref>), we run a coreference resolution system ( <ref type="bibr" target="#b21">Luo et al. 2004</ref>) and assume a "one link per entity" paradigm (similar to one sense per document <ref type="bibr" target="#b7">(Gale, Church, and Yarowsky 1992;</ref><ref type="bibr">Yarowsky 1993)</ref>). We then use these to build a sentence-based context representation of m as well as its finer-grained context encoding, from only words within a window surrounding the mention occurrences.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Modeling Sentences</head><p>We collect all the sentences that contain the mention or are part of the entity's coreference chain. Then we combine these sentences together and form a sequence of sentences containing all instances of mention m. We use a convolutional neural network (CNN) to produce fixed-size vector representations from the variable length sentences. We first embed each word into a d-dimensional vector space using the embedding techniques described in the previous section . This results in a sequence of vectors w 1 ,...,w n . We then map those words into a fixed-size vector using a Convolutional Neural Network (CNN) parameterized with a filter bank V ∈ R k×dc , where c is the width of the convolution (unigram, bigram, etc.) and k is the number of filter maps. We apply a tanh nonlinearity and aggregate the results with mean-pooling. A similar CNN is used for building representations of the first paragraphs of a Wikipedia page which is taken to be the context of the candidate link. First paragraphs of an entity's Wikipedia page consists of one or more sentences. Note that this is different than running CNNs on the whole Wikipedia link embeddings described earlier.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Fine-grained context modeling</head><p>While representing the context of a mention as the output of a CNN running over the sentences surrounding it, might allow for relevant patterns to fire, it is not clear if this type of a representation allows for finer-grained meaning distinctions. Furthermore, this does not exploit the fact that words closer to a mention, are stronger indicators of its meaning than words that are far away. Consider, for example, this sentence: "Ahmadinejad , whose country has been accused of stoking sectarian violence in Iraq, told ABC television that he did not fear an attack from the United States." If our query mention is ABC, only several words surrounding it are needed for a system to infer that ABC is referring to the American Broadcasting Company (a television network), while modeling the entire sentence might lead to losing that signal.</p><p>For that purpose, we consider context to be the words surrounding a mention within a window of length n. For our experiments, we chose n to be 4. We collect all the left and right contexts separately, the left ending with the mention string and the right beginning with the mention string.</p><p>In a first step, we run LSTMs on these contexts as follows: we run forward LSTMs on the left and backward on the right context and use element-wise mean pooling as the combination strategy. To detail: using the condensed notations of (Cheng, Dong, and Lapata 2016), we run a forward LSTM network over each left context, and a backward LSTM network over each right context, and pool them over all the contexts of each mention. The resulting condensed representations are averaged and then combined using a neural tensor network, using the equation below (also see <ref type="figure">Figure 1</ref>).</p><formula xml:id="formula_5">NT N(l, r; W ) = f ( 񮽙 l r 񮽙 t W {1,...,k} 񮽙 l r 񮽙 )<label>(4)</label></formula><p>Here l and r are the representations for the overall left and  <ref type="figure">Figure 1</ref>: Modeling of fine grained context using LSTMs and NTNs from the left and right contexts obtained from the coreference chain of the query entity.</p><formula xml:id="formula_6">right context (l, r ∈ R d ), W</formula><formula xml:id="formula_7">W i ∈ R 2d×2d</formula><p>, f is a standard nonlinearity applied element wise (sigmoid in our case). The output of NTN is a vector NT N(l, r; W ) ∈ R k 4 .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Cross-Lingual Neural Entity Linking</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Neural Model Architecture</head><p>The general architecture of our neural EL model is described in <ref type="figure" target="#fig_2">Figure 2</ref>. Our target is to perform "zero shot learning" represents the probability of the output class C taking a value of 1 (correct link) or 0 (incorrect link), and is computed as a 2 dimensional vector and given by:</p><formula xml:id="formula_8">p(C|m, D, l) = sof tmax(W 0 h + b 0 )<label>(5)</label></formula><p>Feature Abstraction Layer</p><p>In this layer, we encode the similarity between the context of the mention in the source document and the context of <ref type="bibr">4</ref> We use l to denote left context here for simplicity even when we have used it before to denote a link. </p><formula xml:id="formula_9">l i ∈ L,</formula><p>where L is the set of all possible links extracted from the fast match step described in Section .</p><p>the corresponding candidate Wikipedia links as obtained through fast match at multiple granularities, described below. The next input is the cosine similarity between the CNN representations of the sentential context of a mention and the first Wikipedia paragraph, following the intuition that often the first paragraph is a concise description of the main content of a page. Multiple sentences are composed using the same model as above.</p><p>3. "Fine-grained context -Wiki Link" Similarity: Next, we feed the similarity between the more fine-grained embedding of context described in the Embeddings section, Equation (4) and the embedding of the candidate page link. 4. Within-language Features: We also feed in all the local features described in the LIEL system (Sil and Florian 2016). LIEL uses several features such as "how many words overlap between the mention and Wikipedia title match?" or "how many outlink names of the candidate Wikipedia title appear in the query document?" that compares the similarity of the context of the entity under consideration from the source document and its target Wikipedia page. We also add a feature encoding the probability P (l i |m), the posterior of a Wikipedia title l i being the target page for the mention m, using solely the anchor-title index. This feature is a strong indicator to predict if a link l i is the correct target for mention m. Multi-perspective Binning Layer: Previous work ( <ref type="bibr" target="#b20">Liu et al. 2016</ref>) quantizes numeric feature values and then embeds the resulting bins into 10-dimensional vectors. In contrast, we propose a "Multi-perspective Binning Layer" (MPBL) which applies multiple Gaussian radial basis functions to its input, which can be interpreted as a smooth binning process. The above-described similarity values are fed into this MPBL layer, which maps each to a higher dimensional vector. Introducing this layer lets the model learn to respond differently to different values of the cosine input feature, in a neural network friendly way. Our technique differs from ( <ref type="bibr" target="#b20">Liu et al. 2016</ref>) in that it is able to automatically learn the important regions for the input numeric values. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>B. Semantic Similarities and Dissimilarities</head><formula xml:id="formula_10">ˆ t j = s k where k = arg max i cos(t j , s i )</formula><p>The next step is decomposition, where each word embedding s i (or t j ) is decomposed based on its semantic matching vectorˆsvectorˆ vectorˆs i (orˆtorˆ orˆt j ) into two components: similar component s + i (or t + j ) and dissimilar component s − i (or t − j ). We compute the cosine similarity between s i andˆsandˆ andˆs i (or t i andˆtandˆ andˆt i ) and decompose linearly. Hence,</p><formula xml:id="formula_11">(s + i , s − i ) = (αs i , ( √ 1 − α 2 )s i ) and (t + i , t − i ) = (αt i , √ 1 − α 2 t i ) where α = cos(s i , ˆ s i ) and α = cos(t i , ˆ t i ). (s + i , s − i ) = (αs i , (1 − α)s i ) and α = cos(s i , ˆ s i ) (t + i , t − i ) = (αt i , (1 − α)t i ) and α = cos(t i , ˆ t i )</formula><p>In the Composition step, the similar and dissimilar components are composed at different granularities using a two channel CNN and pooled using max-pooling. The output vector is the representation of the similarity (and dis-similarity) of the source context of the mention with the Wikipedia page of the target entity.</p><p>2. Multi-perspective Context Matching (MPCM): Next, we input a series of weighted cosine similarities between the query mention context and the Wikipedia link embedding, as described in ( ). Our argument is that while cosine similarity finds semantically similar words, it has no relation to the classification task at hand. Hence, we propose to train weight vectors to re-weigh the dimensions of the input vectors and then compute the cosine similarity. The weight vectors will be trained to maximize the performance on the entity linking task. We run CNNs to produce a fixed size representations for both query and candidate contexts from Section . We build a node computing the cosine similarity of these two vectors, parametrized by a weight matrix. Each row in the weight matrix is used to compute a score as u k = cos(w k • v 1 , w k • v 2 ), where v 1 and v 2 are input d dimensional vectors, w k ∈ R d is the k th column in the matrix, u is a l-dimensional output vector, and • denotes a element-wise multiplication. Note that re-weighting the input vectors is equivalent to applying a diagonal tensor with non-negative diagonal entries to the input vectors.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Training and Decoding</head><p>To train the model described in Equation <ref type="formula">(2)</ref> </p><formula xml:id="formula_12">(m, D, l, Y ) data pairs 6 .</formula><p>Training is performed using stochastic gradient descent on the following loss function:</p><formula xml:id="formula_13">− 1 |T | 񮽙 (mj ,Dj ,lj ,Yj )∈T log P (C = Y j |m j , D j , l j ) (6)</formula><p>Decoding a particular mention m ∈ D, is simply done by running fast match to produce a set of likely candidate Wikipedia pages, then generate the system outputîoutputˆoutputî (m) as in Equation <ref type="formula">(2)</ref>. Note that the model does all this by only computing similarities between texts in the same language, or by using cross-lingual embeddings, allowing it to transcend across languages.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Experiments</head><p>We evaluate our proposed method on the benchmark datasets for English: <ref type="bibr">CoNLL 2003</ref><ref type="bibr">and TAC 2010</ref><ref type="bibr">and Cross- Lingual: TAC 2015</ref> Trilingual Entity Linking dataset. The TAC 2010 source collection includes news from various agencies and web log data. Training data includes a specially prepared set of 1,500 web queries. Test data includes 2,250 queries -1,500 news and 750 web log uniformly distributed across person, organisation, and geo-political entities. Cross-Lingual (TAC): We evaluate our method on the TAC 2015 Tri-Lingual Entity Linking datasets which comprises of 166 Chinese documents (84 news and 82 discussion forum articles) and 167 Spanish documents (84 news and 83 discussion forum articles). The mentions in this dataset are all named entities of five types: Person, Geo-political Entity, Organization, Location, and Facility.</p><p>We use standard train, validation and test splits if the datasets come with it, else we use the CoNLL validation data as dev. For the CoNLL experiments, in addition to the Wikipedia anchor-title index, we also use a alias-entity mapping previously used by <ref type="bibr" target="#b29">(Pershina, He, and Grishman 2015;</ref><ref type="bibr" target="#b8">Globerson et al. 2016;</ref><ref type="bibr" target="#b41">Yamada et al. 2016</ref>). We also use the mappings provided by <ref type="figure" target="#fig_2">(Hoffart et al. 2011</ref>) obtained by extending the "means" tables of YAGO ( <ref type="bibr" target="#b14">Hoffart et al. 2013</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Hyperparameters</head><p>We tune all our hyper-parameters on the development data. We run CNNs on the sentences and the Wikipedia embeddings with filter size of 300 and width 2. The non-linearity used is tanh. For both forward (left) and backward (right) LSTMs, we use mean pooling. We tried max-pooling and also choosing the last hidden state of the LSTMs but mean <ref type="bibr">6</ref> The ratio of positive to negative training events is controlled to produce a more balanced training data. pooling worked the best. We combine the LSTM vectors for all the left and all the right using mean pooling, as well. For the NTNs, we use sigmoid as the non-linearity and an output size of 10 and use L2 regularization with a value of 0.01. Finally, to compute the similarity we feed the output of the NTN to another hidden layer with sigmoid nonlinearity for a final output vector of size 300. For the main model, we again use sigmoid non-linearity and an output size of 1000 with a dropout rate of 0.4. We do not update the Wikipedia page embeddings as they did not seem to provide gains in numbers while testing on development data. We also do not update the multi-lingual embeddings for the cross-lingual experiments. For the English experiments, we update the mono-lingual English word embeddings. For the MPBL node, the number of dimensions is 100.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Comparison with the SOTA</head><p>The current SOTA for English EL are ( <ref type="bibr" target="#b8">Globerson et al. 2016</ref>) and ( <ref type="bibr" target="#b41">Yamada et al. 2016</ref>). We also compare with LIEL (Sil and Florian 2016) which is a language-independent EL system and has been a top performer in the TAC annual evaluations. For cross-lingual EL, our major competitor is (Tsai and Roth 2016) who uses multi-lingual embeddings similar to us. We also compare with several other systems as shown in <ref type="table" target="#tab_3">Table 1a</ref>, 1b and 2a along with the respective top ranked TAC systems. <ref type="table" target="#tab_3">Table 1a</ref> shows our performance on the CoNLL dataset along with recent competitive systems in terms of microaverage accuracy. We outperform ( <ref type="bibr" target="#b8">Globerson et al. 2016</ref>) by an absolute average of 1.27% and ( <ref type="bibr" target="#b41">Yamada et al. 2016</ref>) by 0.87%. Globerson et al. use a multi-focal attention model to select specific context words that are essential for linking a mention. Our model with the lexical decomposition and composition and the multi-perspective context matching layers seems to be more beneficial for the task of EL. <ref type="table" target="#tab_3">Table 1b</ref> shows our results when compared with the top systems in the evaluation along with other SOTA systems on the TAC2010 dataset. Encouragingly, our model's performance is slightly better than the top performer, <ref type="bibr" target="#b8">Globerson (2016)</ref>, and outperforms both the top rankers from this challenging annual evaluation by 8% absolute percentage points. Note that in both the datasets, our model obtains 7.77% (on CoNLL) and 8.75% (on TAC) points better than <ref type="bibr">(Sil and Flo- rian 2016)</ref>, which is a SOTA multi-lingual system. Another interesting fact we observe is that our full model outperforms ( <ref type="bibr">Sun et al. 2015</ref>) by 3.5% points, where they employ NTNs to model the semantic interactions between the context and the mention. Our model uses NTNs to model the left and right contexts from the full entity coreference chain in a novel fashion not used previously in the EL research and seems highly useful for the task. Interestingly, we observe that the recent (Gupta, Singh, and Roth 2017) EL system performs rather poorly on the CoNLL dataset (7.5% lower than our model) even when their system employ entity type information from a KB which our system does not.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>English Results</head><p>While doing ablation study, we notice that adding the LDC layer provides a boost to our model in both the datasets,</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Systems</head><p>In-KB acc. %  <ref type="formula" target="#formula_0">(2011)</ref> 82.5 <ref type="bibr" target="#b9">Gupta et al. (2017)</ref> 82.9 <ref type="bibr" target="#b10">He et al. (2013)</ref> 85.6 Francis- <ref type="bibr" target="#b6">Landau et al. (2016)</ref> 85. <ref type="bibr">5 Sil &amp; Florian (2016)</ref> 86.2 <ref type="bibr">Lazic et al. (2015)</ref> 86.4 <ref type="bibr">Chisholm &amp; Hachey (2015)</ref> 88.7 <ref type="bibr">Ganea et al. (2015)</ref> 87.6 <ref type="bibr" target="#b29">Pershina et al. (2015)</ref> 91.8 <ref type="bibr" target="#b8">Globerson et al. (2016)</ref> 92.7 <ref type="bibr" target="#b41">Yamada et al. (2016)</ref> 93  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Cross-lingual Results</head><p>Spanish: <ref type="table" target="#tab_6">Table 2a</ref> shows our performance on cross-lingual EL on the TAC2015 Spanish dataset. The experimental setup is similar as in the TAC diagnostic evaluation, where systems need to predict a link as well as produce the type for a query mention. We use an entity type classifier to attach the entity types to the predicted links as described in our previous work in (Sil, Dinu, and Florian 2015). We compare our performance to <ref type="bibr" target="#b31">(Sil and Florian 2016)</ref>, which was the top ranked system in TAC 2015, and the cross-lingual wikifier <ref type="bibr" target="#b38">(Tsai and Roth 2016)</ref>. We see that our zero-shot model trained with the multi-CCA embeddings is 1.32% and 1.85% percentage points better than the two competitors respectively.</p><p>Chinese: <ref type="table" target="#tab_6">Table 2b</ref> displays our performance on the TAC2015 Chinese dataset. Our proposed model is 0.73% points better than <ref type="bibr" target="#b38">(Tsai and Roth 2016)</ref>. In both crosslingual experiments, the multi-CCA embeddings outperform LS and CCA methods. In Spanish, LS and CCA are tied but in Chinese, CCA performs better than LS. Note that "this work" in <ref type="table" target="#tab_6">Table 2</ref> indicates our full model with LDC and MPCM. Sil and Yates 2013) but are more expensive since they capture coherence among titles in the given document. However, ( <ref type="bibr" target="#b30">Ratinov et al. 2011</ref>) argue that global systems provide a minor improvement over local systems. Our proposed EL system is a local system which comprises of a deep neural network architecture with various layers computing the semantic similarity of the source documents and the potential entity link candidates modeled using techniques like neural tensor network, multi-perspective cosine similarity and lexical composition and decomposition. <ref type="bibr">Sun et al. (2015)</ref> used neural tensor networks for entity linking, between mention and the surrounding context. But this did not give good results in our case. Instead, the best results were obtained by composing the left and right contexts of all the mentions in the coreference chain of the target mention. In this work, we also introduced state-of-the-art similarity models like MPCM and LDC for entity linking. Combination of all these components helps our model score 3.5 absolute accuracy improvement over <ref type="bibr">Sun et al. (2015)</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Related Work</head><p>The cross-lingual evaluation at TAC KBP EL Track that started in 2011 <ref type="bibr" target="#b17">(Ji, Grishman, and Dang 2011;</ref><ref type="bibr" target="#b16">Ji et al. 2015</ref>) has Spanish and Chinese as the target foreign languages. One of the top performers (Sil and Florian 2016), like most other participants, perform EL in the foreign language (with the corresponding foreign KB), and then find the corresponding English titles using Wikipedia interlanguage links. Others ( <ref type="bibr" target="#b22">McNamee et al. 2011</ref>) translate the query documents to English and do English EL. The first approach relies on a large enough KB in the foreign language, whereas the second depends on a good machine translation system. Similar to <ref type="bibr" target="#b38">(Tsai and Roth 2016)</ref>, the ideas proposed in this paper make significantly simpler assumptions on the availability of such resources, and therefore can also scale to lower resource languages, while doing very well also on high-resource languages. However, unlike our model they need to train and decode the model on the target language. Our model once trained on English can perform  cross-lingual EL on any target language. Some recent work involves (Lin, Lin, and Ji 2017) but is unrelated since it solves a different problem (EL from only lists) than generic EL and hence an apples-apples comparison cannot be done. ( <ref type="bibr" target="#b28">Pan et al. 2017</ref>) is related but their method prefers common popular entities in Wikipedia and they select training data based on the topic of the test set. Our proposed method is more generic and robust as it is once trained on the English Wikipedia and tested on any other language without re-training. ( <ref type="bibr" target="#b37">Tan et al. 2017</ref>) solves a different problem by performing EL for queries while we perform EL for generic documents like news. Recently (Gupta, Singh, and Roth 2017) propose an EL system by jointly encoding types from a knowledge-base. However, their technique is limited to only English and unlike us do not perform crosslingual EL.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Conclusion</head><p>Recent EL research, that we compare against, have produced models that achieve either SOTA mono-lingual performance or cross-lingual performance, but not both. We produce a model that performs zero-shot learning for the task of crosslingual EL: once trained on English, the model can be applied to any language, as long as we have multi-lingual embeddings for the target language. Our model makes effective use of the similarity models (LDC, MPCM) and composition methods (neural tensor network) to capture similarity/dissimilarity between the query mention's context and the target Wikipedia link's context. We test three methods of generating multi-lingual word embeddings and determine that the MultiCCA-generated embeddings perform best for the task of EL for both Spanish and Chinese. Our model has strong experimental results, outperforming all the previous SOTA systems in both mono and cross-lingual experiments. Also, with the increased focus on cross-lingual EL in future TAC evaluations, we believe that this zero-shot learning technique would prove useful for low-resource languages: train one model and use it for any other language.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head></head><label></label><figDesc>Copyright c 񮽙 2018, Association for the Advancement of Artificial Intelligence (www.aaai.org). All rights reserved.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>(</head><label></label><figDesc>Socher et al. 2013b; Palatucci et al. 2009) for cross-lingual EL. Hence, we want to train a model on English data and use it to decode in any other language, provided we have ac- cess to multi-lingual embeddings from English and the tar- get language. We allow the model to compute several simi- larity/coherence scores S (feature abstraction layer): which are several measures of similarity of the context of the men- tion m in the query document and the context of the can- didate link's Wikipedia page, described in details in the next section, which are fed to a feed-forward neural layer H with weights W h , bias b h , and a sigmoid non-linearity. The output of H (denoted as h) is computed according to h = σ(W h S + b h ). The output of the binary classifier p(C|m, D, l) is the softmax over the output of the final feed- forward layer O with weights W 0 and bias b 0 . p(C|m, D, L)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2: Architecture of our neural EL system. The input to the system are: a document D containing the query mention m and the corresponding Wikipedia candidate link l i ∈ L, where L is the set of all possible links extracted from the fast match step described in Section .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>A</head><label></label><figDesc>. Similarity Features by comparing Context Rep- resentations 1. "Sentence context -Wiki Link" Similarity: The first input to this layer is the cosine similarity between the CNN representations of its relevant context sentences and the embedding of the candidate Wikipedia link (both described in the Embeddings section). 2. "Sentence context -Wiki First Paragraph" Similarity:</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head></head><label></label><figDesc>Datasets English (CoNLL &amp; TAC): The CoNLL dataset (Hoffart et al. 2011) contains 1393 articles with about 34K mentions, and the standard performance metric is mention-averaged accuracy. The documents are partitioned into train, test-a and test-b. Following previous work, we report performance on the 231 test-b documents with 4483 linkable mentions.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Hoffart et al.</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head></head><label></label><figDesc>Previous works in EL (Bunescu and Pasca 2006; Mihalcea and Csomai 2007) involved finding the similarity of the con- text in the source document and the context of the candi- date Wikipedia titles. Recent research on EL has focused on sophisticated global disambiguation algorithms (Globerson et al. 2016; Milne and Witten 2008; Cheng and Roth 2013;</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="false"><head>is a tensor with k slices with</head><label></label><figDesc></figDesc><table>h21 
+
+h41 
+h8 
+h2 
+
+w 1 
+w 2 
+m 
+
+
+
+
+
+hm 
+h1 
+
+w 7 
+w 8 
+m 
+
+
+
+
+
+hm 
+h7 
+
+m 
+w 21 
+w 22 
+
+
+
+
+
+h22 
+hm 
+
+m 
+w 41 
+w 42 
+
+
+
+
+
+h42 
+hm 
+h2 
+
+񮽙 
+
+w 1 
+w 2 
+m 
+
+񮽙 
+
+񮽙 
+
+hm 
+h1 
+
+h8 
+
+񮽙 
+
+w 7 
+w 8 
+m 
+
+
+
+񮽙 
+
+hm 
+h7 
+h21 
+
+m 
+w 21 
+w 22 
+
+
+
+
+
+h22 
+hm 
+h41 
+
+m 
+w 41 
+w 42 
+
+񮽙 
+
+
+
+h42 
+hm 
+
+
+
+
+
+
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>] where s i and t j are the pre-trained word embeddings for the ith and jth word from the source context and the Wikipedia paragraph respectively. The steps of LDC are summarized below. For each word s i in S, the semantic matching step finds a matching wordˆs wordˆ wordˆs i from T . In the reverse direction, a matching wordˆtwordˆ wordˆt j is found for each t j in T .= t k where k = arg max j cos(s i , t j ) andˆt andˆ andˆt j = s k where k = arg max i cos(t j , s i ). ˆ s i = t k where k = arg max j cos(s i , t j )</head><label></label><figDesc></figDesc><table>1. Lexical Decomposition and Composition (LDC): We 
+use the recently proposed LDC 5 model in (Wang, Mi, and 
+Ittycheriah 2016) to compare the contexts. For brevity, we 
+only give a brief description of this feature -we direct 
+the reader to the original paper. We represent the source 
+context S and the Wikipedia paragraph T as a sequence 
+of pre-trained embeddings of words. S = [s 1 , . . . , s m ] 
+and T=[t 1 , . . . , t n For a word embedding, its 
+matching word is the one with the highest cosine similar-
+ity. Hence, ˆ 
+s i 5 Not to be confused with the Linguistic Data Consortium 
+(https://www.ldc.upenn.edu/.) 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>D i and its corresponding correct Wikipedia page l (mij ) , we use our fast match strategy (discussed in Page 2) to generate K ij number of incorrect Wikipedia pages (l ij k ) k . l i and l ij k represent positive and nega- tive examples for the binary classifier. Pairs in the list of [(m ij , D, l ij ), (m ij , D, l ij0 ), . . . , (m ij , D i , l ij K ij )] will be used to produce the similarity/ dis-similarity vectors S ij k . Classification label Y ij k that corresponds to input vector (m ij , D i , l ij k ) will take the value of 1 for the correct Wikipedia page and 0 for incorrect ones. The binary clas- sifier is trained with the training set T which contains all the</head><label></label><figDesc></figDesc><table>, the binary 
+classification training set is prepared as follows. For each 
+mention m ij ∈ </table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>. 1</head><label>1</label><figDesc></figDesc><table>This work 
+92.1 
+This work+CtxLSTMs 
+93.0 
+This work+CtxLSTMs+LDC 
+93.4 
+This work+CtxLSTMs+LDC+MPCM 
+94.0 
+
+(a) CoNLL2003 
+
+Systems 
+In-KB acc. % 
+
+TAC Rank 1 
+79.2 
+TAC Rank 2 
+71.6 
+Sil &amp; Florian (2016) 
+78.6 
+He et al. (2013) 
+81.0 
+Chisholm &amp; Hachey (2015) 
+80.7 
+Sun et al. (2015) 
+83.9 
+Yamada et al. (2016) 
+85.2 
+Globerson et al. (2016) 
+87.2 
+
+This work 
+85.0 
+This work+CtxLSTMs 
+86.3 
+This work+CtxLSTMs+LDC 
+86.9 
+This work+CtxLSTMs+LDC+MPCM 
+87.4 
+
+(b) TAC2010 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 1 :</head><label>1</label><figDesc></figDesc><table>Performance comparison on the CoNLL 2003 testb and TAC2010 datasets. Our system outperforms all EL systems, 
+including the only other multi-lingual system, (Sil and Florian 2016). 
+
+and the multi-perspective context matching (MPCM) layer 
+provides an additional 0.5% (average) points improvement. 
+We see that adding in the context LSTM based layer (fine-
+grained context) adds almost 1% point (in both the datasets) 
+over the base similarity features. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Performance comparison on the TAC 2015 Spanish and Chinese datasets. Our system outperforms all the previous EL 
+systems. 
+
+</table></figure>
+
+			<note place="foot" n="1"> http://nlp.cs.rpi.edu/kbp/2017/taskspec pilot.pdf The Thirty-Second AAAI Conference on Artificial Intelligence (AAAI-18)</note>
+
+			<note place="foot" n="3"> Our experiments on the validation datasets made us think this way.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgements</head><p>We thank Zhiguo Wang for the help with the LDC and MPCM node. We also thank Georgiana Dinu and Waleed Ammar for providing us with the multi-lingual embeddings. We are grateful to Salim Roukos for the helpful discussions, and the anonymous reviewers for their suggestions.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Ammar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Mulcaire</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Tsvetkov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Lample</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1602.01925</idno>
+		<title level="m">Massively multilingual word embeddings</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">one entity per discourse&quot; and&quot; one entity per collocation&quot; improve named-entity disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Barrena</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Agirre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Cabaleiro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Penas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Soroa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COL-ING</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="2260" to="2269" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Using encyclopedic knowledge for named entity disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Bunescu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pasca</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EACL</title>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Relational inference for wikification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roth</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of the Conference on Empirical Methods in Natural Language Processing (EMNLP)</title>
+		<meeting>of the Conference on Empirical Methods in Natural Language essing (EMNLP)</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Long short-term memory-networks for machine reading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Dong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Lapata</surname></persName>
+		</author>
+		<idno>CoRR abs/1601.06733</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Large-scale named entity disambiguation based on wikipedia data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Cucerzan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP-CoNLL</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="708" to="716" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Capturing semantic similarity for entity linking with convolutional neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Faruqui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">;</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Acl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Francis-Landau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Durrett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. NAACL</title>
+		<meeting>NAACL</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+	<note>Improving vector space word representations using multilingual correlation</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">One sense per discourse</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">A</forename><surname>Gale</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">W</forename><surname>Church</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Yarowsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the workshop on Speech and Natural Language</title>
+		<meeting>the workshop on Speech and Natural Language</meeting>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="233" to="237" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Collective entity resolution with multi-focal attention</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Globerson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Lazic</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Chakrabarti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Subramanya</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ringgaard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Pereira</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>ACL</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Entity linking via joint encoding of types, descriptions, and context</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Gupta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Singh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roth</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2017 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="2671" to="2680" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Learning entity representation for entity disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="30" to="34" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hoffart</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Yosef</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Bordino</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Furstenau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pinkal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Spaniol</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Taneva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Thater</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Weikum1</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Robust Disambiguation of Named Entities in Text</title>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<biblScope unit="page" from="782" to="792" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Yago2: A spatially and temporally enhanced knowledge base from wikipedia</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hoffart</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">M</forename><surname>Suchanek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Berberich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Weikum</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Artificial Intelligence</title>
+		<imprint>
+			<biblScope unit="volume">194</biblScope>
+			<biblScope unit="page" from="28" to="61" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Overview of tac-kbp2014 entity discovery and linking tasks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Ji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Dang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Nothman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hachey</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Text Analysis Conference (TAC2014)</title>
+		<meeting>Text Analysis Conference (TAC2014)</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Overview of tac-kbp2015 tri-lingual entity discovery and linking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Ji</surname></persName>
+			<affiliation>
+				<orgName type="collaboration">TAC</orgName>
+			</affiliation>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Nothman</surname></persName>
+			<affiliation>
+				<orgName type="collaboration">TAC</orgName>
+			</affiliation>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hachey</surname></persName>
+			<affiliation>
+				<orgName type="collaboration">TAC</orgName>
+			</affiliation>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Florian</forename></persName>
+			<affiliation>
+				<orgName type="collaboration">TAC</orgName>
+			</affiliation>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename></persName>
+			<affiliation>
+				<orgName type="collaboration">TAC</orgName>
+			</affiliation>
+		</author>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Overview of the tac2011 knowledge base population track</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Ji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Grishman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">T</forename><surname>Dang</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2011" />
+			<publisher>TAC</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Joint entity and event coreference resolution across documents</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Recasens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Surdeanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jurafsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="489" to="500" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">List-only entity linking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C.-Y</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ji</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics<address><addrLine>Short Papers</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="536" to="541" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Jiang</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.03558</idno>
+		<title level="m">Neural networks models for entity discovery and linking</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">A mention-synchronous coreference resolution algorithm based on the bell tree</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Luo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Ittycheriah</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Jing</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Kambhatla</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Roukos</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page">135</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Cross-language entity linking in maryland during a hurricane</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Mcnamee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Mayfield</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">W</forename><surname>Oard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Stoyanov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Doermann</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Wikify!: Linking documents to encyclopedic knowledge</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Mihalcea</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Csomai</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CIKM</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="233" to="242" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">Efficient estimation of word representations in vector space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Dean</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1301.3781</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Exploiting similarities among languages for machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><forename type="middle">V</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1309.4168</idno>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Learning to link with wikipedia</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Milne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><forename type="middle">H</forename><surname>Witten</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CIKM</title>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Zero-shot learning with semantic output codes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Palatucci</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Pomerleau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">M</forename><surname>Mitchell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="1410" to="1418" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Cross-lingual name tagging and linking for 282 languages</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Pan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>May</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Nothman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Knight</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ji</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 55th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="1946" to="1958" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Personalized page rank for named entity disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pershina</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Grishman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">HLT-NAACL</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="238" to="243" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Local and global algorithms for disambiguation to wikipedia</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Ratinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Roth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Downey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anderson</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">One for all: Towards language independent named entity linking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Sil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Florian</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>ACL</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Re-ranking for Joint NamedEntity Recognition and Linking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Sil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yates</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CIKM</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">The ibm systems for trilingual entity discovery and linking at tac 2015</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Sil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Dinu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Florian</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Eighth Text Analysis Conference (TAC2015)</title>
+		<meeting>the Eighth Text Analysis Conference (TAC2015)</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Reasoning with neural tensor networks for knowledge base completion</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="926" to="934" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Zero-shot learning through cross-modal transfer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ganjoo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="935" to="943" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Modeling mention, context and entity with neural networks for entity disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Perelygin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">Y</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chuang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">Y</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Potts</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Ji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="volume">1631</biblScope>
+			<biblScope unit="page" from="1333" to="1339" />
+		</imprint>
+	</monogr>
+	<note>IJCAI</note>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Tan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Lv</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zhou</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.02788</idno>
+		<title level="m">Entity linking for queries by searching wikipedia sentences</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Cross-lingual wikification using multilingual embeddings</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C.-T</forename><surname>Tsai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roth</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NAACL-HLT</title>
+		<meeting>NAACL-HLT</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="589" to="598" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+		<title level="m" type="main">Multiperspective context matching for machine comprehension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Mi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Hamza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Florian</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename></persName>
+		</author>
+		<idno type="arXiv">arXiv:1612.04211</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<monogr>
+		<title level="m" type="main">Sentence similarity learning by lexical decomposition and composition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Mi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Ittycheriah</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>COLING</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Joint learning of the embedding of words and entities for named entity disambiguation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Yamada</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Shindo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Takeda</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Takefuji</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1601.01343</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the workshop on Human Language Technology</title>
+		<meeting>the workshop on Human Language Technology</meeting>
+		<imprint>
+			<date type="published" when="1993" />
+			<biblScope unit="page" from="266" to="271" />
+		</imprint>
+	</monogr>
+	<note>One sense per collocation</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

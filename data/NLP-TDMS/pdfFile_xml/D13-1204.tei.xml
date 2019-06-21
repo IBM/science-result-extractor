@@ -1,0 +1,1984 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-06T23:06+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Breaking Out of Local Optima with Count Transforms and Model Recombination: A Study in Grammar Induction</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher>Association for Computational Linguistics</publisher>
+				<availability status="unknown"><p>Copyright Association for Computational Linguistics</p>
+				</availability>
+				<date type="published" when="1983">1983-1995. 18-21 October 2013. 2013</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Valentin</forename><forename type="middle">I</forename><surname>Spitkovsky</surname></persName>
+							<email>valentin@cs.stanford.edu</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hiyan</forename><surname>Alshawi</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Jurafsky</surname></persName>
+							<email>jurafsky@stanford.edu</email>
+						</author>
+						<title level="a" type="main">Breaking Out of Local Optima with Count Transforms and Model Recombination: A Study in Grammar Induction</title>
+					</analytic>
+					<monogr>
+						<title level="m">Proceedings of the 2013 Conference on Empirical Methods in Natural Language Processing</title>
+						<meeting>the 2013 Conference on Empirical Methods in Natural Language Processing <address><addrLine>Seattle, Washington, USA</addrLine></address>
+						</meeting>
+						<imprint>
+							<publisher>Association for Computational Linguistics</publisher>
+							<date type="published" when="1983">1983-1995. 18-21 October 2013. 2013</date>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Many statistical learning problems in NLP call for local model search methods. But accuracy tends to suffer with current techniques, which often explore either too narrowly or too broadly: hill-climbers can get stuck in local optima, whereas samplers may be inefficient. We propose to arrange individual local opti-mizers into organized networks. Our building blocks are operators of two types: (i) transform , which suggests new places to search, via non-random restarts from already-found local optima; and (ii) join, which merges candidate solutions to find better optima. Experiments on grammar induction show that pursuing different transforms (e.g., discarding parts of a learned model or ignoring portions of training data) results in improvements. Groups of locally-optimal solutions can be further perturbed jointly, by constructing mixtures. Using these tools, we designed several modular dependency grammar induction networks of increasing complexity. Our complete system achieves 48.6% accuracy (directed dependency macro-average over all 19 languages in the 2006/7 CoNLL data)-more than 5% higher than the previous state-of-the-art.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Statistical methods for grammar induction often boil down to solving non-convex optimization problems. Early work attempted to locally maximize the likelihood of a corpus, using EM to estimate probabilities of dependency arcs between word bigrams <ref type="bibr" target="#b70">(Paskin 2001a;</ref><ref type="bibr" target="#b71">2001b</ref>). That parsing model has since been extended to make unsupervised learning more feasible ( <ref type="bibr" target="#b52">Klein and Manning, 2004;</ref><ref type="bibr" target="#b35">Headden et al., 2009;</ref><ref type="bibr" target="#b88">Spitkovsky et al., 2012b</ref>). But even the latest techniques can be quite error-prone and sensitive to initialization, because of approximate, local search.</p><p>In theory, global optima can be found by enumerating all parse forests that derive a corpus, though this is usually prohibitively expensive in practice. A</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Abstract Operators</head><p>Let C be a collection of counts -the sufficient statistics from which a candidate solution to an optimization problem could be computed, e.g., by smoothing and normalizing to yield probabilities. The counts may be fractional and solutions could take the form of multinomial distributions. A local optimizer L will convert C into C * = L D (C) -an updated collection of counts, resulting in a probabilistic model that is no less (and hopefully more) consistent with a data set D than the original C:</p><formula xml:id="formula_0">(1) L D C C *</formula><p>Unless C * is a global optimum, we should be able to make further improvements. But if L is idempotent (and ran to convergence) then L(L(C)) = L(C). Given only C and L D , the single-node optimization network above would be the minimal search pattern worth considering. However, if we had another optimizer L ′ -or a fresh starting point C ′ -then more complicated networks could become useful.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Transforms (Unary)</head><p>New starts could be chosen by perturbing an existing solution, as in MCMC, or independently of previous results, as in random restarts. We focus on intermediate changes to C, without injecting randomness. All of our transforms involve selective forgetting or filtering. For example, if the probabilistic model that is being estimated decomposes into independent constituents (e.g., several multinomials) then a subset of them can be reset to uniform distributions, by discarding associated counts from C. In text classification, this could correspond to eliminating frequent or rare tokens from bags-of-words. We use circular shapes to represent such model ablation operators: <ref type="bibr">(2)</ref> C An orthogonal approach might separate out various counts in C by their provenance. For instance, if D consisted of several heterogeneous data sources, then the counts from some of them could be ignored: a classifier might be estimated from just news text. We will use squares to represent data-set filtering: <ref type="bibr">(3)</ref> C Finally, if C represents a mixture of possible interpretations over D -e.g., because it captures the output of a "soft" EM algorithm -contributions from less likely, noisier completions could also be suppressed (and their weights redistributed to the more likely ones), as in "hard" EM. Diamonds will represent plain (single) steps of Viterbi training:</p><formula xml:id="formula_1">(4) C</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Joins (Binary)</head><p>Starting from different initializers, say C 1 and C 2 , it may be possible for L to arrive at distinct local optima, C * 1 񮽙 = C * 2 . The better of the two solutions, according to likelihood L D of D, could then be selected -as is standard practice when sampling.</p><p>Our joining technique could do better than either</p><formula xml:id="formula_2">C * 1 or C * 2</formula><p>, by entertaining also a third possibility, which combines the two candidates. We construct a mixture model by adding together all counts from</p><formula xml:id="formula_3">C * 1 and C * 2 into C + = C * 1 + C * 2 .</formula><p>Original initializers C 1 , C 2 will, this way, have equal pull on the merged model, 1 regardless of nominal size (because C * 1 , C * 2 will have converged using a shared training set, D). We return the best of C * 1 , C * 2 and C * + = L(C + ). This approach may uncover more (and never returns less) likely solutions than choosing among</p><formula xml:id="formula_4">C * 1 , C * 2 alone: (5) L D L D L D + arg MAX L D C 1 C * 1 = L(C 1 ) C 2 C * 2 = L(C 2 ) C * 1 + C * 2 = C +</formula><p>We will use a short-hand notation to represent the combiner network diagrammed above, less clutter:</p><formula xml:id="formula_5">(6) L D C 2 C 1</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">The Task and Methodology</head><p>We apply transform and join paradigms to grammar induction, an important problem of computational linguistics that involves notoriously difficult objectives ( <ref type="bibr" target="#b72">Pereira and Schabes, 1992;</ref><ref type="bibr" target="#b20">de Marcken, 1995;</ref><ref type="bibr">Gimpel and Smith, 2012, inter alia)</ref>. The goal is to induce grammars capable of parsing unseen text. Input, in both training and testing, is a sequence of tokens labeled as: (i) a lexical item and its category, (w, c w ); (ii) a punctuation mark; or (iii) a sentence boundary. Output is unlabeled dependency trees.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Models and Data</head><p>We constrain all parse structures to be projective, via dependency-and-boundary grammars ( <ref type="bibr" target="#b87">Spitkovsky et al., 2012a;</ref><ref type="bibr" target="#b88">2012b</ref>): DBMs 0-3 are head-outward generative parsing models <ref type="bibr" target="#b0">(Alshawi, 1996</ref>) that distinguish complete sentences from incomplete fragments in a corpus D: D comp comprises inputs ending with punctuation; D frag = D − D comp is everything else. The "complete" subset is further partitioned into simple sentences, D simp ⊆ D comp , with no internal punctuation, and others, which may be complex.</p><p>As an example, consider the beginning of an article from (simple) Wikipedia: (i) Linguistics (ii) Linguistics (sometimes called philology) is the science that studies language. (iii) Scientists who study language are called linguists. Since the title does not end with punctuation, it would be relegated to D frag . But two complete sentences would be in D comp , with the last also filed under D simp , as it has only a trailing punctuation mark. Spitkovsky et al. suggested two curriculum learning strategies: (i) one in which induction begins with clean, simple data, D simp , and a basic model, DBM-1 (2012b); and (ii) an alternative bootstrapping approach: starting with still more, simpler data -namely, short inter-punctuation fragments up to length l = 15, D l split ⊇ D l simp -and a bare-bones model, DBM-0 (2012a). In our example, D split would hold five text snippets: (i) Linguistics; (ii) Linguistics; (iii) sometimes called philology; (iv) is the science that studies language; and (v) Scientists who study language are called linguists. Only the last piece of text would still be considered complete, isolating its contribution to sentence root and boundary word distributions from those of incomplete fragments. The sparse model, DBM-0, assumes a uniform distribution for roots of incomplete inputs and reduces conditioning contexts of stopping probabilities, which works well with split data. We will exploit both DBM-0 and the full DBM, 2 drawing also on split, simple and raw views of input text.</p><p>All experiments prior to final multi-lingual evaluation will use the Penn English Treebank's Wall Street Journal (WSJ) portion <ref type="bibr" target="#b58">(Marcus et al., 1993)</ref> as the underlying tokenized and sentence-broken corpus D. Instead of gold parts-of-speech, we plugged in 200 context-sensitive unsupervised tags, from Spitkovsky et al. (2011c), <ref type="bibr">3</ref> for the word categories.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Smoothing and Lexicalization</head><p>All unlexicalized instances of DBMs will be estimated with "add one" (a.k.a. Laplace) smoothing, using only the word category c w to represent a token. Fully-lexicalized grammars (L-DBM) are left unsmoothed, and represent each token as both a word and its category, i.e., the whole pair (w, c w ). To evaluate a lexicalized parsing model, we will always obtain a delexicalized-and-smoothed instance first.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Optimization and Viterbi Decoding</head><p>We use "early-switching lateen" EM ( <ref type="bibr">Spitkovsky et al., 2011a, §2.4)</ref> to train unlexicalized models, alternating between the objectives of ordinary (soft) and hard EM algorithms, until neither can improve its own objective without harming the other's. This approach does not require tuning termination thresholds, allowing optimizers to run to numerical convergence if necessary, and handles only our shorter inputs (l ≤ 15), starting with soft EM (L = SL, for "soft lateen"). Lexicalized models will cover full data (l ≤ 45) and employ "early-stopping lateen" EM (2011a, §2.3), re-estimating via hard EM until soft EM's objective suffers. Alternating EMs would be expensive here, since updates take (at least) O(l 3 ) time, and hard EM's objective (L = H) is the one better suited to long inputs ( <ref type="bibr" target="#b83">Spitkovsky et al., 2010)</ref>.</p><p>Our decoders always force an inter-punctuation fragment to derive itself (Spitkovsky et al., 2011b, §2.2). <ref type="bibr">4</ref> In evaluation, such (loose) constraints may help attach sometimes and philology to called (and the science... to is). In training, stronger (strict) constraints also disallow attachment of fragments' heads by non-heads, to connect Linguistics, called and is (assuming each piece got parsed correctly).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Final Evaluation and Metrics</head><p>Evaluation is against held-out CoNLL shared task data ( <ref type="bibr" target="#b9">Buchholz and Marsi, 2006;</ref><ref type="bibr" target="#b69">Nivre et al., 2007)</ref>, spanning 19 languages. We compute performance as directed dependency accuracies (DDA), fractions of correct unlabeled arcs in parsed output (an extrinsic metric). <ref type="bibr">5</ref> For most WSJ experiments we include also sentence and parse tree cross-entropies (soft and hard EMs' intrinsic metrics), in bits per token (bpt).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Concrete Operators</head><p>We will now instantiate the operators sketched out in §2 specifically for the grammar induction task. Throughout, we repeatedly employ single steps of Viterbi training to transfer information between subnetworks in a model-independent way: when a module's output is a set of (Viterbi) parse trees, it necessarily contains sufficient information required to estimate an arbitrarily-factored model down-stream. <ref type="bibr">6</ref> </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Transform #1: A Simple Filter</head><p>Given a model that was estimated from (and therefore parses) a data set D, the simple filter (F ) attempts to extract a cleaner model, based on the simpler complete sentences of D simp . It is implemented as a single (unlexicalized) step of Viterbi training:</p><formula xml:id="formula_6">(7) C F</formula><p>The idea here is to focus on sentences that are not too complicated yet grammatical. This punctuationsensitive heuristic may steer a learner towards easy but representative training text and, we showed, aids grammar induction (Spitkovsky et al., 2012b, §7.1).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Transform #2: A Symmetrizer</head><p>The symmetrizer (S) reduces input models to sets of word association scores. It blurs all details of induced parses in a data set D, except the number of times each (ordered) word pair participates in a dependency relation. We implemented symmetrization also as a single unlexicalized Viterbi training step, but now with proposed parse trees' scores, for a sentence in D, proportional to a product over non-root dependency arcs of one plus how often the left and right tokens (are expected to) appear connected:</p><formula xml:id="formula_7">(8) C S</formula><p>The idea behind the symmetrizer is to glean information from skeleton parses. Grammar inducers can sometimes make good progress in resolving undirected parse structures despite being wrong about the polarities of most arcs (Spitkovsky et al., 2009, <ref type="figure">Figure 3</ref>: Uninformed). Symmetrization offers an extra chance to make heads or tails of syntactic relations, after learning which words tend to go together.</p><p>At each instance where a word a attaches z on (say) the right, our implementation attributes half its weight to the intended construction, a z , reserving the other half for the symmetric structure, z attaching a to its left: a z . For the desired effect, these aggregated counts are left unnormalized, while all other counts (of word fertilities and sentence roots) get discarded. To see why we don't turn word attachment scores into probabilities, consider sentences ), not because there is evidence in the data, but as a side-effect of a model's head-driven nature (i.e., factored with dependents conditioned on heads). Always branching right would be a mistake, however, for example if z is a noun, since either of a or c could be a determiner, with the other a verb.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Join: A Combiner</head><p>The combiner must admit arbitrary inputs, including models not estimated from D, unlike the transforms. Consequently, as a preliminary step, we convert each input C i into parse trees of D, with counts </p><formula xml:id="formula_8">L D C 2 C 1</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Basic Networks</head><p>We are ready to propose a non-trivial subnetwork for grammar induction, based on the transform and join operators, which we will reuse in larger networks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Fork/Join (FJ)</head><p>Given a model that parses a base data set D 0 , the fork/join subnetwork will output an adaptation of that model for D. It could facilitate a grammar induction process, e.g., by advancing it from smaller to larger -or possibly more complex -data sets.</p><p>We first fork off two variations of the incoming model based on D 0 : (i) a filtered view, which focuses on cleaner, simpler data (transform #1); and (ii) a symmetrized view that backs off to word associations (transform #2). Next is grammar induction over D. We optimize a full DBM instance starting from the first fork, and bootstrap a reduced DBM 0 from the second. Finally, the two new induced sets of parse trees, for D, are merged (lexicalized join):</p><formula xml:id="formula_9">(10) H L·DBM D SL DBM D SL DBM0 D C F S D0 C 1 C 2 C ′ 1 C ′ 2</formula><p>The idea here is to prepare for two scenarios: an incoming grammar that is either good or bad for D. If the model is good, DBM should be able to hang on to it and make improvements. But if it is bad, DBM could get stuck fitting noise, whereas DBM 0 might be more likely to ramp up to a good alternative. Since we can't know ahead of time which is the true case, we pursue both optimization paths simultaneously and let a combiner later decide for us.</p><p>Note that the forks start (and end) optimizing with soft EM. This is because soft EM integrates previously unseen tokens into new grammars better than hard EM, as evidenced by our failed attempt to reproduce the "baby steps" strategy with Viterbi training ( <ref type="bibr">Spitkovsky et al., 2010, Figure 4)</ref>. A combiner then executes hard EM, and since outputs of transforms are trees, the end-to-end process is a chain of lateen alternations that starts and ends with hard EM.</p><p>We will use a "grammar inductor" to represent subnetworks that transition from D l split to D l+1 split , by taking transformed parse trees of inter-punctuation fragments up to length l (base data set, D 0 ) to initialize training over fragments up to length l + 1:</p><formula xml:id="formula_10">(11) C l+1</formula><p>The FJ network instantiates a grammar inductor with l = 14, thus training on inter-punctuation fragments up to length 15, as in previous work, starting from an empty set of counts, C = ∅. Smoothing causes initial parse trees to be chosen uniformly at random, as suggested by <ref type="bibr" target="#b14">Cohen and Smith (2010)</ref> We diagrammed this system as not taking an input, since the first inductor's output is fully determined by unique parse trees of single-token strings. This iterative approach to optimization is akin to deterministic annealing <ref type="bibr" target="#b77">(Rose, 1998)</ref>, and is patterned after "baby steps" (Spitkovsky et al., 2009, §4.2).</p><p>Unlike the basic FJ, where symmetrization was a no-op (since there were no counts in C = ∅), IFJ makes use of symmetrizers -e.g., in the third inductor, whose input is based on strings with up to two tokens. Although it should be easy to learn words that go together from very short fragments, extracting correct polarities of their relations could be a challenge: to a large extent, outputs of early inductors may be artifacts of how our generative models factor (see §4.2) or how ties are broken in optimization ( <ref type="bibr">Spitkovsky et al., 2012a, Appendix B)</ref>. We therefore expect symmetrization to be crucial in earlier stages but to weaken any high quality grammars, nearer the end; it will be up to combiners to handle such phase transitions correctly (or gracefully).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Grounded Iterated Fork/Join (GIFJ)</head><p>So far, our networks have been either purely iterative (IFJ) or static (FJ). These two approaches can also be combined, by injecting FJ's solutions into IFJ's more dynamic stream. Our new transition subnetwork will join outputs of grammar inductors that either (i) continue a previous solution (as in IFJ); or (ii) start over from scratch ("grounding" to an FJ): <ref type="bibr">(14)</ref> H L·DBM</p><formula xml:id="formula_11">D l+1 split ∅ C l C l+1 l+1 l+1</formula><p>The full GIFJ network can then be obtained by unrolling the above template from l = 14 back to one. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Performance of Basic Networks</head><p>We compared our three networks' performance on their final training sets, WSJ 15 split (see <ref type="table">Table 1</ref>, which also tabulates results for a cleaner subset, WSJ 15 simp ). The first network starts from C = ∅, helping us establish several straw-man baselines. Its empty initializer corresponds to guessing (projective) parse trees uniformly at random, which has 21.4% accuracy and sentence string cross-entropy of 8.76bpt.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Fork/Join (FJ)</head><p>FJ's symmetrizer yields random parses of WSJ 14 split , which initialize training of DBM 0 . This baseline (B) lowers cross-entropy to 6.18bpt and scores 57.0%. FJ's filter starts from parse trees of WSJ 14 simp only, and trains up a full DBM. This choice makes a stronger baseline (A), with 5.89bpt cross-entropy, at 62.2%.</p><p>The join operator uses counts from A and B, C 1 and C 2 , to obtain parse trees whose own counts C ′ 1 and C ′ 2 initialize lexicalized training. From each C ′ i , an optimizer arrives at C * i . Grammars corresponding to these counts have higher cross-entropies, because of vastly larger vocabularies, but also better accuracies: 59.2 and 62.3%. Their mixture C + is a simple sum of counts in C * 1 and C * 2 : it is not expected to be an improvement but happens to be a good move, resulting in a grammar with higher accuracy (64.0%), though not better Viterbi cross-entropy (7.27 falls between 7.08 and 7.30bpt) than both sources. The combiner's third alternative, a locally optimal C * + , is then obtained by re-optimizing from C + . This solution performs slightly better (64.2%) and will be the local optimum returned by FJ's join operator, because it attains the lowest cross-entropy (7.04bpt).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Iterated Fork/Join (IFJ)</head><p>IFJ's iterative approach results in an improvement: 70.5% accuracy and 6.96bpt cross-entropy. To test how much of this performance could be obtained by a simpler iterated network, we experimented with ablated systems that don't fork or join, i.e., our classic "baby steps" schema (chaining together 15 optimizers), using both DBM and DBM 0 , with and without a transform in-between. However, all such "linear" networks scored well below 50%. We conclude from these results that an ability to branch out into different promising regions of a solution space, and to merge solutions of varying quality into better models, are important properties of FJ subnetworks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Grounded Iterated Fork/Join (GIFJ)</head><p>Grounding improves GIFJ's performance further, to 71.4% accuracy and 6.92bpt cross-entropy. This result shows that fresh perspectives from optimizers that start over can make search efforts more fruitful.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Enhanced Subnetworks</head><p>Modularity and abstraction allow for compact representations of complex systems. Another key benefit is that individual components can be understood and improved in isolation, as we will demonstrate next.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.1">An Iterative Combiner (IC)</head><p>Our basic combiner introduced a third option, C * + , into a pool of candidate solutions, {C * 1 , C * 2 }. This new entry may not be a simple mixture of the originals, because of non-linear effects from applying L to C * 1 + C * 2 , but could most likely still be improved. Rather than stop at C * + , when it is better than both originals, we could recombine it with a next best solution, continuing until no further improvement is made. Iterating can't harm a given combiner's crossentropy (e.g., it lowers FJ's from 7.04 to 7.00bpt), and its advantages can be realized more fully in the larger networks (albeit without any end-to-end guarantees): upgrading all 15 combiners in IFJ would improve performance (slightly) more than grounding (71.5 vs. 71.4%), and lower cross-entropy (from 6.96 to 6.93bpt). But this approach is still a bit timid.</p><p>A more greedy way is to proceed so long as C * + is not worse than both predecessors. We shall now state our most general iterative combiner (IC) algorithm: Start with a solution pool</p><formula xml:id="formula_12">p = {C * i } n i=1 . Next, construct p ′ by adding C * + = L( n i=1 C * i</formula><p>) to p and removing the worst of n + 1 candidates in the new set. Finally, if p = p ′ , return the best of the solutions in p; otherwise, repeat from p := p ′ . At n = 2, one could think of taking L(C * 1 + C * 2 ) as performing a kind of bisection search in some (strange) space. With these new and improved combiners, the IFJ network performs better: 71.9% (up from 70.5 -see <ref type="table">Table 1</ref>), lowering cross-entropy (down from 6.96 to 6.93bpt). We propose a distinguished notation for the ICs:</p><formula xml:id="formula_13">(15) * C 2 C 1</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.2">A Grammar Transformer (GT)</head><p>The levels of our systems' performance at grammar induction thus far suggest that the space of possible networks (say, with up to k components) may itself be worth exploring more thoroughly. We leave this exercise to future work, ending with two relatively straight-forward extensions for grounded systems.</p><p>Our static bootstrapping mechanism ("ground" of GIFJ) can be improved by pretraining with simple sentences first -as in the curriculum for learning DBM-1 (Spitkovsky et al., 2012b, §7.1), but now with a variable length cut-off l (much lower than the original 45) -instead of starting from ∅ directly:</p><formula xml:id="formula_14">(16) S DBM D l simp ∅ l+1    l</formula><p>The output of this subnetwork can then be refined, by reconciling it with a previous dynamic solution. We perform a mini-join of a new ground's counts with C l , using the filter transform (single steps of lexicalized Viterbi training on clean, simple data), ahead of the main join (over more training data):</p><formula xml:id="formula_15">(17) H L·DBM D l+1 split C l C l+1 l+1 F l</formula><p>This template can be unrolled, as before, to obtain our last network (GT), which achieves 72.9% accuracy and 6.83bpt cross-entropy (slightly less accurate with basic combiners, at 72.3% -see <ref type="table">Table 1</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Full Training and System Combination</head><p>All systems that we described so far stop training at</p><formula xml:id="formula_16">D 15</formula><p>split . We will use a two-stage adaptor network to transition their grammars to a full data set, D 45 :</p><formula xml:id="formula_17">(18) H L·DBM D 45 split H L·DBM D 45 C</formula><p>The first stage exposes grammar inducers to longer inputs (inter-punctuation fragments with up to 45 tokens); the second stage, at last, reassembles text snippets into actual sentences (also up to l = 45). <ref type="bibr">8</ref> After full training, our IFJ and GT systems parse Section 23 of WSJ at 62.7 and 63.4% accuracy, better than the previous state-of-the-art (61.2% -see <ref type="table">Table 2</ref>). To test the generalized IC algorithm, we merged our implementations of these three strong grammar induction pipelines into a combined system (CS). It scored highest: 64.4%.</p><formula xml:id="formula_18">(19) H L·DBM D 45 (GT) #1 (IFJ) #2 #3</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>CS</head><p>The quality of bracketings corresponding to (nontrivial) spans derived by heads of our dependency structures is competitive with the state-of-the-art in unsupervised constituent parsing. On the WSJ sentences up to length 40 in Section 23, CS attains similar F 1 -measure (54.2 vs. 54.6, with higher recall) to System DDA (@10) ( <ref type="bibr" target="#b29">Gimpel and Smith, 2012)</ref> 53.1 (64.3) ( <ref type="bibr" target="#b28">Gillenwater et al., 2010)</ref> 53.3 (64.3) ( <ref type="bibr" target="#b6">Bisk and Hockenmaier, 2012)</ref> 53.3 (71.5) <ref type="bibr" target="#b8">(Blunsom and Cohn, 2010)</ref> 55.7 (67.7) ( <ref type="bibr" target="#b93">Tu and Honavar, 2012)</ref> 57.0 (71.4) ( <ref type="bibr" target="#b85">Spitkovsky et al., 2011b)</ref> 58.4 <ref type="bibr">(71.4)</ref>  <ref type="figure">(Spitkovsky et al., 2011c)</ref> 59.1  <ref type="table">Table 2</ref>: Directed dependency accuracies (DDA) on Section 23 of WSJ (all sentences and up to length ten) for recent systems, our full networks (IFJ and GT), and threeway combination (CS) with the previous state-of-the-art.</p><p>PRLG <ref type="bibr" target="#b74">(Ponvert et al., 2011</ref>), which is the strongest system of which we are aware (see <ref type="table">Table 3</ref>). 9</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9">Multi-Lingual Evaluation</head><p>Last, we checked how our algorithms generalize outside English WSJ, by testing in 23 more set-ups: all 2006/7 CoNLL test sets ( <ref type="bibr" target="#b9">Buchholz and Marsi, 2006;</ref><ref type="bibr" target="#b69">Nivre et al., 2007)</ref>, spanning 19 languages. Most recent work evaluates against this multi-lingual data, with the unrealistic assumption of part-of-speech tags. But since inducing high quality word clusters for many languages would be beyond the scope of our paper, here we too plugged in gold tags for word categories (instead of unsupervised tags, as in §3-8).</p><p>We compared to the two strongest systems we knew: 10 MZ (Mareček andŽabokrtsk´yandˇandŽabokrtsk´andŽabokrtsk´y, 2012) and SAJ ( <ref type="bibr" target="#b88">Spitkovsky et al., 2012b)</ref>, which report average accuracies of 40.0 and 42.9% for CoNLL data (see <ref type="table">Table 4</ref>). Our fully-trained IFJ and GT systems score 40.0 and 47.6%. As before, combining these networks with our own implementation of the best previous state-of-the-art system (SAJ) yields a further improvement, increasing final accuracy to 48.6%. <ref type="bibr">9</ref> These numbers differ from Ponvert et al.'s (2011 <ref type="table">, Table 6</ref>) for the full Section 23 because we restricted their eval-ps.py script to a maximum length of 40 words, in our evaluation, to match other previous work: Golland et al.'s (2012, <ref type="figure">Figure 1</ref>) for CCM and LLCCM; <ref type="bibr">Huang et al.'s (2012</ref> <ref type="table">, Table 2</ref>) for the rest. <ref type="bibr">10</ref> During review, another strong system (Mareček and Straka, 2013, scoring 48.7%) of possible interest to the reader came out, exploiting prior knowledge of stopping probabilities (estimated from large POS-tagged corpora, via reducibility principles).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>System</head><p>F1 Binary-Branching Upper Bound 85.7 Left-Branching Baseline 12.0 CCM ( <ref type="bibr" target="#b51">Klein and Manning, 2002)</ref>   <ref type="table">Table 3</ref>: Harmonic mean (F 1 ) of precision (P) and recall (R) for unlabeled constituent bracketings on Section 23 of WSJ (sentences up to length 40) for our combined system (CS), recent state-of-the-art and the baselines.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="10">Discussion</head><p>CoNLL training sets were intended for comparing supervised systems, and aren't all suitable for unsupervised learning: 12 languages have under 10,000 sentences (with Arabic, Basque, Danish, Greek, Italian, Slovenian, Spanish and Turkish particularly small), compared to WSJ's nearly 50,000. In some treebanks sentences are very short (e.g., Chinese and Japanese, which appear to have been split on punctuation), and in others extremely long (e.g., Arabic). Even gold tags aren't always helpful, as their number is rarely ideal for grammar induction (e.g., 42 vs. 200 for English). These factors contribute to high variances of our (and previous) results (see <ref type="table">Table 4</ref>). Nevertheless, if we look at the more stable average accuracies, we see a positive trend as we move from a simpler fully-trained system (IFJ, 40.0%), to a more complex system (GT, 47.6%), to system combination (CS, 48.6%). Grounding seems to be more important for the CoNLL sets, possibly because of data sparsity or availability of gold tags.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="11">Related Work</head><p>The surest way to avoid local optima is to craft an objective that doesn't have them. For example, <ref type="bibr" target="#b96">Wang et al. (2008)</ref> demonstrated a convex training method for semi-supervised dependency parsing; <ref type="bibr" target="#b55">Lashkari and Golland (2008)</ref> introduced a convex reformulation of likelihood functions for clustering tasks; and Corlett and Penn (2010) designed  a search algorithm for encoding decipherment problems that guarantees to quickly converge on optimal solutions. Convexity can be ideal for comparative analyses, by eliminating dependence on initial conditions. But for many NLP tasks, including grammar induction, the most relevant known objective functions are still riddled with local optima. Renewed efforts to find exact solutions <ref type="bibr" target="#b22">(Eisner, 2012;</ref><ref type="bibr" target="#b34">Gormley and Eisner, 2013</ref>) may be a good fit for the smaller and simpler, earlier stages of our iterative networks.</p><p>Multi-start methods <ref type="bibr" target="#b81">(Solis and Wets, 1981)</ref> can recover certain global extrema almost surely (i.e., with probability approaching one). Moreover, random restarts via uniform probability measures can be optimal, in a worst-case-analysis sense, with parallel processing sometimes leading to exponential speed-ups ( <ref type="bibr" target="#b41">Hu et al., 1994)</ref>. This approach is rarely emphasized in NLP literature. For instance, <ref type="bibr" target="#b66">Moore and Quirk (2008)</ref> demonstrated consistent, substantial gains from random restarts in statistical machine translation (but also suggested better and faster replacements -see below); <ref type="bibr" target="#b76">Ravi and Knight (2009,</ref> §5, <ref type="figure">Figure 8</ref>) found random restarts for EM to be crucial in parts-of-speech disambiguation. However, other reviews are few and generally negative <ref type="bibr" target="#b49">(Kim and Mooney, 2010;</ref><ref type="bibr" target="#b62">Martin-Brualla et al., 2010)</ref>. Iterated local search methods ( <ref type="bibr" target="#b39">Hoos and Stützle, 2004;</ref><ref type="bibr" target="#b44">Johnson et al., 1988</ref>, inter alia) escape local basins of attraction by perturbing candidate solutions, without undoing all previous work. "Largestep" moves can come from jittering <ref type="bibr" target="#b36">(Hinton and Roweis, 2003)</ref>, dithering <ref type="bibr" target="#b75">(Price et al., 2005</ref>, Ch. 2) or smoothing ( <ref type="bibr" target="#b5">Bhargava and Kondrak, 2009)</ref>. Nonimproving "sideways" moves offer substantial help with hard satisfiability problems <ref type="bibr" target="#b79">(Selman et al., 1992)</ref>; and injecting non-random noise <ref type="bibr" target="#b80">(Selman et al., 1994)</ref>, by introducing "uphill" moves via mixtures of random walks and greedy search strategies, does better than random noise alone or simulated annealing <ref type="bibr" target="#b50">(Kirkpatrick et al., 1983)</ref>. In NLP, <ref type="bibr" target="#b66">Moore and Quirk's (2008)</ref> random walks from previous local optima were faster than uniform sampling and also increased BLEU scores; <ref type="bibr" target="#b25">Elsner and Schudy (2009)</ref> showed that local search can outperform greedy solutions for document clustering and chat disentanglement tasks; and <ref type="bibr" target="#b64">Mei et al. (2001)</ref> incorporated tabu search <ref type="bibr" target="#b31">(Glover, 1989;</ref><ref type="bibr">Glover and Laguna, 1993, Ch.</ref> 3) into HMM training for ASR.</p><p>Genetic algorithms are a fusion of what's best in local search and multi-start methods <ref type="bibr" target="#b40">(Houck et al., 1996)</ref>, exploiting a problem's structure to combine valid parts of any partial solutions <ref type="bibr" target="#b38">(Holland, 1975;</ref><ref type="bibr" target="#b32">Goldberg, 1989)</ref>. Evolutionary heuristics proved useful in the induction of phonotactics <ref type="bibr" target="#b3">(Belz, 1998</ref>), text planning ( <ref type="bibr" target="#b65">Mellish et al., 1998)</ref>, factored modeling of morphologically-rich languages ( <ref type="bibr" target="#b21">Duh and Kirchhoff, 2004</ref>) and plot induction for story generation <ref type="bibr" target="#b63">(McIntyre and Lapata, 2010)</ref>. Multi-objective genetic algorithms <ref type="bibr" target="#b26">(Fonseca and Fleming, 1993</ref>) can handle problems with equally important but conflicting criteria <ref type="bibr">(Stadler, 1988)</ref>, using Pareto-optimal ensembles. They are especially well-suited to language, which evolves under pressures from competing (e.g., speaker, listener and learner) constraints, and have been used to model configurations of vowels and tone systems ( <ref type="bibr" target="#b48">Ke et al., 2003)</ref>. Our transform and join mechanisms also exhibit some features of genetic search, and make use of competing objec-tives: good sets of parse trees must make sense both lexicalized and with word categories, to rich and impoverished models of grammar, and for both long, complex sentences and short, simple text fragments.</p><p>This selection of text filters is a specialized case of more general "data perturbation" techniqueseven cycling over randomly chosen mini-batches that partition a data set helps avoid some local optima ( <ref type="bibr" target="#b56">Liang and Klein, 2009)</ref>. <ref type="bibr" target="#b23">Elidan et al. (2002)</ref> suggested how example-reweighing could cause "informed" changes, rather than arbitrary damage, to a hypothesis. Their (adversarial) training scheme guided learning toward improved generalizations, robust against input fluctuations. Language learning has a rich history of reweighing data via (cooperative) "starting small" strategies <ref type="bibr" target="#b24">(Elman, 1993)</ref>, beginning from simpler or more certain cases. This family of techniques has met with success in semisupervised named entity classification <ref type="bibr" target="#b16">(Collins and Singer, 1999;</ref><ref type="bibr" target="#b98">Yarowsky, 1995)</ref>, <ref type="bibr">11</ref> parts-of-speech induction <ref type="bibr" target="#b12">(Clark, 2000;</ref><ref type="bibr" target="#b13">2003)</ref>, and language modeling <ref type="bibr" target="#b54">(Krueger and Dayan, 2009;</ref><ref type="bibr" target="#b4">Bengio et al., 2009)</ref>, in addition to unsupervised parsing ( <ref type="bibr" target="#b82">Spitkovsky et al., 2009;</ref><ref type="bibr" target="#b92">Tu and Honavar, 2011;</ref><ref type="bibr" target="#b15">Cohn et al., 2011</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="12">Conclusion</head><p>We proposed several simple algorithms for combining grammars and showed their usefulness in merging the outputs of iterative and static grammar induction systems. Unlike conventional system combination methods, e.g., in machine translation ( <ref type="bibr" target="#b97">Xiao et al., 2010</ref>), ours do not require incoming models to be of similar quality to make improvements. We exploited these properties of the combiners to reconcile grammars induced by different views of data <ref type="bibr" target="#b7">(Blum and Mitchell, 1998)</ref>. One such view retains just the simple sentences, making it easier to recognize root words. Another splits text into many inter-punctuation fragments, helping learn word associations. The induced dependency trees can themselves also be viewed not only as directed structures but also as skeleton parses, facilitating the recovery of correct polarities for unlabeled dependency arcs.</p><p>By reusing templates, as in dynamic Bayesian network (DBN) frameworks (Koller and Friedman, <ref type="bibr">11</ref> The so-called Yarowsky-cautious modification of the original algorithm for unsupervised word-sense disambiguation. 2009, §6.2.2), we managed to specify relatively "deep" learning architectures without sacrificing (too much) clarity or simplicity. On a still more speculative note, we see two (admittedly, tenuous) connections to human cognition. First, the benefits of not normalizing probabilities, when symmetrizing, might be related to human language processing through the base-rate fallacy <ref type="bibr" target="#b2">(Bar-Hillel, 1980;</ref><ref type="bibr" target="#b47">Kahneman and Tversky, 1982)</ref> and the availability heuristic <ref type="bibr" target="#b11">(Chapman, 1967;</ref>, since people are notoriously bad at probability <ref type="bibr" target="#b1">(Attneave, 1953;</ref><ref type="bibr" target="#b45">Kahneman and Tversky, 1972;</ref>. And second, intermittent "unlearning" -though perhaps not of the kind that takes place inside of our transformsis an adaptation that can be essential to cognitive development in general, as evidenced by neuronal pruning in mammals <ref type="bibr" target="#b19">(Craik and Bialystok, 2006;</ref><ref type="bibr" target="#b57">Low and Cheng, 2006</ref>). "Forgetful EM" strategies that reset subsets of parameters may thus, possibly, be no less relevant to unsupervised learning than is "partial EM," which only suppresses updates, other EM variants <ref type="bibr" target="#b68">(Neal and Hinton, 1999)</ref>, or "dropout training" <ref type="bibr" target="#b37">(Hinton et al., 2012;</ref><ref type="bibr" target="#b95">Wang and Manning, 2013)</ref>, which is important in supervised settings.</p><p>Future parsing models, in grammar induction, may benefit by modeling head-dependent relations separately from direction. As frequently employed in tasks like semantic role labeling <ref type="bibr" target="#b10">(Carreras and M` arquez, 2005</ref>) and relation extraction <ref type="bibr" target="#b90">(Sun et al., 2011</ref>), it may be easier to first establish existence, before trying to understand its nature. Other key next steps may include exploring more intelligent ways of combining systems <ref type="bibr">(Surdeanu and Man- ning, 2010;</ref><ref type="bibr" target="#b73">Petrov, 2010)</ref> and automating the operator discovery process. Furthermore, we are optimistic that both count transforms and model recombination could be usefully incorporated into sampling methods: although symmetrized models may have higher cross-entropies, hence prone to rejection in vanilla MCMC, they could work well as seeds in multi-chain designs; existing algorithms, such as MCMCMC <ref type="bibr" target="#b27">(Geyer, 1991)</ref>, which switch contents of adjacent chains running at different temperatures, may also benefit from introducing the option to combine solutions, in addition to just swapping them.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>.</head><label></label><figDesc>The fact that z co-occurs with a introduces an asymmetry into z 's relation with c : P( z | c ) = 1 differs from P( c | z ) = 1/2. Normal- izing might force the interpretation c z (and also a z</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>C</head><label></label><figDesc>′ i , via Viterbi-decoding with a smoothed, unlexical- ized version of the corresponding incoming model. Actual combination is then performed in a more pre- cise (unsmoothed) fashion: C * i are the (lexicalized) solutions starting from C ′ i ; and C * + is initialized with their sum, i C * i . Counts of the lexicalized model with lowest cross-entropy on D become the output: 7 (9)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>4 :</head><label>4</label><figDesc>Blind evaluation on 2006/7 CoNLL test sets (all sentences) for our full networks (IFJ and GT), previous state-of-the-art systems of Spitkovsky et al. (2012b) and Mareček andŽabokrtsk´yandˇandŽabokrtsk´andŽabokrtsk´y (2012), and three-way combi- nation with SAJ (CS, including results up to length ten).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table</head><label></label><figDesc></figDesc><table></table></figure>
+
+			<note place="foot" n="1"> If desired, a scaling factor could be used to bias C + towards either C * 1 or C * 2 , for example based on their likelihood ratio.</note>
+
+			<note place="foot" n="2"> We use the short-hand DBM to refer to DBM-3, which is equivalent to DBM-2 if D has no internally-punctuated sentences (D=D split ), and DBM-1 if all inputs also have trailing punctuation (D=D simp ); DBM0 is our short-hand for DBM-0. 3 http://nlp.stanford.edu/pubs/goldtags-data.tar.bz2</note>
+
+			<note place="foot" n="4"> But these constraints do not impact training with shorter inputs, since there is no internal punctuation in D split or D simp . 5 We converted gold labeled constituents in WSJ to unlabeled reference dependencies using deterministic &quot;head-percolation&quot; rules (Collins, 1999); sentence root symbols, though not punctuation arcs, contribute to scores, as is standard (Paskin, 2001b).</note>
+
+			<note place="foot" n="6"> A related approach -initializing EM training with an M-step -was advocated by Klein and Manning (2004, §3).</note>
+
+			<note place="foot" n="7"> In our diagrams, lexicalized modules are shaded black.</note>
+
+			<note place="foot" n="8"> Note that smoothing in the final (unlexicalized) Viterbi step masks the fact that model parts that could not be properly estimated in the first stage (e.g., probabilities of punctuationcrossing arcs) are being initialized to uniform multinomials.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>We thank Yun-Hsuan Sung, for early-stage discussions on ways of extending "baby steps," Elias Ponvert, for sharing all of the relevant experimental results and evaluation scripts from his work with Jason Baldridge and Katrin Erk, and the anonymous reviewers, for their helpful comments on the draft version of this paper. Funded, in part, by Defense Advanced Research Projects Agency (DARPA) Deep Exploration and Filtering of Text (DEFT) Program, under Air Force Research Laboratory (AFRL) prime contract no. FA8750-13-2-0040. Any opinions, findings, and conclusion or recommendations expressed in this material are those of the authors and do not necessarily reflect the view of the DARPA, AFRL, or the US government. Once again, the first author thanks Moofus.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Head automata for speech translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Alshawi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICSLP</title>
+		<imprint>
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Psychological probability as a function of experienced frequency</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Attneave</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Experimental Psychology</title>
+		<imprint>
+			<biblScope unit="page">46</biblScope>
+			<date type="published" when="1953" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">The base-rate fallacy in probability judgments</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Bar</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Acta Psychologica</title>
+		<imprint>
+			<biblScope unit="page">44</biblScope>
+			<date type="published" when="1980" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Discovering phonotactic finite-state automata by genetic search</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Belz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COLING-ACL</title>
+		<imprint>
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Louradour</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Weston</surname></persName>
+		</author>
+		<title level="m">Curriculum learning. In ICML</title>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Multiple word alignment with profile hidden Markov models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bhargava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Kondrak</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL-HLT: Student Research and Doctoral Consortium</title>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Simple robust grammar induction with combinatory categorial grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bisk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hockenmaier</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Combining labeled and unlabeled data with co-training</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Blum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mitchell</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1998" />
+			<pubPlace>In COLT</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Unsupervised induction of tree substitution grammars for dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Blunsom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Cohn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">CoNLL-X shared task on multilingual dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Buchholz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Marsi</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+	<note>In CoNLL</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Introduction to the CoNLL-2005 shared task: Semantic role labeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Carreras</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+	<note>In CoNLL</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Illusory correlation in observational report. Verbal Learning and Verbal Behavior</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">J</forename><surname>Chapman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1967" />
+			<biblScope unit="volume">6</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Inducing syntactic categories by context distribution clustering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Clark</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CoNLL-LLL</title>
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Combining distributional and morphological information for part of speech induction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Clark</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EACL</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Viterbi training for PCFGs: Hardness results and competitiveness of uniform initialization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">B</forename><surname>Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Inducing treesubstitution grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Cohn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Blunsom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Goldwater</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2011" />
+			<publisher>JMLR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Unsupervised models for named entity classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Collins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Singer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Head-Driven Statistical Models for Natural Language Parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Collins</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+		<respStmt>
+			<orgName>University of Pennsylvania</orgName>
+		</respStmt>
+	</monogr>
+<note type="report_type">Ph.D. thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">An exact A * method for deciphering letter-substitution ciphers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Corlett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Penn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Cognition through the lifespan: mechanisms of change</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">I M</forename><surname>Craik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Bialystok</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">TRENDS in Cognitive Sciences</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Lexical heads, phrase structure and the induction of grammar</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>De Marcken</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+	<note>In WVLC</note>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Automatic learning of language model structure</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Duh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Kirchhoff</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COLING</title>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Grammar induction: Beyond local search</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Eisner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICGI</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Data perturbation for escaping local maxima in learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Elidan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ninio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Friedman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Schuurmans</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Learning and development in neural networks: The importance of starting small</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">L</forename><surname>Elman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Cognition</title>
+		<imprint>
+			<biblScope unit="page">48</biblScope>
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Bounding and comparing methods for correlation clustering beyond ILP</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Elsner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Schudy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL-HLT: Integer Linear Programming for NLP</title>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Genetic algorithms for multiobjective optimization: Formulation, discussion and generalization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Fonseca</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">J</forename><surname>Fleming</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICGA</title>
+		<imprint>
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Markov chain Monte Carlo maximum likelihood</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">J</forename><surname>Geyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Interface Symposium</title>
+		<imprint>
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">Posterior sparsity in unsupervised dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Gillenwater</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Ganchev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Graça</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Pereira</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Taskar</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+		<respStmt>
+			<orgName>University of Pennsylvania</orgName>
+		</respStmt>
+	</monogr>
+<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+		<title level="m" type="main">Concavity and initialization for unsupervised dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Gimpel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+		<editor>NAACL-HLT</editor>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Tabu search</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Glover</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Laguna</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Modern Heuristic Techniques for Combinatorial Problems</title>
+		<editor>C. R. Reeves</editor>
+		<imprint>
+			<publisher>Blackwell Scientific Publications</publisher>
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Tabu search -Part I</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Glover</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ORSA Journal on Computing</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<date type="published" when="1989" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<title level="m" type="main">Genetic Algorithms in Search, Optimization &amp; Machine Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">E</forename><surname>Goldberg</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1989" />
+			<publisher>Addison-Wesley</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">A featurerich constituent context model for grammar induction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Golland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Denero</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Uszkoreit</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP-CoNLL</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Nonconvex global optimization for latent-variable models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">R</forename><surname>Gormley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Eisner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title level="m" type="main">Improving unsupervised dependency parsing with richer contexts and smoothing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">P</forename><surname>Headden</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Iii</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Johnson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Mcclosky</surname></persName>
+		</author>
+		<editor>NAACL-HLT</editor>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Stochastic neighbor embedding</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Roweis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Improving neural networks by preventing co-adaptation of feature detectors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">R</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ArXiv</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<monogr>
+		<title level="m" type="main">Adaptation in Natural and Artificial Systems: An Introductory Analysis with Applications to Biology, Control, and Artificial Intelligence</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">H</forename><surname>Holland</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1975" />
+			<publisher>University of Michigan Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+		<title level="m" type="main">Stochastic Local Search: Foundations and Applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">H</forename><surname>Hoos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Stützle</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2004" />
+			<publisher>Morgan Kaufmann</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Comparison of genetic algorithms, random restart, and two-opt switching for solving large location-allocation problems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">R</forename><surname>Houck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Joines</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">G</forename><surname>Kay</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers &amp; Operations Research</title>
+		<imprint>
+			<biblScope unit="page">23</biblScope>
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<monogr>
+		<title level="m" type="main">Random restarts in global optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">C</forename><surname>Shonkwiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Spruill</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1994" />
+			<publisher>GT</publisher>
+		</imprint>
+	</monogr>
+<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Improved constituent context model with features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">L</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">PACLIC</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Interpolated estimation of Markov source parameters from sparse data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Jelinek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">L</forename><surname>Mercer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Pattern Recognition in Practice</title>
+		<imprint>
+			<date type="published" when="1980" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">How easy is local search?</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Johnson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">H</forename><surname>Papadimitriou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Yannakakis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Computer and System Sciences</title>
+		<imprint>
+			<biblScope unit="page">37</biblScope>
+			<date type="published" when="1988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">Subjective probability: A judgment of representativeness</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kahneman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Tversky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Cognitive Psychology</title>
+		<imprint>
+			<biblScope unit="page">3</biblScope>
+			<date type="published" when="1972" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">On the psychology of prediction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kahneman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Tversky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Psychological Review</title>
+		<imprint>
+			<biblScope unit="page">80</biblScope>
+			<date type="published" when="1973" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">Evidential impact of base rates</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kahneman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Tversky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Judgment under uncertainty: Heuristics and biases</title>
+		<editor>D. Kahneman, P. Slovic, and A. Tversky</editor>
+		<imprint>
+			<publisher>Cambridge University Press</publisher>
+			<date type="published" when="1982" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<analytic>
+		<title level="a" type="main">Optimization models of sound systems using genetic algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ogura</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">S</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">-Y</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="page">29</biblScope>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<analytic>
+		<title level="a" type="main">Generative alignment and semantic parsing for learning from ambiguous supervision</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">J</forename><surname>Mooney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COLING</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Optimization by simulated annealing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kirkpatrick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Gelatt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jr</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">P</forename><surname>Vecchi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Science</title>
+		<imprint>
+			<biblScope unit="page">220</biblScope>
+			<date type="published" when="1983" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<analytic>
+		<title level="a" type="main">A generative constituentcontext model for improved grammar induction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Klein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b52">
+	<analytic>
+		<title level="a" type="main">Corpus-based induction of syntactic structure: Models of dependency and constituency</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Klein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b53">
+	<monogr>
+		<title level="m" type="main">Probabilistic Graphical Models: Principles and Techniques</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Koller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Friedman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2009" />
+			<publisher>MIT Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b54">
+	<analytic>
+		<title level="a" type="main">Flexible shaping: How learning in small steps helps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">A</forename><surname>Krueger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Dayan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Cognition</title>
+		<imprint>
+			<biblScope unit="page">110</biblScope>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b55">
+	<analytic>
+		<title level="a" type="main">Convex clustering with exemplar-based models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Lashkari</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Golland</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b56">
+	<analytic>
+		<title level="a" type="main">Online EM for unsupervised models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Liang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL-HLT</title>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b57">
+	<analytic>
+		<title level="a" type="main">Axon pruning: an essential step underlying the developmental plasticity of neuronal connections</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">K</forename><surname>Low</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-J</forename><surname>Cheng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Royal Society of London Philosophical Transactions Series B</title>
+		<imprint>
+			<biblScope unit="volume">361</biblScope>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b58">
+	<analytic>
+		<title level="a" type="main">Building a large annotated corpus of English: The Penn Treebank</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">P</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Santorini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Marcinkiewicz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Linguistics</title>
+		<imprint>
+			<biblScope unit="page">19</biblScope>
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b59">
+	<analytic>
+		<title level="a" type="main">Stop-probability estimates computed on a large corpus improve unsupervised dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Mareček</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Straka</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b60">
+	<analytic>
+		<title level="a" type="main">Gibbs sampling with treeness constraint in unsupervised dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Mareček</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Zabokrtsk´yzabokrtsk´y</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ROBUS</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b61">
+	<analytic>
+		<title level="a" type="main">Exploiting reducibility in unsupervised dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Mareček</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Zabokrtsk´yzabokrtsk´y</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP-CoNLL</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b62">
+	<analytic>
+		<title level="a" type="main">Instance sense induction from attribute sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Martin-Brualla</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Alfonseca</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pasca</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Hall</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Robledoarnuncio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ciaramita</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COLING</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b63">
+	<analytic>
+		<title level="a" type="main">Plot induction and evolutionary search for story generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Mcintyre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Lapata</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b64">
+	<monogr>
+		<title level="m" type="main">Optimization of HMM by the tabu search algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Mei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Sun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>-S. Pan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T.-Y</forename><surname>Chen</surname></persName>
+		</author>
+		<editor>RO-CLING</editor>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b65">
+	<analytic>
+		<title level="a" type="main">Experiments using stochastic search for text planning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Mellish</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Knott</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Oberlander</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>O&amp;apos;donnell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">INLG</title>
+		<imprint>
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b66">
+	<analytic>
+		<title level="a" type="main">Random restarts in minimum error rate training for statistical machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">C</forename><surname>Moore</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Quirk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COLING</title>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b67">
+	<analytic>
+		<title level="a" type="main">Using semantic cues to learn syntax</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Naseem</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Barzilay</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b68">
+	<analytic>
+		<title level="a" type="main">A view of the EM algorithm that justifies incremental, sparse, and other variants</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Neal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Learning in Graphical Models</title>
+		<editor>M. I. Jordan</editor>
+		<imprint>
+			<publisher>MIT Press</publisher>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b69">
+	<analytic>
+		<title level="a" type="main">The CoNLL 2007 shared task on dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Nivre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hall</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kübler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Mcdonald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Nilsson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Riedel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Yuret</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP-CoNLL</title>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b70">
+	<monogr>
+		<title level="m" type="main">Cubic-time parsing and learning algorithms for grammatical bigram models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Paskin</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2001" />
+			<pubPlace>UCB</pubPlace>
+		</imprint>
+	</monogr>
+<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b71">
+	<analytic>
+		<title level="a" type="main">Grammatical bigrams</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Paskin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b72">
+	<analytic>
+		<title level="a" type="main">Inside-outside reestimation from partially bracketed corpora</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Pereira</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Schabes</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b73">
+	<analytic>
+		<title level="a" type="main">Products of random latent variable grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Petrov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL-HLT</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b74">
+	<analytic>
+		<title level="a" type="main">Simple unsupervised grammar induction from raw text with cascaded finite state models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Ponvert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Baldridge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Erk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL-HLT</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b75">
+	<monogr>
+		<title level="m" type="main">Differential Evolution: A Practical Approach to Global Optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">V</forename><surname>Price</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">M</forename><surname>Storn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Lampinen</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+			<publisher>Springer</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b76">
+	<analytic>
+		<title level="a" type="main">Minimized models for unsupervised part-of-speech tagging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ravi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Knight</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL-IJCNLP</title>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b77">
+	<analytic>
+		<title level="a" type="main">Deterministic annealing for clustering, compression, classification, regression and related optmization problems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Rose</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE</title>
+		<meeting>the IEEE</meeting>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="volume">86</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b78">
+	<analytic>
+		<title level="a" type="main">Fast unsupervised incremental parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Seginer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b79">
+	<analytic>
+		<title level="a" type="main">A new method for solving hard satisfiability problems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Selman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Levesque</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Mitchell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b80">
+	<analytic>
+		<title level="a" type="main">Noise strategies for improving local search</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Selman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">A</forename><surname>Kautz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Cohen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b81">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">J</forename><surname>Solis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J.-B</forename><surname>Wets</surname></persName>
+		</author>
+		<title level="m">Minimization by random search techniques. Mathematics of Operations Research</title>
+		<imprint>
+			<date type="published" when="1981" />
+			<biblScope unit="volume">6</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b82">
+	<analytic>
+		<title level="a" type="main">Baby Steps: How &quot;Less is More&quot; in unsupervised dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><forename type="middle">I</forename><surname>Spitkovsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Alshawi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jurafsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">GRLL</title>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b83">
+	<analytic>
+		<title level="a" type="main">Viterbi training improves unsupervised dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><forename type="middle">I</forename><surname>Spitkovsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Alshawi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jurafsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CoNLL</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b84">
+	<analytic>
+		<title level="a" type="main">Lateen EM: Unsupervised training with multiple objectives, applied to dependency grammar induction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><forename type="middle">I</forename><surname>Spitkovsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Alshawi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jurafsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b85">
+	<analytic>
+		<title level="a" type="main">Punctuation: Making a point in unsupervised dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><forename type="middle">I</forename><surname>Spitkovsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Alshawi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jurafsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CoNLL</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b86">
+	<analytic>
+		<title level="a" type="main">Unsupervised dependency parsing without gold partof-speech tags</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><forename type="middle">I</forename><surname>Spitkovsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">X</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Alshawi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jurafsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b87">
+	<analytic>
+		<title level="a" type="main">Bootstrapping dependency grammar inducers from incomplete sentence fragments via austere models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><forename type="middle">I</forename><surname>Spitkovsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Alshawi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jurafsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICGI</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b88">
+	<analytic>
+		<title level="a" type="main">Three dependency-and-boundary models for grammar induction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><forename type="middle">I</forename><surname>Spitkovsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Alshawi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jurafsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP-CoNLL</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b89">
+	<monogr>
+		<title level="m" type="main">Multicriteria Optimization in Engineering and in the Sciences</title>
+		<editor>W. Stadler</editor>
+		<imprint>
+			<date type="published" when="1988" />
+			<publisher>Plenum Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b90">
+	<analytic>
+		<title level="a" type="main">Semi-supervised relation extraction with large-scale word clustering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Sun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Grishman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Sekine</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b91">
+	<analytic>
+		<title level="a" type="main">Ensemble models for dependency parsing: Cheap and good</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Surdeanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NAACL-HLT</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b92">
+	<analytic>
+		<title level="a" type="main">On the utility of curricula in unsupervised learning of probabilistic grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Tu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Honavar</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IJCAI</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b93">
+	<analytic>
+		<title level="a" type="main">Unambiguity regularization for unsupervised learning of probabilistic grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Tu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Honavar</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EMNLP-CoNLL</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b94">
+	<analytic>
+		<title level="a" type="main">Availability: A heuristic for judging frequency and probability</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Tversky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kahneman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Cognitive Psychology</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<date type="published" when="1973" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b95">
+	<analytic>
+		<title level="a" type="main">Fast dropout training</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">I</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICML</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b96">
+	<analytic>
+		<title level="a" type="main">Semisupervised convex training for dependency parsing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><forename type="middle">I</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Schuurmans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Lin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">HLT-ACL</title>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b97">
+	<analytic>
+		<title level="a" type="main">Boosting-based system combination for machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Xiao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b98">
+	<analytic>
+		<title level="a" type="main">Unsupervised word sense disambiguation rivaling supervised methods</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Yarowsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL</title>
+		<imprint>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

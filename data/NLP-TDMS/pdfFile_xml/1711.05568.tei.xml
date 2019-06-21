@@ -1,0 +1,1320 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:14+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Dialogue Act Recognition via CRF-Attentive Structured Network</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zheqian</forename><surname>Chen</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rongqin</forename><surname>Yang</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhou</forename><surname>Zhao</surname></persName>
+							<email>zhaozhou@zju.edu.cn</email>
+							<affiliation key="aff1">
+								<orgName type="department">College of Computer Science</orgName>
+								<orgName type="institution">Zhejiang University</orgName>
+								<address>
+									<settlement>Hangzhou</settlement>
+									<country key="CN">China</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Deng</forename><surname>Cai</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaofei</forename><surname>He</surname></persName>
+							<email>xiaofeihe@gmail.com</email>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="department">College of Computer Science</orgName>
+								<orgName type="laboratory">State Key Lab of CAD&amp;CG</orgName>
+								<orgName type="institution">Zhejiang University</orgName>
+								<address>
+									<settlement>Hangzhou</settlement>
+									<country key="CN">China</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Dialogue Act Recognition via CRF-Attentive Structured Network</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Dialogue Act Recognition</term>
+					<term>Conditional Random Field</term>
+					<term>Structured Attention Network</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Dialogue Act Recognition (DAR) is a challenging problem in dialogue interpretation, which aims to attach semantic labels to utterances and characterize the speaker&apos;s intention. Currently, many existing approaches formulate the DAR problem ranging from multi-classification to structured prediction, which suffer from handcrafted feature extensions and attentive contextual structural dependencies. In this paper, we consider the problem of DAR from the viewpoint of extending richer Conditional Random Field (CRF) structural dependencies without abandoning end-to-end training. We incorporate hierarchical semantic inference with memory mechanism on the utterance modeling. We then extend structured attention network to the linear-chain conditional random field layer which takes into account both contextual utterances and corresponding dialogue acts. The extensive experiments on two major benchmark datasets Switchboard Dialogue Act (SWDA) and Meeting Recorder Dialogue Act (MRDA) datasets show that our method achieves better performance than other state-of-the-art solutions to the problem. It is a remarkable fact that our method is nearly close to the human annotator&apos;s performance on SWDA within 2% gap.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Dialogue Act Recognition (DAR) is an essential problem in modeling and detecting discourse structure. The goal of DAR is to attach semantic labels to each utterance in a conversation and recognize the speaker's intention, which can be regarded as a sequence labeling task. Many applications have benefited from the use of automatic dialogue act recognition such as dialogue systems, machine translation, automatic speech recognition, topic identification and talking avatars <ref type="bibr" target="#b21">[21]</ref> [24] <ref type="bibr" target="#b14">[14]</ref>. One of the primary applications of DAR is to support task-oriented discourse agent system. Knowing the past utterances of DA can help ease the prediction of the current DA state, thus help to narrow the range of utterance generation topics for the current turn. For instance, the "Greeting" and "Farewell" acts are often followed with another same type utterances, the "Answer" Permission to make digital or hard copies of part or all of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for third-party components of this work must be honored. For all other uses, contact the owner/author(s). act often responds to the former "Question" type utterance. Thus if we can correctly recognize the current dialogue act, we can easily predict the following utterance act and generate a corresponding response. <ref type="table">Table 1</ref> shows a snippet of the kind of discourse structure in which we are interested. The essential problem of DAR lies on predicting the utterance's act by referring to contextual utterances with act labels. Most of existing models adopt handcrafted features and formulate the DAR as a multi-classification problem. However, these methods which adopt feature engineering process and multi-classification algorithms reveal deadly weakness from two aspects: First, they are labor intensive and can not scale up well across different datasets. Furthermore, they abandon the useful correlation information among contextual utterances. Typical multi-classification algorithms like SVM, Naive Bayes <ref type="bibr" target="#b12">[12]</ref> [2] <ref type="bibr" target="#b39">[39]</ref> can not account for the contextual dependencies and classify the DA label in isolation. It is evident that during a conversation, the speaker's intent is influenced by the former utterance such as the previous "Greeting" and "Farewell" examples. To tackle these two problems, some works have turn to structured prediction algorithm along with deep learning tactics such as DRLM-Conditional <ref type="bibr" target="#b17">[17]</ref>, LSTM-Softmax <ref type="bibr" target="#b21">[21]</ref> and RCNN <ref type="bibr" target="#b20">[20]</ref>. However, most of them failed to utilize the empirical effectiveness of attention in the graphical structured network and relies completely on the hidden layers of the network, which may cause the structural bias. A further limitation is that although these works claim they have considered the contextual correlations, in fact they view the whole conversation as a flat sequence and neglect the dual dependencies in the utterance level and act level <ref type="bibr" target="#b3">[4]</ref> [16] <ref type="bibr" target="#b32">[32]</ref>. Until now, the achieved performances in DAR field are still far behind human annotator's accuracy. The input of the model is a conversation which consist of n utterances u 1 , u 2 , ..., u n with corresponding dialogue act labels a 1 , a 2 , ..., a n . Each utterance is composed of diverse length of words in the character level E c and the word level E w . Notice that utterances are not exist independent, utterances have contextual relations with each other.</p><p>In this paper, we present the problem of DAR from the viewpoint of extending richer CRF-attentive structural dependencies along with neural network without abandoning end-to-end training. For simplicity, we call the framework as CRF-ASN (CRF-Attentive Structured Network). Specifically, we propose the hierarchical semantic inference integrated with memory mechanism on the utterance modeling. The memory mechanism is adopted in order to enable the model to look beyond localized features and have access to the entire sequence. The hierarchical semantic modeling learns different levels of granularity including word level, utterance level and conversation level. We then develop internal structured attention network on the linear-chain conditional random field (CRF) to specify structural dependencies in a soft manner. This approach generalizes the soft-selection attention on the structural CRF dependencies and takes into account the contextual influence on the nearing utterances. It is notably that the whole process is differentiable thus can be trained in an end-to-end manner.</p><p>The main contributions of this paper are as follows:</p><p>• Unlike the previous studies, we study dialogue act recognition from the viewpoint of extending rich CRF-attentive structural dependencies. The proposed CRF structural attention on the DAR problem provides an alternative approach to encode the internal utterance inference with dialogue acts.</p><p>• We propose the hierarchical deep recurrent neural network with memory enhanced mechanism to fully model the utterance semantic representations. The proposed framework can be trained end-to-end from scratch and can be easily extended across different dialogue tasks.</p><p>• We conduct extensive experiments on two popular datasets SWDA and MRDA to show that our method outperform several state-of-the-art solutions on the problem. It is worth noting that our method has achieved nearly close to the human annotator's performance on SWDA within 2% gap, which is very convincing.</p><p>The rest of this paper is organized as follows. In section 2, we introduce the problem of dialogue act recognition from the viewpoint of introducing CRF-structured attention, and propose the CRF-attentive structural network with hierarchical semantic inference and memory mechanism. A variety of experimental results are presented in Section 3. We have a comprehensive analysis on the experiment results and conduct the ablations to prove the availability of our model. We then provide a brief review of the related work about dialogue act recognition problem in Section 4. Finally, we provide some concluding remarks in Section 5.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">CRF-ATTENTIVE STRUCTURED NETWORK</head><p>In this section, we study the problem of dialogue act recognition from the viewpoint of extending rich CRF-attentive structural dependencies. We first present the hierarchical semantic inference with memory mechanism from three levels: word level, utterance level and conversation level. We then develop graphical structured attention to the linear chain conditional random field to fully utilize the contextual dependencies.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">The problem</head><p>Before presenting the problem, we first introduce some basic mathematical notions and terminologies for dialogue act recognition. Formally, we assume the input is in the form of sequence pairs:</p><formula xml:id="formula_0">D = (C 1 , C 2 , ..., C N ) with Y = (Y 1 , Y 2 , ..., Y M ).</formula><p>C n is the input of the n-th conversation in dataset D and Y m is the m-th targeted dialogue act type. Each conversation C i is composed of a sequence of utterances which denoted as C i = (u 1 , u 2 , ..., u j ) with aligned act types (y 1 , y 2 , ..., y j ). We have each dialogue act type assigned to utterance u j → y j and each associated y j ∈ Y denoted the possible dialogue act belongs to Y act types. Again each utterance consists of a sequence of diverse words u i = (w 1 , w 2 , ..., w t ).</p><p>Most of the previous models do not leverage the implicit and intrinsic dependencies among dialogue act and utterances. They just consider a conversation as a flat structure with an extremely long chain of words. However, such a construction suffers vanishing gradient problem as the extremely long words become impractical in the neural network back-propagation training process. To alleviate this problem, we consider the conversation to be a hierarchical structure composed of three level encoders: first encode each word in a fine grained manner, and the second encoder operates at the utterance level, the last encoder encode each utterance in the conversation level. Each encoder is based on the previous one thus can make sure the output of the previous one can capture the dependencies across the conversation. Here we take an example to illustrate the sequence structure in <ref type="figure" target="#fig_0">Figure 1</ref>. Apart from hierarchical neural encoders, we also integrate external memory to allow <ref type="figure">Figure 2</ref>: The Overview of learning memory enhanced hierarchical conversation representation architecture. The momory hop is set to 1. First concatenate the rich word embedding and obtain the original utterance representation u t from the basic BiGRU. The hidden state h t represents the contextual encoding which cares the former and the latter utterance dependencies. After summarizing hierarchical memory enhanced output o t and the original utterance u t , we get the final representation u t denoted in a bold form.</p><p>the model to have unrestricted access to the whole sequence rather than localized features as in RNNs.</p><p>Naturally the dialogue act recognition problem can be regarded as a sequence labeling task which can be assigned dialogue act through multi-classification method or the structured prediction algorithms. In our formulation, we adopt the linear chain conditional random field (CRF) along with hierarchical attentive encoders for the structured prediction. Instead of labeling each utterance in isolation, structured prediction models such as HMM, CRF can better capture the contextual dependencies among utterances. In our model, we define the structured attention model as being an extended attention model which provides an alternative approach to incorporate the machinery of structural inference directly into our neural network.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Hierarchical Semantic Network</head><p>Due to the hierarchical nature of conversations, our proposed model is constructed at multiple levels of granularity, e.g. word level, utterance level and conversation level. The representation of a conversation can be composed by each utterance u j , and each u j can be obtained by combining the representations of constituent words w t . Taking inspiration from Memory Networks and incorporate so-called memory hops, we adopt the memory enhanced contextual representations in order to have unrestricted access to the whole sequence rather than localized features as former recurrent neural network. Here we include the memory enhanced hierarchical representation in <ref type="figure">Figure 2</ref> to depict the conversation level representation.</p><p>As illustrated in <ref type="figure">Figure 2</ref>, the hierarchical semantic network can be divided into two parts: (1) fine grained embedding layer (2) memory enhanced contextual representation layer. The second part can be further broken down into three main components: (a) the input memory m 1:t which takes in the output from the word embedding layer (b) the contextual attention which takes the consideration of the former utterance and the latter one. (c) the output memory c 1:t which is obtained from the input memory connected with the attention mechanism. The weights are determined by measuring the similarity between the input memory and the current utterance input. Fine Grained Embedding: For a given conversation, each utterance u j is encoded by a fine grained embedding layer. We first try to utilize the rich lexical factors and linguistic properties to enhance the word representation. For each word token w t in each utterance, we initialized the word embedding using pretrained embeddings such as Word2vec or Glove. Furthermore, in order to tackle the out-of-vocabulary (OOV) problem, we adopt the character-level word embedding via CNN to combine with pretrained word level embeddings. We also extend the lexical factors via POS tag and NER tag to enhance the utterance understanding. The obtained four factors are concatenated to form a rich lexical representation as:</p><formula xml:id="formula_1">e k = f embed (w t , c t , pos, ner )<label>(1)</label></formula><p>Since we consider the bidirectional GRU to encode the representation of each utterance, we concatenate the outputs from the forward and backward GRU hidden representations at the time step. For each utterance u j which consists a sequence of words w 1 , w 2 , ..., w j , the original semantic representation is as follows:</p><formula xml:id="formula_2">u j = − −−− → f GRU (h k −1 , e k ), ← −−− − f GRU (h k −1 , e k )<label>(2)</label></formula><p>Here we utilize f embed and f GRU to represent the word level embedding function and utterance level encoder in our hierarchical model. After obtained the original semantic representations on each utterance, we later apply the memory enhanced contextual layer to further explore the correlations between utterances. Memory Enhanced Contextual Representation: Every utterance in a conversation is encoded with u j = Φ(e k ), where Φ (·) is the encoding function via Bi-GRU to map the input words into a vector u j ∈ R d . The original sequence utterances are denoted as</p><formula xml:id="formula_3">u 1 , u 2 , ..., u j</formula><p>. While this original semantic representation can be the input component in the context of memory network. In order to tackle the drawback of insensitivity to temporal information between memory cells, we adopt the approach in injecting temporal signal into the memory using a contextual recurrent encoding:</p><formula xml:id="formula_4">← − h j = ← −− − GRU (u j , ← −− − h j−1 ) − → h j = − −− → GRU (u j , − −− → h j−1 ) h j = tanh( ← − − W m ← − h j + − − → W m − → h j + b m )<label>(3)</label></formula><p>where</p><formula xml:id="formula_5">← − − W m , − − → W m , b m are learnable parameters.</formula><p>It is a remarkable fact that the new sequence h j can be seen as the contextual integrated representations which take consider of the former utterances and the latter ones. The injected temporal signal can further explore the contextual influence on the current input utterance. We thus can make use of this obtained h j to represent another u j which cares more about the context influence.</p><p>For the current input utterance u j , in memory networks, the input is required to be in the same space as the input memory. Here we adopt the popular attention mechanism in the memory by measuring the relevance between current input utterance u j and the contextual new representation h j . The relevance is measured with a softmax function:</p><formula xml:id="formula_6">p j,i = so f tmax(u T j h i )<label>(4)</label></formula><p>Once the attention weights have been computed, the output memory can be used to generate the final output of the memory layer in the form of a weighted sum over the attention and the input utterance:</p><formula xml:id="formula_7">o t = i p j,i u j<label>(5)</label></formula><p>The output allows the model to have unrestricted access to elements in previous steps as opposed to a single hidden state u j in recurrent neural networks. Thereby we can effectively detect the long range dependencies among utterances in a conversation.</p><p>To further extend the complex reasoning over multiple supporting facts from memory, we adopt a stacking operation which stacks hops between the original utterance semantic representation u j and the k-th output hop o t to be the input to the (k + 1)th hop:</p><formula xml:id="formula_8">u k+1 t = o k t + u k t<label>(6)</label></formula><p>where u k +1 t encodes not only information at the current step (u k j ), but also relevant knowledge from the contextual memory (o k t ). Note that in the scope of this work, we limit the number of hops to 1 to ease the computational cost.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Structured CRF-Attention Network</head><p>Traditional attention networks have proven to be an effective approach for embedding categorical inference within a deep neural network. However, In DAR problem, we need to further explore the structural dependencies among utterances and dialogue acts.</p><p>As we see, utterances in a conversation are not exist independently. The latter utterance may be the responding answer to the former question, or that the chunk of utterances are in the same act type.</p><p>Here we consider generalizing selection to types of chunks selecting attention, and propose the structured attention to model richer dependencies by incorporating structural distributions within networks. Such a structured attention can be interpreted as using softselection that considers all possible structures over the utterance input.</p><p>In our paper, we formulate the DAR as a sequence labeling problem. It is a natural choice to assign a label to each element in the sequence via linear chain CRF, which enable us to model dependencies among labels. Here we do not directly apply the original linear chain CRF to the learned utterance. Although the dependencies among utterances have been captured by the former hierarchical semantic networks, we still need to further explore the dialogue act dependencies in the label level. For dialogue act sequence labeling problem, greedily predicting the dialogue act at each time-step might not optimal the solution. Instead, it is better to look into the correlations in both utterance level and the dialogue act level in order to jointly decode the best chain of dialogue acts.</p><p>Formally, let u = [u 1 , u 2 , ..., u n ] represent a sequence of utterance inputs, let y = [y 1 , y 2 , ..., y n ] be the corresponding dialogue act sequence. Variable z are discrete latent act variables [z 1 , z 2 , ..., z n ] with sample space {1, ..., n} that encodes the desired selection among these inputs. The aim of the structured attention is to produce a sequence aware conversation c based on the utterances u and the dialogue act sequence y. We assume the attentive distribution z = p(z|u i , y), where we condition p on the input utterances u and the dialogue act sequence y. Here we assume the utterances in the conversation as an undirected graph structure with n vertices. The CRF is parameterized with clique potentials θ c (z c ) ∈ R, indicating the subset of z give by clique c. Under this definition, the attention probability is defined as p(z|u, q; θ ) = so f tmax( c θ c (z c )). For symmetry, we use the softmax in a general sense, i.e. so f tmax(д(z))</p><formula xml:id="formula_9">= 1 z exp(д(z)), where z = z ′ exp(д(z ′ ))</formula><p>is the implied recognition function. Here θ comes from the former memory enhanced deep model over utterances u and corresponding dialogue acts y.</p><p>The conversation c over the utterances and dialogue acts is defined as expectation:</p><formula xml:id="formula_10">c = E z∼p(z |u,y) [f (u, z)] = c E z∼p(z c |u,y) [f c (u, z c )]<label>(7)</label></formula><p>where we assume the annotation function f factors into f (u, z) = c f c (u, z c ). The annotation function is defined to simply return the selected hidden state. The conversation c can be interpreted as an dialogue act aware attentive conversation as taking the expectation of the annotation function with respect to a latent variable z ∼ p, where p is parameterized to be function of utterances u and dialogue acts y.</p><p>The expectation is a linear combination of the input representation and represents how much attention will be focused on each utterance according to the dialogue act sequence. We can model the structural dependencies distribution over the latent z with a linear chain CRF with n states:</p><formula xml:id="formula_11">p(z 1 , ..., z n |u, y) = so f tmax( n i=1 θ i (z j ))<label>(8)</label></formula><p>where θ k,l is the pairwise potential for z i = k and z j = l. Notice that the utterance u and the dialogue act sequence y are both obtained from downstream learned representation. The marginal distribution p(z i |u) can be calculated efficiently in linear time via the forwardbackward algorithm. These marginals further allow us to implicitly sum over the linear chain conditional random field. We refer to this type of attention layer as a structural attention layer , where we can explicitly look into the undirected graphical CRF structure to find which utterances are in the same chunk or in isolation.</p><p>Here we define the node potentials with a unary CRF setting:</p><formula xml:id="formula_12">θ i (j) = n j=1 u T i (y j )<label>(9)</label></formula><p>where for each utterance we summarize the possible dialogue act to perform sequential reasoning. Given the potential, we compute the structural marginals p(z 1 , ..., z n |u, y) using the forward-backward algorithm, which is then used to compute the final probability of predicting the sequence of dialogue acts as:</p><formula xml:id="formula_13">p(y 1 , y 2 , ..., y n , u 1 , u 2 , ..., u n ; θ ) = n j=1 n j=1 u T i (y j ) y n j=1 n j=1 u T i (y j )<label>(10)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.4">End-to-End Training</head><p>We adopt the maximum likelihood training estimation to learn the CRF-attentive structured parameters. Given the training set D with (U , Y ) conversation pairs, the log likelihood can be written as:</p><formula xml:id="formula_14">L = N i=1 log p(Y i |U i , Θ)<label>(11)</label></formula><p>where we denote the Θ as the set of parameters within neural networks from hierarchical layers: word embedding layer, memory enhanced utterance modeling layer, CRF-attentive structured layer. We define the objective function in training process:</p><formula xml:id="formula_15">Θ min L(Θ) = L(Θ) + λ ∥Θ∥ 2 2<label>(12)</label></formula><p>λ &gt; 0 is a hyper-parameter to trade-off the training loss and regularization. By using SGD optimization with the diagonal variant of AdaGrad, at time step t, the parameter Θ is updated as follows:</p><formula xml:id="formula_16">Θ t = Θ t −1 − ρ t i=1 д 2 i д t<label>(13)</label></formula><p>where ρ is the initial learning rate and д t is the sub-gradient at time t.</p><p>Notice that one of our contributions is to apply CRF structural attention as the final layer of deep models. The whole model can</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Algorithm 1 Viterbi algorithm for CRF-ASN Input:</head><p>The observation space</p><formula xml:id="formula_17">O = {o 1 , o 2 , ..., o N } The state space S = {s 1 , s 2 , ..., s K } The observation sequence Y = (y 1 , y 2 , ..., y T ) The probabilities = (π 1 , π 2 , ..., π K ) Output:</formula><p>The most likely hidden state sequence X = (x 1 , x 2 , ..., x N )</p><p>1: Construct transition matrix A, each element stores the transition probability of transiting from state s i to state s j 2: Construct emission matrix B, each element stores the probability of observing o j from state s i 3: for each state i ∈ {1, 2, ..., K } do for each state j ∈ {1, 2, ..., K } do 9:</p><formula xml:id="formula_18">T 1 [j, i] ← max(T 1 [k, i − 1] · A k j · Bjy i ) 10: T 2 [j, i] ← arдmax(T 1 [k, i − 1] · A k j · B jy i ) 11:</formula><p>end for 12: end for</p><formula xml:id="formula_19">13: z T ← arдmax(T 1 [k,T ]) 14: X T ← s Z T 15: for I ← T ,T − 1, ..., 2 do 16: Z i−1 ← T 2 [z i , i]</formula><p>17:</p><formula xml:id="formula_20">X i−1 ← S Z i −1</formula><p>18: end for 19: return X be trained in an end-to-end manner. Here we consider the standard Viterbi algorithm for computing the distribution p(z 1 , ..., z n |u, y; θ ). The main procedure is summarized in Algorithm 1.</p><p>For testing, we adopt Viterbi algorithm to obtain the optimal sequence by using dynamic programming techniques. The testing procedure can be written as:</p><formula xml:id="formula_21">y ′ = arg max y ∈Y p(y|U , Θ)<label>(14)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">EXPERIMENTS</head><p>In this section, we conduct several experiments on two public DA datasets SwDA and MRDA, and show the effectiveness of our approach CRF-ASN for dialogue act recognition.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Data Preparation</head><p>We evaluate the performance of our method on two benchmark DA datasets: Switchboard Dialogue Act Corpus (SwDA) and The ICSI Meeting Recorder Dialogue Act Corpus (MRDA). These two datasets have been widely used to conduct the dialogue act recognition or the dialogue act classification tasks by several prior studies.</p><p>• SwDA: Switchboard Dialogue Act Corpus is a large handlabeled dataset of 1155 conversations from the Switchboard corpus of spontaneous human-to-human telephone speech. Each conversation involved two randomly selected strangers <ref type="table">Tag   Example  proportion</ref> STATEMENT "I am working on my projects trying to graduate. " 36% BACKCHANNEL/ACKNOWLEDGE "Uh-huh. " "Yeah. " "All right. " "Ok... " "Well... " 19% OPINION "I think it's great. " / "I don't believe it can work. " 13% ABANDONED/UNINTERPRETABLE "So, -" "Are yo-" "Maybe-" 6% AGREEMENT/ACCEPT "That's exactly it. " "I can't agree more. " 5% Disruption "yeah | he == . " "yeah | it's uh == " 14.73% BackChannel "okay, " "right, " "oh, " "yes, " "yeah, " 10.20% FloorGrabber "let's see, " "well, " "I mean, " "but.. " 12.40% Question Y/N, WH, Or 7.20% Statement "Beijing is the capital of China" 55.46%  <ref type="table" target="#tab_1">From the table 2 and table 3</ref>, we can see the datasets are highly imbalanced in terms of label distributions. The dialogue act type STATEMENT occupies the largest proportion in both two datasets. Following the second place is the BACKCHANNEL act type which somewhat reflect the speaker's speech style.</p><p>We present the detailed data preparation procedure for obtaining the clear dataset. For two datasets, we performed pre-processing steps in order to filter out the noise and some informal nature of  utterances. We first strip the exclamations and commas, and then we convert the characters into lower-case. Notice that for SwDA, we only get the training and testing datasets. In order to smooth the training step and tune the parameters, we depart the original training dataset into two parts, one for training and the other small part used to be the validation set. We list the detailed statistics of the two datasets in table 4.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Evaluation Criteria</head><p>We mainly evaluate the performance of our proposed CRF-ASN method based on the widely-used evaluation criteria for dialogue act recognition, Accuracy. The Accuracy is the normalized criteria of accessing the quality of the predicted dialogue acts based on the testing utterance set u t . Given the testing conversation C = [u 1 , u 2 , ..., u n ] with its ground-truth dialogue acts Y = [y 1 , y 2 , ..., y n ], we denote the predicted dialogue acts from our CRF-ASN method by a. We now introduce the evaluation criteria below.</p><formula xml:id="formula_22">Accuracy = 1 |u| u i ∈u (1 − n i=1 1[a i y i ])<label>(15)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Implemental Details</head><p>We preprocess each utterance using the library of nltk <ref type="bibr" target="#b29">[29]</ref> and exploit the popular pretrained word embedding Glove with 100 dimensional vectors <ref type="bibr" target="#b34">[34]</ref>. The size of char-level embedding is also set as 100-dimensional and is obtained by CNN filters under the instruction of Kim <ref type="bibr" target="#b23">[23]</ref>. The Gated Recurrent Unit <ref type="bibr" target="#b6">[7]</ref> which is variant from LSTM <ref type="bibr" target="#b15">[15]</ref> is employed throughout our model. We adopt the AdaDelta <ref type="bibr" target="#b48">[46]</ref> optimizer for training with an initial learning rate of 0.005. We also apply dropout <ref type="bibr" target="#b38">[38]</ref>between layers with a dropout rate of 0.2. For the memory network enhanced reasoning, we set the number of hops as 1 to preliminary learn the contextual dependencies among utterances. We do not set too many hops as increasing the number of GRU layers reduced the accuracy of the model. Early stopping is also used on the validation set with a patience of 5 epochs. Conversations with the same number of utterances were grouped together into mini-batches, and each utterance in a mini-batch was padded to the maximum length for that batch. The maximum batch-size allowed was 48. During training, we set the moving averages of all weights as the exponential decay rate of 0.999 <ref type="bibr" target="#b30">[30]</ref>. The whole training process takes approximately 14 hours on a single 1080Ti GPU. All the hyper-parameters were selected by tuning one hyper-parameter at a time while keeping the others fixed.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Performance Comparisons</head><p>We compare our propose method with other several state-of-the-art methods for the problem of dialogue act recognition as follows:</p><p>• Bi-LSTM-CRF <ref type="bibr" target="#b25">[25]</ref> method builds a hierarchical bidirectional LSTM as a base unit and the conditional random field as the top layer to do the dialogue act recognition task.</p><p>• DRLM-Conditional <ref type="bibr" target="#b18">[18]</ref> method combines postive aspects of neural network architectures with probabilistic graphical models. The model combines a recurrent neural network language model with a latent variable model over shallow discourse structure.</p><p>• LSTM-Softmax <ref type="bibr" target="#b21">[21]</ref> method applies a deep LSTM structure to classify dialogue acts via softmax operation. The authors claim that the word embeddings, dropout, weight decay and number of LSTM layers all have large effect on the final performance.</p><p>• RCNN <ref type="bibr" target="#b3">[4]</ref> method composes both sentence model and discourse model to extend beyond the single sentence. The authors propose hierarchical CNN on sentence model and RNN on the contextual discourses.</p><p>• CNN <ref type="bibr" target="#b27">[27]</ref> method incorporates the preceding short texts to classify dialogue act. The authors demonstrate that adding sequential information improves the quality of the predictions.</p><p>• HMM <ref type="bibr" target="#b39">[39]</ref> method treats the discourse structure of a conversation as a hidden Markov model and the individual dialogue acts as observations emanating from the model states.</p><p>• CRF Simple baseline which applies the text encoding and CRF-based structure prediction on the DAR problem.</p><p>• SVM Simple baseline which applies the text encoding and multi-classification algorithm on the DAR problem.</p><p>Among them, The former five approaches eg. Bi-LSTM-CRF, DRLMConditional, LSTM-Softmax, RCNN, CNN all adopt the deep neural network model in order to better capture the utterances semantic representations. The latter three methods (HMM, CRF, SVM) just employ the simple feature selection on the text processing. About half of the baselines including Bi-LSTM-CRF, DRLM-Conditional, HMM, CRF consider the graphical structured prediction while the others eg. RCNN, CNN, LSTM-Softmax, SVM just adopt the traditional multi-classification algorithms. <ref type="table" target="#tab_6">Table 5 and Table 6</ref> respectively show the experimental Accuracy results of the methods on the SwDA and MRDA datasets. The hyperparameters and parameters which achieve the best performance on the validation set are chosen to conduct the testing evaluation. The experiments reveal some interesting points:</p><p>• The results show that our proposed model CRF-ASN obviously outperforms the state-of-the-art baselines on both    SwDA and MRDA datasets. Numerically, Our model improves the DAR accuracy over Bi-LSTM-CRF by 2.1% and 0.8% on SwDA and MRDA respectively. It is remarkable that our CRF-ASN method is nearly close to the human annotators' performance on SwDA, which is very convincing to prove the superiority of our model. • The deep neural networks outperform the other featurebased models. We can see the last three non-deep models obtain worse performance than the top five deep-based methods. This suggests that the performance of dialogue act recognition can be improved significantly with discriminative deep neural networks, either in convolutional neural network or the recurrent neural network.</p><p>• Apart from deep learning tactics, the problem formulations are also critical to the DAR problem. We see structured prediction approaches eg. CRF-ASN, Bi-LSTM-CRF obtain better results than multi-classification eg. LSTM-Softmax. What's more, under the same text encoding situation, the CRF-based model achieves much better results than the SVM-based method. Which can fully prove the superiority of the structured prediction formulation. We also notice that CRF is better than HMM when adopted to the DAR task.</p><p>• The major differences between our proposed model CRF-ASN and the strong baseline BI-LSTM-CRF lie in two aspects: First we adopt a more fine grained manner to encode the utterances and utilize the memory enhanced mechanism to compute the contextual dependencies. Second we employ an adapted structured attention network on the CRF layer, rather than directly apply the original CRF on the utterances. These two modifications are essential and improve the performance significantly.   </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Ablation Results</head><p>We respectively evaluate the individual contribution of the proposed module in our model. We conduct thorough ablation experiments on the SwDA dataset, which are recorded on the table 7. To make it fair, we only modify one module at a time and fix the other components to be in the same settings.</p><p>• We replace the proposed structured CRF-attention layer to simple CRF, the results show structured CRF-attention layer results in major improvement in the accuracy, approximately over 2.1% absolute points. We further replace the structure prediction formulation to multi-classification on SVM, the results drop dramatically, which illustrate the benefit of considering structural dependencies among utterances.</p><p>• We replace the fine-grained word E w , E c , POS, N ER to the simple Glove vector. The results suggest that fine grained word embedding is useful to represent a text. We also adapt the context state h t to only care its neighbor utterances. The result is not satisfying, which conveys us that the basic text understanding is critical in the semantic representations.</p><p>• We replace the memory network to directly apply CRF layer to the utterance layer. We also conduct a comparing experiment which plus the original utterance to memory enhanced output. The two results show the designed hierarchical memory-enhanced components are helpful in the utterance understanding and modeling the contextual influence.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.6">Visualization</head><p>In <ref type="figure" target="#fig_4">Figure 3</ref>, we visualize of the output edge marginals produced by the CRF-ASN model for a conversation. In this instance, the actual dialogue act recognition procedure is displayed as 4 → 5 → 3. In the testing step, the model is uncertain and select the most attentive path to maximize the true dialogue act recognition. Here we can see from the marginal edges the path 4 → 5 → 3 occupies more attentive weights than the path 4 → 3 → 4 in predicting the dialogue act label. Thus we ultimately select the right way to recognize the dialogue act. <ref type="figure" target="#fig_5">Figure 4</ref> shows the confusion heatmap of our proposed CRF-ASN model for the SwDA dataset. Each element in the heatmap denotes the rate that the predicted label is the same to the true label. We can see from the diagonal, the &lt;sd,sd&gt; &lt;b,b&gt; pairs achieve the most satisfying matching score while &lt;qyd, qyd&gt; is much worse than other pairs. This can be explained that the sd (statement) and b(acknowledge) have clearly self-identification while qyd(Declarative Yes-No-Question) is more easier to be mistakenly  recognized. We can see that &lt;qyd,qy&gt; which represents (Declarative Yes-No-Questio,Yes-No-Question) is indeed hard to recognize since their dialogue type are too similar with each other. For another reason, we notice that due to the bias of the ground truth, there are some cases that we predict the dialogue act correctly while the ground truth is wrong. To some reason, classifying so many fine-grained dialogue act labels is not easy for human annotators, besides the human-subjectivity occupies an important role in recognizing the dialogue act.</p><p>In this section, we briefly review some related work on dialogue act recognition and attention network.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Dialogue Act Recognition</head><p>The main task of dialogue act recognition is to assign an act label to each utterance in a conversation, which can be defined as a supervised problem due to the properties that each utterance has a corresponding act label. Most of the existing work for the problem of dialogue act recognition can be categorized as following two groups.</p><p>Regarding the DAR as a multi-classification problem. Reithinger et al. <ref type="bibr" target="#b35">[35]</ref> present deal with the dialogue act classification using a statistically based language model. Webb et al. <ref type="bibr" target="#b43">[43]</ref> apply diverse intra-utterance features involving word n-gram cue phrases to understand the utterance and do the classification. Geertzen et al. <ref type="bibr" target="#b11">[11]</ref> propose a multidimensional approach to distinguish and annotate units in dialogue act segmentation and classification. <ref type="bibr">Grau et al. [12]</ref> focus on the dialogue act classification using a Bayesian approach. Serafin et al. <ref type="bibr" target="#b37">[37]</ref> employ Latent Semantic Analysis (LSA) proper and augmented method to work for dialogue act classification. Chen et al. <ref type="bibr" target="#b5">[6]</ref> had an empirical investigation of sparse log-linear models for improved dialogue act classification. Milajevs et al. <ref type="bibr" target="#b33">[33]</ref> investigate a series of compositional distributional semantic models to dialogue act classification.</p><p>Regarding the DAR as a sequence labeling problem. Stolcke et al. <ref type="bibr" target="#b39">[39]</ref> treat the discourse structure of a conversation as a hidden Markov model and the individual dialogue acts as observations emanating from the model states. <ref type="bibr">Tavafi et al. [41]</ref> study the effectiveness of supervised learning algorithms SVM-HMM for DA modeling across a comprehensive set of conversations. Similar to the SVM-HMM, Surendran et al. <ref type="bibr" target="#b40">[40]</ref> also use a combination of linear support vector machines and hidden markov models for dialog act tagging in the HCRC MapTask corpus. <ref type="bibr">Lendvai et al. [28]</ref> explore two sequence learners with a memory-based tagger and conditional random fields into turn-internal DA chunks. Boyer et al. <ref type="bibr" target="#b4">[5]</ref> also applied HMM to discover internal dialogue strategies inherent in the structure of the sequenced dialogue acts. <ref type="bibr">Galley et al. [10]</ref> use skip-chain conditional random field to model non-local pragmatic dependencies between paired utterances. Zimmermann et al. <ref type="bibr" target="#b51">[49]</ref> investigate the use of conditional random fields for joint segmentation and classification of dialog acts exploiting both word and prosodic features.</p><p>Recently, approaches based on deep learning methods improved many state-of-the-art techniques in NLP including DAR accuracy on open-domain conversations <ref type="bibr" target="#b20">[20]</ref> [48] <ref type="bibr" target="#b17">[17]</ref> [26] <ref type="bibr" target="#b27">[27]</ref>. <ref type="bibr">Kalchbrenner et al. [20]</ref> used a mixture of CNN and RNN. CNNs were used to extract local features from each utterance and RNNs were used to create a general view of the whole dialogue. Khanpour et al. <ref type="bibr" target="#b21">[21]</ref> design a deep neural network model that benefits from pre-trained word embeddings combined with a variation of the RNN structure for the DA classification task. Ji et al. <ref type="bibr" target="#b17">[17]</ref> also investigated the performance of using standard RNN and CNN on DA classification and got the cutting edge results on the MRDA corpus using CNN. Lee et al. <ref type="bibr" target="#b27">[27]</ref> proposes a model based on CNNs and RNNs that incorporates preceding short texts as context to classify current DAs. <ref type="bibr">Zhou et al. [48]</ref> combine heterogeneous information with conditional random fields for Chinese dialogue act recognition. <ref type="bibr">Kumar et al. [26]</ref> build a hierarchical encoder with CRF to learn multiple levels of utterance and act dependencies.</p><p>Unlike the previous studies, we formulate the problem from the viewpoint of integrating contextual dependencies in both utterance level and the act label level. We not only consider the fine grained multi-level semantic representations, but also integrate the structured attention network to further capture the structure designpendencies in the CRF layer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Attention Network</head><p>Attention mechanism has become an essential component in text understanding in recent years. Since the first work proposed by <ref type="bibr">Bahdanau et al. [3]</ref> that adopt the attention mechanism in neural machine translation, attention mechanism based neural networks have become a major trend in diverse text researching field, such as in machine comprehension <ref type="bibr" target="#b13">[13]</ref> [45] <ref type="bibr" target="#b19">[19]</ref> [8], machine translation <ref type="bibr" target="#b31">[31]</ref> [9], abstract summarization <ref type="bibr" target="#b36">[36]</ref>  <ref type="bibr" target="#b0">[1]</ref>, text classification <ref type="bibr" target="#b42">[42]</ref> [47] <ref type="bibr" target="#b44">[44]</ref> and so on. The principle of attention mechanism is to select the most pertinent piece of information, rather than using all available information, a large part of it being irrelevant to compute the neural response.</p><p>In our work, we propose the CRF-attentive structured network in order to encode the internal utterance inference with dialogue acts. The structured attention is a more general attention mechanism which take account of the graphical dependencies and allow for extending attention beyond the standard soft-selection approach. The most similar work to our model is proposed by Kim et al. <ref type="bibr" target="#b22">[22]</ref>. Kim et al. also experiment with two different classes of structured attention networks: subsequence selection and syntactic selection. However, the objectives of these two networks aims to segment the structure dependencies, which are quite different from our DAR task. In DAR task we care more on the dialogue act influences on the overall conversation structure, thus the former structured attention may not be suitable for our problem.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">CONCLUSION</head><p>In this paper, we formulate the problem of dialogue act recognition from the viewpoint of capturing hierarchical rich utterance representations and generalize richer CRF attentive graphical structural dependencies without abandoning end-to-end training. We propose the CRF-Attentive Structured Network (CRF-ASN) for the problem. We implement the model in two steps. We first encode the rich semantic representation on the utterance level by incorporating hierarchical granularity and memory enhanced inference mechanism. The learned utterance representation can capture long term dependencies across the conversation. We next adopt the internal structured attention network to compute the dialogue act influence and specify structural dependencies in a soft manner. This approach enable the soft-selection attention on the structural CRF dependencies and take account of the contextual influence on the nearing utterances. We demonstrate the efficacy of our method using the well-known public datasets SwDA and MRDA. The extensive experiments demonstrate that our model can achieve better performance than several state-of-the-art solutions to the problem.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Figure 1: An illustration of the hierarchical conversation structure. The input of the model is a conversation which consist of n utterances u 1 , u 2 , ..., u n with corresponding dialogue act labels a 1 , a 2 , ..., a n . Each utterance is composed of diverse length of words in the character level E c and the word level E w . Notice that utterances are not exist independent, utterances have contextual relations with each other.</figDesc><graphic url="image-1.png" coords="2,79.23,83.69,453.54,90.80" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Model</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Model</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 3 :</head><label>3</label><figDesc>Figure 3: Visualization of the structured attention distribution over conditional random field sequence. For example, the edges represent the marginal probabilities p(z|u, Θ), and the nodes represent the utterances and corresponding dialogue acts. In this figure we can see For utterance u4, dialogue a3 is the most suitable predicting label as the edge (4 → 5 → 3) is the most attentive path.</figDesc><graphic url="image-3.png" coords="8,324.69,83.69,226.77,126.87" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 4 :</head><label>4</label><figDesc>Figure 4: Confusion heatmap of CRF-ASN model for the SwDA dataset. There are totally 10 DA labels, where the row denotes the true label and the column denotes the predicted label.</figDesc><graphic url="image-4.png" coords="8,317.96,326.71,283.48,188.99" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0"><head></head><label></label><figDesc></figDesc><graphic url="image-2.png" coords="3,65.06,83.69,481.88,220.19" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 :</head><label>2</label><figDesc></figDesc><table>Top five percentages of utterance type in the SWDA corpus 
+
+Tag 
+Example 
+proportion 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 3 :</head><label>3</label><figDesc></figDesc><table>Top five percentages of utterance type in the MRDA 
+corpus 
+
+who had been charged with talking informally about one 
+of several, self-selected general interest topics. For each ut-
+terance, together with a variety of automatic and semiau-
+tomatic tools, the tag set distinguishes 42 mutually exclu-
+sive utterance types via DAMSL taxonomy. The top five 
+frequent DA types include STATEMENT, BACKCHANNEL 
+/ ACKNOWLEDGE, OPINION, ABANDONED / UNINTER-
+PRETABLE, AGREEMENT / ACCEPT. We list the top five 
+percentages of utterance type in the overall corpus in table2. 
+• MRDA: The ICSI Meeting Recorder Dialogue Act Corpus 
+consists of hand-annotated dialog act, adjacency pair, and 
+hotspot labels for the 75 meetings in the ICSI meeting cor-
+pus. The MRDA scheme provides several class-maps and 
+corresponding scripts for grouping related tags together into 
+smaller number of DAs. In this work we use the most widely 
+used class-map that groups all tags into 5 DAs, i.e., Disrup-
+tion (D) indicates the current Dialogue Act is interrupted. 
+BackChannel (B) are utterances which are not made directly 
+by a speaker as a response and do not function in a way that 
+elicits a response either. FloorGrabber (F) are dialogue acts 
+for grabbing or maintaining the floor. Question (Q) is for 
+eliciting listener feedback. And finally, unless an utterance 
+is completely indecipherable or else can be further described 
+by a general tag, then its default status is Statement (S). We 
+respectively list the percentage of the five general dialogue 
+acts in table 3. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 4 :</head><label>4</label><figDesc></figDesc><table>|C | is the number of Dialogue Act classes, |V | is the 
+vocabulary size. Training, Validation and Testing indicate 
+the number of conversations (number of utterances) in the 
+respective splits. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 5 :</head><label>5</label><figDesc></figDesc><table>Comparing Accuracy of our method (CRF-ASN) 
+with other methods in the literature on SwDA dataset. 
+
+Model 
+Accuracy(%) 
+Ours (CRF-ASN) 
+91.7 
+Bi-LSTM-CRF 
+90.9 
+LSTM-Softmax 
+86.8 
+CNN 
+84.6 
+CRF 
+83.9 
+SVM 
+82.0 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7" validated="false"><head>Table 6 :</head><label>6</label><figDesc></figDesc><table>Comparing Accuracy of our method (CRF-ASN) 
+with other methods in the literature on the MRDA dataset. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_9" validated="false"><head>Table 7 :</head><label>7</label><figDesc></figDesc><table>Component ablations on SwDA dataset 
+
+</table></figure>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">A convolutional attention network for extreme summarization of source code</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miltiadis</forename><surname>Allamanis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hao</forename><surname>Peng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Charles</forename><surname>Sutton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Machine Learning</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2091" to="2100" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Automatic Dialog Act Segmentation and Classification in Multiparty Meetings</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeremy</forename><surname>Ang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yang</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Elizabeth</forename><surname>Shriberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICASSP</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Neural Machine Translation by Jointly Learning to Align and Translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Science</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Recurrent Convolutional Neural Networks for Discourse Compositionality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nal</forename><surname>Kalchbrenner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2013 Workshop on Continuous Vector Space Models and their Compositionality. Proceedings of the 2013 Workshop on Continuous Vector Space Models and their Compositionality</title>
+		<meeting>the 2013 Workshop on Continuous Vector Space Models and their Compositionality. the 2013 Workshop on Continuous Vector Space Models and their Compositionality</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Discovering Tutorial Dialogue Strategies with Hidden Markov Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kristy</forename><forename type="middle">Elizabeth</forename><surname>Boyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eunyoung</forename><surname>Ha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Michael</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert</forename><surname>Wallis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Phillips</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mladen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James C</forename><surname>Vouk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lester</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AIED</title>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="141" to="148" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">An empirical investigation of sparse log-linear models for improved dialogue act classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yun-Nung</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William</forename><forename type="middle">Yang</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander I</forename><surname>Rudnicky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Acoustics, Speech and Signal Processing (ICASSP)</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="8317" to="8321" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bart</forename><surname>Van Merriënboer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dzmitry</forename><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<title level="m">On the Properties of Neural Machine Translation: Encoder-Decoder Approaches. Syntax, Semantics and Structure in Statistical Translation</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page">103</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bhuwan</forename><surname>Dhingra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hanxiao</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhilin</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>William W Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Salakhutdinov</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+	<note>n. d.</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Gated-Attention Readers for Text Comprehension</title>
+		<imprint/>
+	</monogr>
+	<note>n. d.</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Multi-Way, Multilingual Neural Machine Translation with a Shared Attention Mechanism</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Orhan</forename><surname>Firat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NAACL-HLT</title>
+		<meeting>NAACL-HLT</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="866" to="875" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">A skip-chain conditional random field for ranking meeting utterances by importance</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michel</forename><surname>Galley</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2006 Conference on Empirical Methods in Natural Language Processing</title>
+		<meeting>the 2006 Conference on Empirical Methods in Natural Language Processing</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="364" to="372" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">A multidimensional approach to utterance segmentation and dialogue act classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeroen</forename><surname>Geertzen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Volha</forename><surname>Petukhova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Harry</forename><surname>Bunt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 8th SIGdial Workshop on Discourse and Dialogue</title>
+		<meeting>the 8th SIGdial Workshop on Discourse and Dialogue<address><addrLine>Antwerp</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="140" to="149" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Dialogue act classification using a Bayesian approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sergio</forename><surname>Grau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Emilio</forename><surname>Sanchis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maria</forename><forename type="middle">Jose</forename><surname>Castro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Vilar</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">9th Conference Speech and Computer</title>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Teaching machines to read and comprehend</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Karl</forename><surname>Moritz Hermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tomas</forename><surname>Kocisky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lasse</forename><surname>Espeholt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Will</forename><surname>Kay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mustafa</forename><surname>Suleyman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1693" to="1701" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Towards an open-domain conversational system fully based on natural language processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ryuichiro</forename><surname>Higashinaka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenji</forename><surname>Imamura</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Toyomi</forename><surname>Meguro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chiaki</forename><surname>Miyazaki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nozomi</forename><surname>Kobayashi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hiroaki</forename><surname>Sugiyama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Toru</forename><surname>Hirano</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Toshiro</forename><surname>Makino</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshihiro</forename><surname>Matsuo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COLING</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="928" to="939" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiheng</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Yu</surname></persName>
+		</author>
+		<title level="m">Bidirectional LSTM-CRF Models for Sequence Tagging</title>
+		<imprint/>
+	</monogr>
+	<note>n. d.. n. d.</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">A Latent Variable Recurrent Neural Network for Discourse-Driven Language Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yangfeng</forename><surname>Ji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gholamreza</forename><surname>Haffari</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Eisenstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">HLT-NAACL</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">A Latent Variable Recurrent Neural Network for Discourse Relation Language Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yangfeng</forename><surname>Ji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gholamreza</forename><surname>Haffari</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jacob</forename><surname>Eisenstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NAACL-HLT</title>
+		<meeting>NAACL-HLT</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="332" to="342" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Text Understanding with the Attention Sum Reader Network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rudolf</forename><surname>Kadlec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Schmid</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ondrej</forename><surname>Bajgar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jan</forename><surname>Kleindienst</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+	<note>n. d.. n. d.</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nal</forename><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+		<title level="m">Recurrent Convolutional Neural Networks for Discourse Compositionality. ACL 2013</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page">119</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Dialogue Act Classification in Domain-Independent Conversations Using a Deep Recurrent Neural Network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hamed</forename><surname>Khanpour</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nishitha</forename><surname>Guntakandla</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rodney</forename><surname>Nielsen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">COLING</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoon</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carl</forename><surname>Denton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luong Hoang Alexander M</forename><surname>Rush</surname></persName>
+		</author>
+		<title level="m">Structured Attention Networks</title>
+		<imprint/>
+	</monogr>
+	<note>n. d.. n. d.</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">CharacterAware Neural Language Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoon</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yacine</forename><surname>Jernite</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Sontag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander M</forename><surname>Rush</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AAAI</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2741" to="2749" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Dialogue act recognition approaches</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pavel</forename><surname>Král</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christophe</forename><surname>Cerisara</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computing and Informatics</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="page" from="227" to="250" />
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Dialogue Act Sequence Labeling using Hierarchical encoder with CRF</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Harshit</forename><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arvind</forename><surname>Agarwal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Riddhiman</forename><surname>Dasgupta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sachindra</forename><surname>Joshi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arun</forename><surname>Kumar</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Dialogue Act Sequence Labeling using Hierarchical encoder with CRF</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Harshit</forename><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arvind</forename><surname>Agarwal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Riddhiman</forename><surname>Dasgupta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sachindra</forename><surname>Joshi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arun</forename><surname>Kumar</surname></persName>
+		</author>
+		<idno>CoRR abs/1709.04250</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Sequential Short-Text Classification with Recurrent and Convolutional Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ji</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Young</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Franck</forename><surname>Dernoncourt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of NAACL-HLT</title>
+		<meeting>NAACL-HLT</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="515" to="520" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Token-based chunking of turninternal dialogue act sequences</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Piroska</forename><surname>Lendvai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeroen</forename><surname>Geertzen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 8th SIGDIAL Workshop on Discourse and Dialogue</title>
+		<meeting>the 8th SIGDIAL Workshop on Discourse and Dialogue</meeting>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="174" to="181" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">NLTK: The natural language toolkit</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Loper</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Bird</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACL-02 Workshop on Effective tools and methodologies for teaching natural language processing and computational linguistics</title>
+		<meeting>the ACL-02 Workshop on Effective tools and methodologies for teaching natural language processing and computational linguistics</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2002" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="63" to="70" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Exponentially weighted moving average control schemes: properties and enhancements</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>James</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael S</forename><surname>Lucas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Saccucci</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Technometrics</title>
+		<imprint>
+			<biblScope unit="volume">32</biblScope>
+			<biblScope unit="page" from="1" to="12" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">Effective Approaches to Attention-based Neural Machine Translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minh-Thang</forename><surname>Luong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hieu</forename><surname>Pham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher D</forename><surname>Manning</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+	<note>n. d.. n. d.</note>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<title level="m" type="main">End-to-end Sequence Labeling via Bidirectional LSTM-CNNs-CRF</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xuezhe</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><surname>Hovy</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+	<note>n. d.. n. d.</note>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Investigating the contribution of distributional semantic information for dialogue act classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dmitrijs</forename><surname>Milajevs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><surname>Purver</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2nd Workshop on Continuous Vector Space Models and their Compositionality (CVSC</title>
+		<meeting>the 2nd Workshop on Continuous Vector Space Models and their Compositionality (CVSC</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="40" to="47" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Glove: Global vectors for word representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeffrey</forename><surname>Pennington</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><surname>Manning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2014 conference on empirical methods in natural language processing (EMNLP</title>
+		<meeting>the 2014 conference on empirical methods in natural language processing (EMNLP</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1532" to="1543" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title level="m" type="main">Dialogue act classification using language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Norbert</forename><surname>Reithinger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Klesen</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+	<note>In EuroSpeech</note>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+		<title level="m" type="main">A Neural Attention Model for Sentence Summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Alexander M Rush</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sumit</forename><surname>Harvard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Weston</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+	<note>n. d.. n. d.</note>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Latent Semantic Analysis for dialogue act classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Riccardo</forename><surname>Serafin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Barbara</forename><forename type="middle">Di</forename><surname>Eugenio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Glass</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2003 Conference of the North American Chapter of the Association for Computational Linguistics on Human Language Technology: companion volume of the Proceedings of HLT-NAACL 2003</title>
+		<meeting>the 2003 Conference of the North American Chapter of the Association for Computational Linguistics on Human Language Technology: companion volume of the HLT-NAACL 2003</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="94" to="96" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Dropout: a simple way to prevent neural networks from overfitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ilya</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of machine learning research</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="page" from="1929" to="1958" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Dialogue act modeling for automatic tagging and recognition of conversational speech</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andreas</forename><surname>Stolcke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Ries</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noah</forename><surname>Coccaro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Elizabeth</forename><surname>Shriberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rebecca</forename><surname>Bates</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Jurafsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Paul</forename><surname>Taylor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rachel</forename><surname>Martin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Dialogue</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="page">3</biblScope>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+	<note>Carol Van Ess-Dykema, and Marie Meteer</note>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<monogr>
+		<title level="m" type="main">Dialog act tagging with support vector machines and hidden Markov models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dinoj</forename><surname>Surendran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gina-Anne</forename><surname>Levow</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+	<note>Interspeech</note>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maryam</forename><surname>Tavafi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yashar</forename><surname>Mehdad</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shafiq</forename><surname>Joty</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Giuseppe</forename><surname>Carenini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raymond</forename><surname>Ng</surname></persName>
+		</author>
+		<title level="m">Dialogue Act Recognition in Synchronous and Asynchronous Conversations</title>
+		<imprint/>
+	</monogr>
+	<note>n. d.. n. d.</note>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Relation Classification via Multi-Level Attention CNNs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Linlin</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhu</forename><surname>Cao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gerard</forename><surname>De Melo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhiyuan</forename><surname>Liu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACL (1)</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Dialogue act classification based on intra-utterance features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nick</forename><surname>Webb</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Hepple</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yorick</forename><surname>Wilks</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the AAAI Workshop on Spoken Language Understanding</title>
+		<meeting>the AAAI Workshop on Spoken Language Understanding</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="volume">4</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<monogr>
+		<title level="m" type="main">Hierarchical Attention Networks for Document Classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zichao</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Diyi</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xiaodong</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><forename type="middle">J</forename><surname>Smola</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eduard</forename><forename type="middle">H</forename><surname>Hovy</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<monogr>
+				<title level="m">HLT-NAACL</title>
+		<imprint>
+			<biblScope unit="page" from="1480" to="1489" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wenpeng</forename><surname>Yin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Ebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hinrich</forename><surname>Schütze</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+	<note>n. d.</note>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<monogr>
+		<title level="m" type="main">Attention-Based Convolutional Neural Network for Machine Comprehension</title>
+		<imprint/>
+	</monogr>
+	<note>n. d.</note>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<monogr>
+		<title level="m" type="main">ADADELTA: AN ADAPTIVE LEARNING RATE METHOD</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Matthew D Zeiler</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+	<note>n. d.</note>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<analytic>
+		<title level="a" type="main">Attention-based bidirectional long short-term memory networks for relation classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peng</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Shi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Tian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhenyu</forename><surname>Qi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bingchen</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hongwei</forename><surname>Hao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bo</forename><surname>Xu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics</title>
+		<meeting>the 54th Annual Meeting of the Association for Computational Linguistics</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="207" to="212" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Combining heterogeneous deep neural networks with conditional random fields for Chinese dialogue act recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yucan</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Qinghua</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jie</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yuan</forename><surname>Jia</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neurocomputing</title>
+		<imprint>
+			<biblScope unit="volume">168</biblScope>
+			<biblScope unit="page" from="408" to="417" />
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<analytic>
+		<title level="a" type="main">Joint segmentation and classification of dialog acts using conditional random fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthias</forename><surname>Zimmermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Tenth Annual Conference of the International Speech Communication Association</title>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

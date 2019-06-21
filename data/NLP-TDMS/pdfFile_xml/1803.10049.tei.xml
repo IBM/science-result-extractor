@@ -1,0 +1,1405 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T09:11+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Fast Parametric Learning with Activation Memorization</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jack</forename><forename type="middle">W</forename><surname>Rae</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><surname>Dayan</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><forename type="middle">P</forename><surname>Lillicrap</surname></persName>
+						</author>
+						<title level="a" type="main">Fast Parametric Learning with Activation Memorization</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Neural networks trained with backpropagation often struggle to identify classes that have been observed a small number of times. In applications where most class labels are rare, such as language modelling, this can become a performance bottleneck. One potential remedy is to augment the network with a fast-learning non-parametric model which stores recent activations and class labels into an external memory. We explore a simplified architecture where we treat a subset of the model parameters as fast memory stores. This can help retain information over longer time intervals than a traditional memory, and does not require additional space or compute. In the case of image classification, we display faster binding of novel classes on an Omniglot image curriculum task. We also show improved performance for word-based language models on news reports (Giga-Word), books (Project Gutenberg) and Wikipedia articles (WikiText-103)-the latter achieving a state-of-the-art perplexity of 29.2.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.">Introduction</head><p>Neural networks can be trained to classify discrete outputs by appending a softmax output layer. This is a linear map projecting the d-dimensional hidden output of the network to m outputs, where m is the number of distinct classes. A softmax operator <ref type="bibr" target="#b5">(Bridle, 1990</ref>) is then applied to produce a probability distribution over classes. The parameters in this softmax layer are typically optimized with the network's parameters by gradient descent.</p><p>We can think of the weights in the softmax layer θ ∈ R m×d as a set of m vectors θ <ref type="bibr">[i]</ref>; i = 1, . . . , m that each correspond to a given class. When trained with a supervised loss, such as cross-entropy, each step of gradient descent pulls the <ref type="bibr">1</ref> DeepMind, London, UK 2 CoMPLEX, Computer Science, University College London, London, UK 3 Gatsby Computational Neuroscience Unit, University College London, UK. Correspondence to: Jack W Rae &lt;jwrae@google.com&gt;, Timothy P Lillicrap &lt;countzero@google.com&gt;.</p><p>Copyright 2018 by the author(s).</p><p>parameter θ <ref type="bibr">[y]</ref>, corresponding to the class label y, towards having a greater inner product with the network output h, and pushes all other parameters θ <ref type="bibr">[j]</ref> , j = y towards having a smaller inner product with h.</p><p>One shortcoming of neural network classifiers trained with backpropagation is that they require many input examples for a given class in order to predict it with reasonable accuracy. That is, many positive class examples and optimization steps are required to pull θ[i] towards a point in space where class i can then be recognized. While the learner will have many opportunities to organize θ[i] parameters associated with frequent classes, infrequent class parameters will be poorly estimated. In domains where new classes are frequently introduced, or large-scale classification problems where some classes are very infrequently observed, this estimation problem is potentially quite serious.</p><p>One approach to speed up learning, which has received revived interest, is meta-learning. Here, meta-learning refers to algorithms which learn to produce or manipulate learning algorithms <ref type="bibr" target="#b40">(Thrun, 1998;</ref><ref type="bibr">Hochreiter et al., 2001</ref>), and it operates by learning over a distribution of tasks or datasets. A meta-learner applies knowledge from the global distribution of tasks to produce or optimize algorithms which specialize to a given task instance. Meta-learning of neural networks has seen promising results for applications such as parameter optimization <ref type="bibr" target="#b0">(Andrychowicz et al., 2016;</ref><ref type="bibr" target="#b9">Finn et al., 2017</ref>) and classification ( <ref type="bibr" target="#b36">Santoro et al., 2016;</ref><ref type="bibr" target="#b43">Vinyals et al., 2016;</ref><ref type="bibr" target="#b45">Zhou et al., 2018)</ref>. For classification, the networks are augmented with a differentiable external memory, and are trained with many rounds of data -with class labels permuted between episodes.</p><p>Meta-learning can be very powerful for few-shot learning in cases where there is a set of similar prior data to metalearn over, however it may not be practical for standalone datasets. For example, if one wants to model the grammar of computer code, it is unclear that a meta-learning system trained over natural language will be useful. Also memorybased meta-learning requires backpropagating from the read time to the original write time, which is not well suited to applications where writes and reads are separated by long time steps of conditional computation. In the case of modelling language, for example, infrequent words will not occur for large time intervals -rendering memory-based <ref type="figure">Figure 1</ref>. Mixture model of parametric and non-parametric classifiers connected to a recurrent language model. The non-parametric model (right hand side) stores a history of past activations and associated labels as key, value pairs. The parametric model (left hand side) contains learnable parameters θ for each class in the output vocabulary V . We can view both components as key, value memories -one slow-moving, optimized with gradient descent, and one rapidly updating but ephemeral. meta-learning challenging.</p><p>The task of statistical language modelling itself is interesting to investigate issues of binding new or infrequent classes, because most classes (words) are infrequent <ref type="bibr" target="#b46">(Zipf, 1935)</ref> and new classes naturally emerge over time. Recent approaches to improve neural language models have involved augmenting the network with a non-parametric cache, which stores past hidden activations h t−n , . . . , h t−1 and corresponding labels, y t−n , . . . , y t−1 ( <ref type="bibr" target="#b42">Vinyals et al., 2015;</ref><ref type="bibr" target="#b31">Merity et al., 2016;</ref><ref type="bibr" target="#b13">Grave et al., 2016b;</ref><ref type="bibr" target="#b26">Kawakami et al., 2017;</ref><ref type="bibr" target="#b14">Grave et al., 2017)</ref>. Attention over this cache provides better modelling of infrequent words that occur in a recent context, including previously unknown words <ref type="bibr" target="#b18">(Gulcehre et al., 2016)</ref>. However there is a diminishing return to increasing the cache size ( <ref type="bibr" target="#b13">Grave et al., 2016b)</ref>, and once rare words fall outside the recent context the boost in predictive performance expires.</p><p>Motivated from these memory systems, we explore a very simple optimization procedure where the network accumulates activations h t directly into the softmax layer weights θ[y t ] when a class y t has been seen a small number of times, and uses gradient descent otherwise. Accumulating or smoothing network activations into the weights actually corresponds to the well-known Hebbian learning update rule <ref type="bibr" target="#b19">Hebb, 1949</ref>) in the special case of classification on the output layer, where W, x i t , x j t correspond to θ, h t , y t respectively. We see that mixing the two rules provides better initial representations and can also preserve these representations for much longer time spans. This is because memorized activations for one class are not competing for space with activations from other (more frequent, say) classes -unlike a conventional external memory. In this sense, the parameters become an instance of a quickly updated compressed memory, we explore this idea in <ref type="table" target="#tab_1">Section 3.2</ref> We demonstrate this model adapts quickly to novel classes in a simple image classification task using handwritten characters from Omniglot ( <ref type="bibr" target="#b28">Lake et al., 2015)</ref>. We then show it improves overall test perplexity for two medium-scale language modelling corpora, WikiText103 (wikipedia articles) ( <ref type="bibr" target="#b31">Merity et al., 2016)</ref> and Project Gutenberg (books) 1 alongside a large-scale corpus GigaWord v5 (news articles) <ref type="bibr" target="#b34">(Parker et al., 2011</ref>). By splitting accuracy over word frequency buckets, we see improved perplexity for less frequent words.</p><formula xml:id="formula_0">W [i, j] ← 1 n n t=1 x i t x j t (</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">Background</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1.">Memory</head><p>There has been recent interest in models which store past hidden activations through time h 1 , h 2 , . . . , h t−1 into a memory matrix and query the contents with a differentiable attention mechanism. This has been applied to machine translation ( <ref type="bibr" target="#b3">Bahdanau et al., 2014</ref>), program induction ( <ref type="bibr" target="#b15">Graves et al., 2014;</ref>, and question answering ( <ref type="bibr" target="#b38">Sukhbaatar et al., 2015)</ref>. Memory-augmented neural networks have also been successfully applied to language modelling ( <ref type="bibr" target="#b42">Vinyals et al., 2015;</ref><ref type="bibr" target="#b26">Kawakami et al., 2017;</ref><ref type="bibr" target="#b31">Merity et al., 2016;</ref><ref type="bibr" target="#b13">Grave et al., 2016b;</ref> to facilitate the learning of unknown words, capture the tendency for globally rare words to be repeated in close proximity, and to quickly adapt the network to contextually relevant prior text ( <ref type="bibr" target="#b37">Sprechmann et al., 2018</ref>).</p><p>There are many variants of how to read from memory and mix this information with the network computations. One approach is to retrieve hidden activations and mix these with network activations in latent space ( <ref type="bibr" target="#b18">Gulcehre et al., 2016)</ref>. Another approach is a classic mixture model, as shown in <ref type="figure">Figure 1</ref>; the output probability distribution can be obtained by interpolating the probabilities p p , p np from the parametric model and memory respectively.</p><p>For intuition we briefly explain a particular architecture, the Neural Cache ( <ref type="bibr" target="#b13">Grave et al., 2016b</ref>), whose operation is related to our model. The cache is a store of the last n hidden activations along with their corresponding target output (next word) from a trained parametric language model, such as the Long Short Term Memory (LSTM) <ref type="bibr" target="#b20">(Hochreiter &amp; Schmidhuber, 1997</ref>). The conditional probability of a word w occurring is proportional to the sum over kernalized inner product similarities between the current hidden state h t and past hidden states when word w occurred.</p><formula xml:id="formula_1">p c (w | h t ) ∝ t−1 i=t−n e h T t hi I{y i = w}<label>(1)</label></formula><p>Where I{p} = 1 if p is true, 0 otherwise. This is then interpolated with the parametric language model using a fixed hyper-parameter, swept over during validation. Although the cache is of fixed size n, it can be defined to be very large with sparse attention and efficient data-structures ( <ref type="bibr" target="#b35">Rae et al., 2016;</ref><ref type="bibr" target="#b24">Kaiser et al., 2017;</ref><ref type="bibr" target="#b14">Grave et al., 2017</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2.">Language modelling</head><p>We can model a sequence of text as the product of conditional word probabilities,</p><formula xml:id="formula_2">p(w 1 , w 2 , . . . , w t ) = t i=1 p(w i | w 1 , w 2 , . . . , w i−1 )</formula><p>which are estimated separately. Traditional n-gram models take frequency-based estimates of these conditional probabilities with truncated contexts p n = p(w i | w i−n , . . . , w i−1 ) and smooth between them to estimate the full conditional probability, p(w i | w 1 , . . . , w i−1 ) = n j=1 λ j p j . A popular approach is Kneser-Ney smoothing <ref type="bibr">(Kneser &amp; Ney, 1995)</ref>. More recently, neural language models such as LSTMs and convolutional neural networks directly model the conditional probabilities through sequence-to-sequence training and achieve state-of-the-art performance in many established benchmarks <ref type="bibr" target="#b7">(Collobert &amp; Weston, 2008;</ref><ref type="bibr" target="#b39">Sundermeyer et al., 2012;</ref><ref type="bibr" target="#b25">Kalchbrenner et al., 2014;</ref><ref type="bibr" target="#b23">Jozefowicz et al., 2016;</ref><ref type="bibr" target="#b8">Dauphin et al., 2016;</ref><ref type="bibr" target="#b30">Melis et al., 2017</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.">Model</head><p>We propose Hebbian Softmax, a modification of the traditional softmax layer with an updated learning rule. Hebbian Softmax contains the same linear map from the hidden state to the output vocabulary, but learns by smoothing hidden activations into the weight parameters for novel classes whilst concurrently applying gradient descent. This is to facilitate faster binding of novel classes, and improve learning of infrequent classes. We note this corresponds to a learning rule that transitions from Hebbian learning to gradient descent, and we will show that the combination of the two learning rules works better than either one in isolation.</p><p>Many of the features of Hebbian Softmax are motivated from memory systems, and the theory of complementary learning systems in the brain ( <ref type="bibr" target="#b29">McClelland et al., 1995)</ref>. During training, the weights corresponding to a given class  <ref type="bibr">[yt]</ref> of the final layer softmax corresponding to the active class yt after one step of gradient descent. This is interpolated with the hidden activation at the time of class occurrence, ht. The remaining parameters are optimized with gradient descent. Here, I{yt} is the one-hot target vector, V denotes the vocabulary of classes, and ct is defined to be a counter of class occurrences during training -which is used to anneal λt as described in (4).</p><p>will initially correspond to a compressed 2 episodic memory store -with new activations memorized and older activations eventually forgotten.</p><p>The parameters of the softmax layer are treated both as regular slow-adapting network parameters through which gradients flow to the rest of the network, and fast-adapting memory slots which are updated sparsely without altering the rest of the network. In comparison to an external memory, the advantage of Hebbian Softmax is that it is simple to implement and requires almost no additional space or computation.</p><p>We will describe the learning rule in detail, and contrast the conditional probabilities from Hebbian Softmax to those generated by a non-parametric cache. We also generalize the memorization procedure in Section 3.3 as an instance of a secondary fast-learning overfitting procedure with respect to a euclidean objective, and explore several promising variant objective functions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1.">Update Rule</head><p>Given the weights of a linear projection θ ∈ R d×m in the final softmax layer of a network, we calculate the gradient descent update with respect to a cross-entropy loss,</p><formula xml:id="formula_3">ˆ θ t+0.5 [i] ← θ t [i] − α (p i − 1) h t i = y t θ t [i] − α p i h t i = y t (2)</formula><p>where p i = e h T t θi / n j=1 e h T t θj is the probability output from the softmax, and α is the learning rate. In practice the gradient descent updatê θ t+0.5 can be calculated with adaptive optimizers, such as RMSProp <ref type="bibr" target="#b41">(Tieleman &amp; Hinton, 2012)</ref>. This is interpolated with the previous layer's hidden activation h t for the active class y t ,</p><formula xml:id="formula_4">θ t+1 [i] ← λ t h t + (1 − λ t ) ˆ θ t+0.5 [i] i = y t ˆ θ t+0.5 [i] i = y t ,<label>(3)</label></formula><p>as illustrated in <ref type="figure" target="#fig_0">Figure 2</ref>. When λ t = 1 this corresponds to the rule θ t+1 ← h t · I{y t } where I{y t } ∈ [0, 1] m is a onehot target vector. In this case Hebbian update rule, W ij ← x i x j for x i = h t the hidden output and x j = I{y t } the target. Naturally when λ = 0 this is gradient descent, and so we see Hebbian Softmax is mixture of the two learning rules. All remaining parameters in the model are optimized with gradient descent as usual.</p><p>When mixing the two learning rules, we would like to benefit from fast initial learning of classes that have not been seen many times, along with stable consolidation of frequently seen classes. As such we do not want λ t to be constant, but instead something that is eventually annealed to zero. We add an additional counter array c ∈ Z m which counts class occurrences, and propose an annealing function of</p><formula xml:id="formula_5">λ t = max(1 / c[y t ], γ) · I{c[y t ] &lt; T }<label>(4)</label></formula><p>where γ, T are tuning parameters. T is the number of class occurrences before switching completely to gradient descent and γ is the minimum activation mixing parameter. Although heuristic, we found this worked well in practice vs. a constant λ or pure annealing λ t = 1/c[y t ]. If training from scratch, we suggest setting γ = 1/N min and T = N min × (# epochs until convergence) where N min is the minimum number of occurrences of any class in a training epoch. This is to ensure we smooth over many class examples in a given epoch, and the memorization of activations continues until the representation of h t stabilizes. We describe the full algorithm in Algorithm 1, including details for training with minibatches.</p><p>The final layer trains with a two-speed dynamic. For some training steps the full network will be optimized slowly via gradient descent as usual (when frequently-encountered classes are observed), and for other time steps a sparse subset of parameters will rapidly change. The remaining network parameters are optimized with gradient descent.</p><p>It is worth noting that simply increasing the learning rate of the softmax layer, or running multiple steps of optimization on rare class inputs, would not achieve the same effect. The value θ[y t ] would indeed be pulled towards a large inner product with h t , however neighbouring parameters θ[i]; i = y t would be pushed towards a large negative inner product with h t and this could lead to catastrophic forgetting of previously consolidated classes. Instead we allow gradient descent to slowly push neighbouring parameters away, and thus disambiguate similar classes in a gradual fashion.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Algorithm 1 Hebbian Softmax batched update</head><formula xml:id="formula_6">-At iteration 0 γ ← min. discount (hyper-parameter) T ← smoothing limit (hyper-parameter) M ← num. classes B ← batch size c 0 [i] ← 0; i = 1, .</formula><p>. . , M -At iteration t h t,1:B ← softmax inputs p t,1:B ← softmax outputs y t,1:B ← target labelsˆθ labelsˆ labelsˆθ t+0.5 ←SGD(θ t , h t,1:B , p t,1:B , y 1:B )</p><formula xml:id="formula_7">for i = 1, . . . , M do n t,i ← B j=1 I{y t,j = i} if n t,i &gt; 0 then λ t,i ← max(1/c t [i], γ) I{c t [i] &lt; T } ¯ h t,i ← 1 nt,i B j=1 h t,j I{y t,j = i} θ t+1 ← λ t,i ¯ h t,i + (1 − λ t,i ) ˆ θ t+0.5 [i] else θ t+1 ← ˆ θ t+0.5 [i] end if c t+1 [i] ← c t [i] + n t,i end for</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.">Relation to cache models</head><p>We can consider the weights constructed from the above optimization procedure as a compressed memory storing historic activations. We contrast the output probabilities of Hebbian Softmax with those produced from a nonparametric cache model.</p><p>Recall the conditional probability of a class, w, given a cache of previous activations (1). If we set I w (j) to be the time step of j-th most recent occurrence of w, then we can re-write the cache probability,</p><formula xml:id="formula_8">p c (w | h t ) ∝ t−1 i=t−n e h T t hi I{y i = w} = Nw j=1 e g(j) h T t h Iw (j)<label>(5)</label></formula><p>where g(j) = −∞ if j &lt; t−n and 1 otherwise, is a weighting function which places uniform weight to the attention over classes in the past n time steps. However if we wish to characterize infrequent classes, we may want a weighting scheme with a larger time horizon that has a smooth decay.</p><p>If we modified the cache to have infinite memory capacity and used a geometric weighting scheme to decay the contribution of the j-th most recent activation corresponding to the given class, e.g. g(j) = λ (1 − λ) j−1 , then the resulting conditional probability is,</p><formula xml:id="formula_9">˜ p c (w | h t ) ∝ Nw j=1 e λ (1−λ) j−1 h T t h Iw (j)<label>(6)</label></formula><p>where N w is the total number of occurrences of class w. Let us now consider the conditional probability from Hebbian Softmax for class w, where w has been observed less than T times. If θ has not received large gradients from the occurrence of nearby neighboring classes, and we fix λ t = λ over time, then <ref type="formula" target="#formula_4">(3)</ref> gives</p><formula xml:id="formula_10">θ i ≈ Nw j=1 λ (1 − λ) j−1 h Iw(j) ,</formula><p>plugging this into our softmax conditional probability,</p><formula xml:id="formula_11">p θ (w | h t ) ∝ e h T t θw ≈ e h T t Nw j=1 λ (1−λ) j−1 h Iw (j) = Nw j=1 e λ (1−λ) j−1 h T t h Iw (j) .</formula><p>we see the parametric Hebbian Softmax actually becomes a proxy for the conditional probability output by the nonparametric infinite cache model˜pmodel˜ model˜p c . Past activations now have a geometric contribution to the probability, versus the cache's arithmetic reduction (6). This form is useful because we can compute p sm much more efficiently thañ p c and it does not require storing the entire history of past activations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3.">Alternate Objective Functions</head><p>We briefly discuss a generalization of the Hebbian Softmax update by casting it as an overfitting procedure to an inner objective function. Recall equation (3) for parameters corresponding to the active class,</p><formula xml:id="formula_12">θ t+1 [i] ← λ t h t + (1 − λ t ) ˆ θ t+0.5 [i].</formula><p>We can re-phrase this as smoothingˆθsmoothingˆ smoothingˆθ t+0. <ref type="bibr">5</ref> [i] with the trivial solution to a euclidean objective function, which we overfit to.</p><formula xml:id="formula_13">θ t+1 [i] ← λw * + (1 − λ) ˆ θ t+0.5 [i] w * ← arg max w −||w − h t || 2</formula><p>From this perspective we are performing a two-level optimization procedure. The outer optimization loop is the mixture of gradient descent and exponential smoothing, and the inner optimization loop determines a good value for w * based on the activation h t and the current parameters.</p><p>We consider several other objective functions that are more expensive to compute, but may be preferable to a simple Euclidean distance. Notably, switching to inner product similarity (IP), and also incorporating a cost to parameter similarity (SVM, Smax) to push w * towards h t but away from neighbouring parameters -to avoid confusion or interference with other classes. As we keep neighbouring parameters fixed, we hope to avoid the catastrophic forgetting typically associated with model overfitting. We list the set of objectives considered,</p><formula xml:id="formula_14">w * ← arg max w g(w) g L2 (w) = −||w − h t || 2<label>(7)</label></formula><formula xml:id="formula_15">g IP (w) = w T h t (8) g SVM (w) = w T h t − θj ∈N k (ht) ξ w T θ j · I(w T θ j &gt; )<label>(9)</label></formula><formula xml:id="formula_16">g Smax (w) = e w T ht / θj ∈N k (ht) e w T θj<label>(10)</label></formula><p>where N k (h t ) refers to the k nearest parameters to the activation h t that do not correspond to y t , the class label.</p><p>Including all M parameters in θ t would make the inner optimization loop very slow, so we choose a sparse subset k M . These are all optimized under the hard norm constraint ||w|| 2 &lt; 10 with gradient descent for multiple steps, typically 20, at a given point in training.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.">Results</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.">Image Curriculum</head><p>We apply Hebbian Softmax to the problem of image classification. We create a simple curriculum task using Omniglot data ( <ref type="bibr" target="#b28">Lake et al., 2015)</ref>, where a subset of classes (30) are initially provided, and 5 new classes are added when test performance exceeds a threshold (60%). Although this is a toy setup, it allows us to investigate the basic properties of fast class binding without other confounding factors, found in real-world problems.</p><p>Omniglot contains handwritten characters from 50 alphabets, totalling 1, 623 unique character classes. There are 20 examples per class. We partition the first 5 examples per class to a test set, and assign the rest for training.</p><p>We use the same architectural setup as Matching Networks For the Hebbian Softmax update, we store the pristine hidden activation pre-dropout. Unlike many one-shot Omniglot papers, we do not train in a meta-learning setup -namely, labels are not shuffled between episodes.</p><p>We trained the convnet classifier with RMSProp and swept over learning rates α ∈ [1e − 4, 4e − 2] to find the fastestlearning baseline softmax model. A value of α = 8e − 3 was the largest learning rate to provide stable learning (see <ref type="figure" target="#fig_6">Figure 8</ref> in Appendix B). We then compared the regular softmax layer with Hebbian Softmax , both placed on the deep convnet.</p><p>If we inspect the number of steps spent on each level averaged over 10 seeds, we see in <ref type="figure" target="#fig_1">Figure 3</ref> that the model is noticeably more data efficient after 80 total classes. Although it is still far from one-shot, there is a 1 − 2X data efficiency gain on average. In Appendix B, <ref type="figure">Figure 9</ref> we show the progression of the curriculum in terms of the number of classes shown versus training steps. Hebbian Softmax progresses through the curriculum at identical speed to the softmax until around 1, 000 steps of training, from then on it begins to bind new classes and complete the each level faster.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.">Language Modelling</head><p>We would like to evaluate Hebbian Softmax in the context of a large-scale classification task, where some classes are infrequently observed. Word-level language modelling is an ideal fit because it satisfies both criteria, and there are established performance benchmarks. Some large-scale language modelling corpora require the use of efficient softmax approximations, such as the adaptive softmax ( <ref type="bibr" target="#b12">Grave et al., 2016a</ref>) or hierarchical softmax <ref type="bibr" target="#b11">(Goodman, 2001</ref>) due to the very large vocabulary size. To reduce confounding factors, we restrict ourselves to applications where the full softmax can be used. We investigate two medium-sized corpora, WikiText-103 which contains just over 100M to- Steps <ref type="table" target="#tab_0">(B)   30   35   40   45   50   55   60   Perplexity   Softmax  Hebbian, T=100</ref> Hebbian, T=500 Hebbian, T=1000 <ref type="figure">Figure 4</ref>. Validation perplexity for WikiText-103 over 9 billion words of training (≈ 90 epochs). The LSTM drops to a perplexity of 36.4 with a regular softmax layer, and 34.3 with the Hebbian Softmax , T = 500, when representations from the LSTM begin to settle. For tuning parameter T ; T = 100 converges quicker, but begins to overfit after 5.5B training words (coinciding when all classes have been observed at least 100 times).</p><p>kens derived from Wikipedia articles ( <ref type="bibr" target="#b31">Merity et al., 2016)</ref>, and Gutenberg which contains a subset of open-access texts from Project Gutenberg listed in Appendix A.2. The idea is that Wikipedia articles should cover factual information, where the style of writing is somewhat consistent and named entities may appear across many articles; whereas books should be more self-contained (unique named entities) and stylistically different. We also consider a very large corpus, GigaWord v5, which is a collection of articles from eight press associations exceeding a decade's worth of global news.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.1.">MODEL DETAILS</head><p>For WikiText-103 we swept over LSTM hidden sizes {1024, 2048, 4096}, no. LSTM layers {1, 2}, embedding dropout {0, 0.1, 0.2, 0.3}, use of layer norm ( <ref type="bibr" target="#b2">Ba et al., 2016b</ref>) {True, False}, and whether to share the input/output embedding parameters {True, False} totalling 96 parameters. A single-layer LSTM with 2048 hidden units with tied embedding parameters and an input dropout rate of 0.3 was selected, and we used this same model configuration for the other language corpora. We trained the models on 8 P100 Nvidia GPUs by splitting the batch size into 8 sub-batches, sending them to each GPU and summing the resulting gradients. The total batch size used was 512 and a sequence length of 100 was chosen. We did not pass the state of the LSTM between sequences during training, however the state is passed during evaluation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.2.">WIKITEXT-103</head><p>The WikiText-103 corpus contains 267, 735 unique words and each word occurs at least three times in the training set. We take the best LSTM parameter configura- tion (described above) as a baseline, and compare it to an identical model where the final layer is replaced with Hebbian Softmax . We swept over the insertion limit parameter T ∈ {100, 500, 1000} and discount factor γ ∈ {0.05, 0.1, 0.25} using the validation set. We found T = 500, γ = 0.25 worked best, achieving a test perplexity of 34.3 on this dataset <ref type="table" target="#tab_0">(Table 1)</ref>. Inspecting the validation curves in <ref type="figure">Figure 4</ref> we see the Hebbian Softmax initially hampers validation performance, until around 2-3B training tokens have been consumed. This makes sense, as storing activations from prior layers of the network is only an effective strategy once the network has rich intermediate representations of its inputs. Inspecting <ref type="table">Table 4</ref>.2.2 we see the test perplexity broken down by word frequency, the gain in overall performance is obtained from less frequent vocabulary.</p><p>We also investigate the model evaluated dynamically on the test using (a) a Neural Cache ( <ref type="bibr" target="#b13">Grave et al., 2016b</ref>) and (b) Memory-based Parameter Adaptation (MbPA) <ref type="bibr">(Sprech- mann et al., 2018)</ref>. Hyper-parameter details for these models are detailed in Appendix A.1. The cache reduces the test perplexity by 1.6 for the LSTM and 4.4 for LSTM + Hebbian Softmax . The addition of MbPA reaches a test perplexity of 29.2 which is, to the authors' knowledge, stateof-the-art at time of writing.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.3.">GUTENBERG</head><p>Books provide several different linguistic challenges to articles. The style of writing is intentionally varied between authors, and named entities can be wholly fictional -confined to a single text. We extract a subset of English-language books from the corpus, strip the Gutenberg headers and tokenize the text (Appendix A.5). We select a dataset of comparable size to WikiText-103; 2042 books in total with 2017 training books (175, 181, 505 tokens), 12 validation books (609, 545 tokens), and 13 test books (526, 646 tokens) -see Appendix A.2 for full details. We select all words that occur at least five times in the training set, a total vocabulary of 242, 621 and map the remainder to an unk token. Hebbian Softmax models less frequent words with better accuracy. Note the training set size of WikiText is smaller than Gutenberg, which is itself much smaller than GigaWord; so the &gt; 10K bucket includes an increasing number of unique words. This explains GigaWord's larger perplexity in this bucket. Furthermore there were no words observed &lt; 100 times within the GigaWord 250K vocabulary. A random model would have a perplexity of |V | ≈ 2.5e5 for all frequency buckets. We use the same LSTM hyper-parameters as those chosen from the wikipedia sweep, and compare against Hebbian Softmax with T = 100, T = 500 and γ = 0.1. <ref type="figure">Figure 5</ref> in Appendix A.2 shows the validation performance after 15B steps of training, equating to roughly 80 epochs and 6 days of training with 8 P100s training synchronously.</p><p>After approximately 4B steps of training the softmax performance is surpassed, and this gap widens even up to 15B steps to a gap of 2 − 3 points in perplexity. Similar to WikiText-103, we see in <ref type="table">Table 4</ref>.2.2 the gain in perplexity is more pronounced over less frequent words.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3.">GigaWord v5</head><p>We evaluate Hebbian Softmax on a large-scale language modelling corpus. GigaWord is interesting because it is a vast collection of news articles, and there is a natural temporal order. We pre-process the dataset (Appendix A.5), select all articles from 2000-2009 for the training set, and test on all articles from 2010. The total number of training tokens is 4.0B and the total number of test tokens is 260M. The total unique tokens (after pre-processing) for the training set reaches 6M, however for parity with the other experiments we choose a vocabulary size of 250K. We use the same LSTM hyper-parameters and Hebbian Softmax hyperparameters, and train the model for 6B steps, after which the models plateau in evaluation performance. We observe a 9.8-point drop in perplexity, from 53.5 to 43.7, illustrated in <ref type="table">Table 4</ref>.2.2.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4.">Alternate Objective Functions</head><p>We test out some of the alternate inner objective functions described in Section 3.3. These are described in <ref type="formula" target="#formula_14">(7)</ref>, and the inner objective functions include Euclidean, Inner Product, SVM, (sparse) Softmax. These could be applied to any of the described experiments, we chose the WikiText-103 language modelling task because it is more comparable to prior work.</p><p>Although more expressive objective functions appear promising, in practice we see <ref type="figure">(Figure 7</ref> in <ref type="bibr">Appendix A.4</ref>) that validation performance is roughly equivalent between all inner objective functions. This suggests the network activation h t naturally do not land too close to other class parameters, and the norm of activations is not too large or small, in comparison to the model parameters θ. The latter may be due to the use of layer normalization from the LSTM.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.">Related Work</head><p>Few-shot classification has been investigated in a metalearning setup with a mixture model of a parametric neural network and a non-parametric memory ( <ref type="bibr" target="#b36">Santoro et al., 2016;</ref><ref type="bibr" target="#b43">Vinyals et al., 2016)</ref>. Here, a subset of classes are used with permuted labels per episode, activations are stored to memory, and gradients are passed through the memory. This allows the network to shape its activations to be conducive to accurate retrieval and classification. Here, we do not meta-learn the activations stored into network parameters and instead rely on their representation being rich enough from regular parametric training. We do this to avoid backpropagating through time to the point of writing to memory, as the parameters may contain memories stored millions of time steps ago in the case of rare words.</p><p>In natural language processing memory-augmented models have been shown to improve the modelling of unknown words and adaptation to new domains ( <ref type="bibr" target="#b13">Grave et al., 2016b;</ref><ref type="bibr" target="#b31">Merity et al., 2016;</ref><ref type="bibr" target="#b26">Kawakami et al., 2017)</ref>. However in these works the memory is typically small and models the recent past. During evaluation the test activations and corresponding labels are stored in memory, and the model is evaluated dynamically -adapting to the test data on the fly. Whilst dynamic evaluation provides insights into domain transfer, it is limited in applicability as the model may not receive ground-truth labels when launched into production.</p><p>More recent work has investigated methods of memorizing and searching over the training set to enhance performance ( <ref type="bibr" target="#b24">Kaiser et al., 2017;</ref><ref type="bibr" target="#b14">Grave et al., 2017;</ref><ref type="bibr" target="#b17">Gu et al., 2017</ref>). These approaches typically require complex engineering to efficiently index this memory store. Part of the benefit of Hebbian Softmax is implementation simplicity.</p><p>Prior literature on the softmax operator for language modelling computational efficiency ( <ref type="bibr" target="#b6">Chen et al., 2015;</ref><ref type="bibr" target="#b12">Grave et al., 2016a</ref>) or tricks such as smoothing across many softmax layers <ref type="bibr" target="#b44">(Yang et al., 2017)</ref>. However these do not focus on increasing the data-efficiency or faster learning of infrequent classes.</p><p>Other architectures have been considered for fast learning, such as the 'fast weights' auto-associative memory ( <ref type="bibr" target="#b1">Ba et al., 2016a)</ref>. This focuses on fast adaptation to recent information that persists over a short window of time. <ref type="bibr">The LEABRA architecture (O'Reilly, 1996a</ref>) contains a mixture of contrastive Hebbian learning (GENEREC) (O'Reilly, 1996b) and gradient descent for fast and slow learning, however this cognitively-inspired model has not been shown to scale to large-scale classification problems.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.">Discussion</head><p>This paper explores one way in which we can achieve fast parametric learning in neural networks, and preserve this knowledge over time. We show that activation memorization is useful for vision in the binding of newly introduced classes, beating a well tuned adaptive learning rate optimizer, RMSProp.</p><p>For language we show improvement in the modelling of text with an extensive vocabulary. In the latter we show the model beats a very strong LSTM benchmark on three stylistically different corpora, and achieves state of the art on WikiText-103. This is achieved with effectively no additional compute or memory resources. Breaking down perplexity over word frequency bucket, we see that less frequent words are better modelled, as hypothesized. We suggest that Hebbian Softmax could be applied to any classification domain with infrequent classes, or non-stationary data. It may also be useful in quickly adapting a pre-trained classifier to a new task / set of classes -however this is beyond the scope of our initial investigation.</p><p>It would also be interesting to explore activation memorization deeper within the network, and thus in more general scenarios to classification. In this case, there is no direct feedback from a ground-truth class label and the update rule would not necessarily be an instance of Hebbian learning. A natural first step would be to generalize the ideas to largescale softmax operators that are internal to the networksuch as attention over a large memory.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A. Language Modelling</head><p>A.1. WikiText-103</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.1.1. DYNAMIC EVALUATION PARAMETERS</head><p>For the Neural Cache, we swept over the hyper-parameters:</p><p>• Softmax inverse temperature: θ cache ∈ {0.1, 0.2, 0.3}</p><p>• Cache output interpolation: λ cache ∈ {0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35}</p><p>• Cache size n cache ∈ {1000, 5000, 8000, 9000, 10000}</p><p>and chose θ cache = 0.3, λ cache = 0.1, n cache = 10000 by sweeping over the validation set.</p><p>For the mixture of Neural Cache and MbPA we swept over the same cache parameters, alongside:</p><p>• MbPA output interpolation: λ mbpa ∈ {0.02, 0.04, 0.06, 0.08, 0.10},</p><p>• Number of neighbours retrieved from memory: K ∈ {512, 1024},</p><p>• Number of MbPA steps: n mbpa ∈ {1, 2}</p><p>and selected λ mbpa = 0.04, λ cache = 0.1, θ cache = 0.3, K = 1024, n mbpa = 1, n cache = 10000. We also selected the MbPA learning rate α lr = 0.3, and the L2-regularization β mbpa = 0.5 on the MbPA-modified parameters. The memory size for MbPA was chosen to be equal to the cache size. Hebbian, T=100 Hebbian, T=500 <ref type="figure">Figure 5</ref>. Validation learning curves for the Gutenberg corpus. All word classes have been observed after around 4B training tokens and we observe the performance of Hebbian Softmax return to that of the vanilla LSTM thereafter, as all parameters are optimized by gradient descent.  Steps <ref type="table">(B)   35  40  45  50  55  60  65  70  75  80   Perplexity   Euclidean</ref> Inner Product SVM Softmax <ref type="figure">Figure 7</ref>. Validation learning curves for WikiText-103 comparing different overfitting objectives. Surprisingly there is not a significant improvement in performance by choosing inner objectives which relate to the overall training objective, e.g. Softmax, vs L2.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.3. GigaWord</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.4. Alternate Objective Functions</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A.5. Data pre-processing</head><p>For Project Gutenberg and GigaWord v5 we used a very simple python script to pre-process and tokenize the data using NLTK. We post the Gutenberg script here for ease of reproduction. The GigaWord v5 script excludes the Project Gutenbergspecific selection of start / end markers to extract the text. The NLTK library 3 is used to split out sentence and word tokens, the resulting text contains lower-case text with one sentence per line.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Softmax</head><p>Hebbian Softmax, T=10 <ref type="figure">Figure 9</ref>. Omniglot curriculum task. Starting from 30 classes, 5 new classes are added when total test error exceeds 60%. Each line shows a 2-σ confidence band obtained from 10 independent seed runs.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 2 .</head><label>2</label><figDesc>Figure 2. Update rule. Here the vectorˆθt+0vectorˆ vectorˆθt+0.5 denotes the parameters θt[yt] of the final layer softmax corresponding to the active class yt after one step of gradient descent. This is interpolated with the hidden activation at the time of class occurrence, ht. The remaining parameters are optimized with gradient descent. Here, I{yt} is the one-hot target vector, V denotes the vocabulary of classes, and ct is defined to be a counter of class occurrences during training -which is used to anneal λt as described in (4).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 3 .</head><label>3</label><figDesc>Figure 3. Number of training steps taken to complete each level on the Omniglot curriculum task. Comparisons between the Hebbian Softmax and softmax baseline are averaged over 10 independent seeds. As classes are sampled uniformly, we expect the number of steps taken to level completion to rise linearly with the number of classes.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 6 .</head><label>6</label><figDesc>Figure 6. Test perplexity on GigaWord v5 corpus. Each model is trained on all articles from 200 − 2009 and tested on 2010. Because the test set is very large, a random subsample of articles are used per evaluation cycle. For this reason, the measurements are more noisy.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>#Figure 8 .</head><label>8</label><figDesc>Figure 8. Omniglot curriculum performance versus learning rate for a regular softmax architecture. Values of 1e − 3 to 8e − 3 are similarly fast to learn and are stable. Stability breaks down for larger values.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0" validated="true"><head>Table 1 . Validation and test perplexities on WikiText-103.</head><label>1</label><figDesc></figDesc><table>Valid. Test 
+
+LSTM (Graves et al., 2014) 
+-
+48.7 
+Temporal CNN (Bai et al., 2018) 
+-
+45.2 
+Gated CNN (Dauphin et al., 2016) 
+-
+37.2 
+LSTM (ours) 
+36.0 
+36.4 
+LSTM + Cache 
+34.5 
+34.8 
+LSTM + Hebbian 
+34.1 
+34.3 
+LSTM + Hebbian + Cache 
+29.7 
+29.9 
+LSTM + Hebbian + Cache + MbPA 
+29.0 
+29.2 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 . Test perplexity versus training word frequency.</head><label>2</label><figDesc></figDesc><table></table></figure>
+
+			<note place="foot" n="1"> Project Gutenberg. (n.d.). Retrieved January 2, 2018, from www.gutenberg.org</note>
+
+			<note place="foot" n="2"> The memory is compressed because multiple activations corresponding to the same class are smoothed into one vector, instead of being stored separately.</note>
+
+			<note place="foot" n="3"> https://www.nltk.org/</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgements</head><p>The authors would like to thank Gabor Melis, Greg Wayne, Oriol Vinyals, Pablo Sprechmann, Siddhant Jayakumar, Charles Blundell, Koray Kavukcuoglu, Shakir Mohamed, Adam Santoro, Phil Blunsom, Felix Hill, Angeliki Lazaridou, James Martens, Ozlem Aslan, Guillaume Desjardins, and Chloe Hillier for their comments and assistance during the course of this project. Peter Dayan is currently on a leave of absence at Uber Technologies; Uber was not involved in this study.</p></div>
+			</div>
+
+			<div type="annex">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Appendix</head></div>			</div>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Learning to learn by gradient descent by gradient descent</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Andrychowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Marcin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Denil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Misha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Gomez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sergio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthew</forename><forename type="middle">W</forename><surname>Hoffman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Pfau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>David</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tom</forename><surname>Schaul</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">De</forename><surname>Freitas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nando</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="3981" to="3989" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Using fast weights to attend to the recent past</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Ba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mnih</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Volodymyr</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Leibo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Joel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Catalin</forename><surname>Ionescu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="4331" to="4339" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Ba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jamie</forename><surname>Kiros</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ryan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.06450</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">Layer normalization. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Neural machine translation by jointly learning to align and translate</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bahdanau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Dzmitry</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1409.0473</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Convolutional sequence modeling revisited</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Shaojie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kolter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zico</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Koltun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Vladlen</surname></persName>
+		</author>
+		<ptr target="https://openreview.net/forum" />
+		<imprint>
+			<date type="published" when="2018" />
+			<biblScope unit="page">8</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Training stochastic model recognition algorithms as networks can lead to maximum mutual information estimation of parameters</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><forename type="middle">S</forename><surname>Bridle</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="page" from="211" to="217" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Welin</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Grangier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Auli</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1512.04906</idno>
+		<title level="m">Strategies for training large vocabulary neural language models</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">A unified architecture for natural language processing: Deep neural networks with multitask learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronan</forename><surname>Collobert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Weston</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 25th international conference on Machine learning</title>
+		<meeting>the 25th international conference on Machine learning</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="160" to="167" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Language modeling with gated convolutional networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yann</forename><forename type="middle">N</forename><surname>Dauphin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Fan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Angela</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Auli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Grangier</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1612.08083</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Modelagnostic meta-learning for fast adaptation of deep networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chelsea</forename><surname>Finn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pieter</forename><surname>Abbeel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sergey</forename><surname>Levine</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1703.03400</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Understanding the difficulty of training deep feedforward neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xavier</forename><surname>Glorot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yoshua</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Thirteenth International Conference on Artificial Intelligence and Statistics</title>
+		<meeting>the Thirteenth International Conference on Artificial Intelligence and Statistics</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="249" to="256" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Classes for fast maximum entropy training</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joshua</forename><surname>Goodman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Acoustics, Speech, and Signal Processing</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2001" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="561" to="564" />
+		</imprint>
+	</monogr>
+	<note>2001 IEEE International Conference on</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edouard</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Cissé</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Moustapha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Grangier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hervé</forename><surname>Jégou</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.04309</idno>
+		<title level="m">Efficient softmax approximation for gpus</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Improving neural language models with a continuous cache</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edouard</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nicolas</forename><surname>Usunier</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1612.04426</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Unbounded cache model for online language modeling with open vocabulary</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edouard</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Cisse</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Moustapha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="6044" to="6054" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Wayne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Danihelka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ivo</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1410.5401</idno>
+		<title level="m">Neural turing machines</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Hybrid computing using a neural network with dynamic external memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Wayne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Greg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Reynolds</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Malcolm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Harley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Danihelka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ivo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Grabska-Barwi´nskabarwi´nska</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Agnieszka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sergio</forename><surname>Colmenarejo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Gómez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Edward</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ramalho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tiago</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Agapiou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Nature</title>
+		<imprint>
+			<biblScope unit="volume">538</biblScope>
+			<biblScope unit="issue">7626</biblScope>
+			<biblScope unit="page">471</biblScope>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Search engine guided non-parametric neural machine translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiatao</forename><surname>Gu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Yong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyunghyun</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><surname>Victor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><forename type="middle">K</forename></persName>
+		</author>
+		<idno type="arXiv">arXiv:1705.07267</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Caglar</forename><surname>Gulcehre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sungjin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nallapati</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ramesh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bowen</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bengio</forename></persName>
+		</author>
+		<idno type="arXiv">arXiv:1603.08148</idno>
+		<title level="m">Yoshua. Pointing the unknown words</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">The organization of behavior: A neurophysiological approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Donald</forename><forename type="middle">O</forename><surname>Hebb</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1949" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Long short-term memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sepp</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jürgen</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1735" to="1780" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Learning to learn using gradient descent</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sepp</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Younger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Conwell</forename><surname>Steven</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peter</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Artificial Neural Networks</title>
+		<imprint>
+			<biblScope unit="page" from="87" to="94" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Springer</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Exploring the limits of language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rafal</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Oriol</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mike</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Noam</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yonghui</forename><surname>Wu</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1602.02410</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Lukasz</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nachum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ofir</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aurko</forename><surname>Roy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Samy</surname></persName>
+		</author>
+		<title level="m">Learning to remember rare events. International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">A convolutional neural network for modelling sentences</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kalchbrenner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Grefenstette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1404.2188</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Learning to create and reuse words in open-vocabulary neural language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuya</forename><surname>Kawakami</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.06986</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Improved backing-off for m-gram language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Reinhard</forename><surname>Ney</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hermann</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Acoustics, Speech, and Signal Processing</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="1995" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="181" to="184" />
+		</imprint>
+		<respStmt>
+			<orgName>Fast Parametric Learning with Activation Memorization Kneser</orgName>
+		</respStmt>
+	</monogr>
+	<note>ICASSP-95</note>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Human-level concept learning through probabilistic program induction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Brenden</forename><forename type="middle">M</forename><surname>Lake</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joshua</forename><forename type="middle">B</forename><surname>Tenenbaum</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Science</title>
+		<imprint>
+			<biblScope unit="volume">350</biblScope>
+			<biblScope unit="issue">6266</biblScope>
+			<biblScope unit="page" from="1332" to="1338" />
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Why there are complementary learning systems in the hippocampus and neocortex: insights from the successes and failures of connectionist models of learning and memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><forename type="middle">L</forename><surname>Mcclelland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Mcnaughton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Bruce</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O&amp;apos;reilly</forename><surname>Randall</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Psychological review</title>
+		<imprint>
+			<biblScope unit="volume">102</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page">419</biblScope>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+		<title level="m" type="main">On the state of the art of evaluation in neural language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gábor</forename><surname>Melis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chris</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Phil</forename><surname>Blunsom</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.05589</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">Pointer sentinel mixture models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Caiming</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.07843</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Biologically plausible error-driven learning using local activation differences: The generalized recirculation algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>O&amp;apos;reilly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Randall</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="895" to="938" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">The Leabra model of neural interactions and learning in the neocortex</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>O&amp;apos;reilly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Randall</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1996" />
+			<pubPlace>Pittsburgh, PA, USA</pubPlace>
+		</imprint>
+		<respStmt>
+			<orgName>Carnegie Mellon University</orgName>
+		</respStmt>
+	</monogr>
+<note type="report_type">PhD thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<monogr>
+		<title level="m" type="main">English gigaword fifth edition ldc2011t07. dvd. Philadelphia: Linguistic Data Consortium</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert</forename><surname>Parker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Graff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>David</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Kong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Junbo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ke</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kazuaki</forename><surname>Maeda</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Scaling memory-augmented neural networks with sparse reads and writes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jack</forename><surname>Rae</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jonathan</forename><forename type="middle">J</forename><surname>Hunt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Danihelka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ivo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Harley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Timothy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrew</forename><forename type="middle">W</forename><surname>Senior</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Wayne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Gregory</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Graves</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Lillicrap</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="3621" to="3629" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+		<title level="m" type="main">One-shot learning with memory-augmented neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adam</forename><surname>Santoro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bartunov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sergey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Botvinick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Matthew</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daan</forename><surname>Wierstra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timothy</forename><surname>Lillicrap</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1605.06065</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pablo</forename><surname>Sprechmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Jayakumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rae</forename><surname>Siddhant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Jack</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexander</forename><surname>Pritzel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Adria</forename><surname>Puigdomenech</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Badia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Uria</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Benigno</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Oriol</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hassabis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Demis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Razvan</forename><surname>Pascanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Charles</forename><surname>Blundell</surname></persName>
+		</author>
+		<title level="m">International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">End-to-end memory networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sukhbaatar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sainbayar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><surname>Weston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Fergus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Rob</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in neural information processing systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="2440" to="2448" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Lstm neural networks for language modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Sundermeyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ralf</forename><surname>Schlüter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hermann</forename><surname>Ney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Thirteenth Annual Conference of the International Speech Communication Association</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Lifelong learning algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sebastian</forename><surname>Thrun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Learning to learn</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="181" to="209" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<monogr>
+		<title level="m" type="main">Lecture 6.5-rmsprop: Divide the gradient by a running average of its recent magnitude. COURSERA: Neural networks for machine learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tijmen</forename><surname>Tieleman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoffrey</forename><surname>Hinton</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="26" to="31" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Pointer networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Oriol</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Meire</forename><surname>Fortunato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Navdeep</forename><surname>Jaitly</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="2692" to="2700" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Matching networks for one shot learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Oriol</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Blundell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Charles</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lillicrap</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Wierstra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Daan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="3630" to="3638" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhilin</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Dai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zihang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruslan</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>William</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1711.03953</idno>
+		<title level="m">Breaking the softmax bottleneck: a high-rank rnn language model</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<monogr>
+		<title level="m" type="main">Deep metalearning: Learning to learn in the concept space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fengwei</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bin</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zhenguo</forename><surname>Li</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1802.03596</idno>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<monogr>
+		<title level="m" type="main">The psychology of language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">George</forename><forename type="middle">K</forename><surname>Zipf</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1935" />
+			<pubPlace>NY HoughtonMifflin</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">We selected 2042 English-language books under the /1 subdirectory. Each book has a unique id, we shuffled the books and split out a reasonably sized train, validation and test set</title>
+		<ptr target="https://www.gutenberg.org/MIRRORS.ALL" />
+	</analytic>
+	<monogr>
+		<title level="m">We downloaded a subset of books (listed below) from Project Gutenberg on</title>
+		<imprint>
+			<date type="published" when="2018-01-02" />
+		</imprint>
+	</monogr>
+	<note>The book ids are listed below for these splits</note>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<analytic>
+		<title/>
+	</analytic>
+	<monogr>
+		<title level="j">Test</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="page">11931</biblScope>
+			<date type="published" when="1064" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

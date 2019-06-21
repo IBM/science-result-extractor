@@ -1,0 +1,1017 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /Users/yhou/git/grobid-0.5.3/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.5.3" ident="GROBID" when="2019-02-07T07:26+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">An Analysis of Neural Language Modeling at Multiple Scales</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stephen</forename><surname>Merity</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nitish</forename><surname>Shirish Keskar</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Richard</forename><surname>Socher</surname></persName>
+						</author>
+						<title level="a" type="main">An Analysis of Neural Language Modeling at Multiple Scales</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<abstract>
+				<p>Many of the leading approaches in language mod-eling introduce novel, complex and specialized architectures. We take existing state-of-the-art word level language models based on LSTMs and QRNNs and extend them to both larger vocabularies as well as character-level granularity. When properly tuned, LSTMs and QRNNs achieve state-of-the-art results on character-level (Penn Tree-bank, enwik8) and word-level (WikiText-103) datasets, respectively. Results are obtained in only 12 hours (WikiText-103) to 2 days (enwik8) using a single modern GPU.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.">Introduction</head><p>Language modeling (LM) is one of the foundational tasks of natural language processing. The task involves predicting the (n + 1) th token in a sequence given the n preceding tokens. Trained LMs are useful in many applications including speech recognition <ref type="bibr" target="#b33">(Yu &amp; Deng, 2014)</ref>, machine translation <ref type="bibr" target="#b14">(Koehn, 2009)</ref>, natural language generation ( <ref type="bibr" target="#b27">Radford et al., 2017;</ref><ref type="bibr" target="#b19">Merity et al., 2017a</ref>), learning token embeddings, and as a general-purpose feature extractor for downstream tasks (P. <ref type="bibr" target="#b25">Matthew, 2017</ref>).</p><p>Language models can operate at various granularities, with these tokens formed from either words, sub-words, or characters. While the underlying objective remains the same across all sub-tasks, each has its own unique set of benefits and challenges.</p><p>In practice, word-level LMs appear to perform better at downstream tasks compared to character-level LMs but suffer from increased computational cost due to large vocabulary sizes. Even with a large vocabulary, word-level LMs still need to replace infrequent words with out-of-vocabulary (OoV) tokens. Character-level LMs do not suffer this OoV problem as the potentially infinite set of potential words * Equal contribution 1 Salesforce Research, Palo Alto, CA -94301.</p><p>Correspondence to: Stephen Merity &lt;smer-ity@salesforce.com&gt;.</p><p>Code available at https://github.com/salesforce/ awd-lstm-lm can be constructed by repeatedly selecting from a limited set of characters. This introduces two issues for characterlevel LMs however -they are slower to process than their word-level counterparts as the number of tokens increases substantially, and due to this, they experience more extreme issues with vanishing gradients. Tokens are also far less informative in a character-level LM. For a word-level LM to understand the likely topics a sentence may cover, one or two discriminative words may be sufficient. In comparison, a character-level LM would require at least half a dozen. Given this distinction, word-and character-level LMs are commonly trained with vastly different architectures. While vanilla Long Short Term Memory (LSTM) networks have been shown to achieve state-of-the-art performance on wordlevel LM they have been hitherto considered insufficient for competitive character-level LM; see e.g., <ref type="bibr" target="#b18">(Melis et al., 2018)</ref> In this paper, we show that a given baseline model framework, composed of a vanilla RNN (LSTM or its cheaper counterpart, <ref type="bibr">QRNN (Bradbury et al., 2017)</ref>) and an adaptive softmax, is capable of modeling both character-and word-level tasks at multiple scales of data whilst achieving state-of-the-art results. Further, we present additional analysis regarding a comparison of the LSTM and QRNN architectures and the importance of various hyperparameters in the model. We conclude the paper with a discussion concerning the choice of datasets and model metrics.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">Motivation</head><p>Recent research has shown that a well tuned LSTM baseline can outperform more complex architectures in the task of word-level language modeling ( <ref type="bibr" target="#b21">Merity et al., 2018;</ref><ref type="bibr" target="#b18">Melis et al., 2018</ref>). The model in <ref type="bibr" target="#b21">Merity et al. (2018)</ref> also aims to use well optimized components, such as the NVIDIA cuDNN LSTM or highly parallel Quasi-Recurrent Neural Network ( <ref type="bibr" target="#b0">Bradbury et al., 2017)</ref>, allowing for rapid convergence and experimentation due to efficient hardware usage. While the models were shown to achieve state-of-the-art results on modest language modeling datasets, their application to larger-scale word-level language modeling or character-level language modeling had not been successful.</p><p>Large-scale word-and character-level datasets can both require training over hundreds of millions of tokens. This requires an efficient model such that experimentation does not require vast amounts of time or resources. From this, we aim to ensure our model can train in a matter of days or hours on a single modern GPU and can achieve results competitive with current state-of-the-art results.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.">Model architecture</head><p>Our underlying architecture is based upon the model used in <ref type="bibr" target="#b21">Merity et al. (2018)</ref>. Their model consists of a trainable embedding layer, one or more layers of a stacked recurrent neural network, and a softmax classifier. The embedding and softmax classifier utilize tied weights <ref type="bibr" target="#b11">(Inan et al., 2016;</ref><ref type="bibr" target="#b26">Press &amp; Wolf, 2016)</ref> to both decrease the total parameter count as well as improve classification accuracy over rare words. Their experimental setup features various optimization and regularization variants such as randomizedlength backpropagation through time (BPTT), embedding dropout, variational dropout, activation regularization (AR), and temporal activation regularization (TAR). This model framework has been shown to achieve state-of-the-art results using either an LSTM or QRNN based model in under a day on an NVIDIA Quadro GP100.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1.">LSTM and QRNN</head><p>In <ref type="bibr" target="#b21">Merity et al. (2018)</ref>, two different recurrent neural network cells are evaluated: the Long Short Term Memory (LSTM) <ref type="bibr" target="#b9">(Hochreiter &amp; Schmidhuber, 1997</ref>) and the QuasiRecurrent Neural Network (QRNN) <ref type="bibr" target="#b0">(Bradbury et al., 2017)</ref>.</p><p>While the LSTM works well in terms of task performance, it is not an optimal fit for ensuring high GPU utilization. The LSTM is sequential in nature, relying on the output of the previous timestep before work can begin on the current timestep. This limits the concurrency of the LSTM to the size of the batch and even then can result in substantial CUDA kernel overhead if each timestep must be processed individually.</p><p>The QRNN attempts to improve GPU utilization for recurrent neural networks in two ways: it uses convolutional layers for processing the input, which apply in parallel across timesteps, and then uses a minimalist recurrent pooling function that applies in parallel across channels. As the convolutional layer does not rely on the output of the previous timestep, all input processing can be batched into a single matrix multiplication. While the recurrent pooling function is sequential, it is a fast element-wise operation that is applied to existing prepared inputs, thus producing next to no overhead. In our investigations, the overhead of applying dropout to the inputs was more significant than the recurrent pooling function.</p><p>The QRNN can be up to 16 times faster than the optimized NVIDIA cuDNN LSTM for timings only over the RNN itself <ref type="bibr" target="#b0">(Bradbury et al., 2017)</ref>. When two networks are composed of approximately equal size with the LSTM and QRNN, ( <ref type="bibr" target="#b21">Merity et al., 2018)</ref> found that QRNN based models were overall 2 − 4× faster per epoch. For word-level LMs, QRNNs were also found to require fewer epochs to converge and achieved comparable state-of-the-art results on the word-level Penn Treebank and WikiText-2 datasets.</p><p>Given the sizes of the datasets we intend to process can be many millions of tokens in length, the potential speed benefit of the QRNN is of interest, especially if the results remain competitive to that of the LSTM.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.">Longer BPTT lengths</head><p>Truncated backpropagation through time (BPTT) <ref type="bibr" target="#b31">(Williams &amp; Peng, 1990;</ref><ref type="bibr" target="#b30">Werbos, 1990</ref>) is necessary for long form continuous datasets. Traditional LMs use relatively small BPTT windows of 50 or less for word-level LM and 100 or less for character-level. For both granularities, however, the gradient approximation made by truncated BPTT is highly problematic. A single sentence may well be longer than the truncated BPTT window used in character-or even wordlevel modeling, preventing useful long term dependencies from being discovered. This is exacerbated if the long term dependencies are split across paragraphs or pages. The longer the sequence length used during truncated BPTT, the further back long term dependencies can be explicitly formed, potentially benefiting the model's accuracy.</p><p>In addition to a potential accuracy benefit, longer BPTT windows can improve GPU utilization. In most models, the primary manner to improve GPU utilization is through increasing the number of examples per batch, shown to be highly effective for tasks such as image classification ( <ref type="bibr" target="#b4">Goyal et al., 2017)</ref>. Due to the more parallel nature of the QRNN, the QRNN can process long sequences entirely in parallel, in comparison to the more sequential LSTM. This is as the QRNN does not feature a slow sequential hidden-to-hidden matrix multiplication at each timestep, instead relying on a fast element-wise operator.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3.">Tied adaptive softmax</head><p>Large vocabulary sizes are a major issue on large-scale word-level datasets and can result in impractically slow models (softmax overhead) or models that are impossible to train due to a lack of GPU memory (parameter overhead). To address these issues, we use a modified version of the adaptive softmax ( <ref type="bibr" target="#b6">Grave et al., 2016b</ref>), extended to allow for tied weights <ref type="bibr" target="#b11">(Inan et al., 2016;</ref><ref type="bibr" target="#b26">Press &amp; Wolf, 2016)</ref>. While other softmax approximation strategies exist <ref type="bibr" target="#b23">(Morin &amp; Bengio, 2005;</ref><ref type="bibr" target="#b7">Gutmann &amp; Hyvärinen, 2010)</ref>, the adaptive softmax has been shown to achieve results close to that of the full softmax whilst maintaining high GPU efficiency.</p><p>The adaptive softmax uses a hierarchy determined by word frequency to reduce computation time. Words are split into two levels: the first level (the short-list) and the second level, which forms clusters of rare words. Each cluster has a representative token in the short-list which determines the overall probability assigned across all words within that cluster. Due to Zipf's law, most words will only require a softmax over the short-list during training, reducing computation and memory usage. Clusters on the second level are also constructed such that the matrix multiplications required for a standard batch are near optimal for GPU efficiency.</p><p>In the original adaptive softmax implementation, words within clusters on the second level feature a reduced embedding size, reducing from embedding dimensionality d to d</p><p>4 . This minimizes both total parameter count and the size of the softmax matrix multiplications. The paper justifies this by noting that rare words are unlikely to need full embedding size fidelity due to how infrequently they occur.</p><p>Weight tying cannot be used with this memory optimization however. As weight tying re-uses the word vectors from the embedding as the targets in the softmax, the embedding dimensionality must be equal for all words. We discard the adaptive softmax memory optimization in order to utilize tied weights. Counter-intuitively, weight tying actually reduces the memory usage even more than the adaptive softmax memory optimization, as weight tying allows us to halve the memory usage by re-using the word vectors from the embedding layer.</p><p>When a dataset is processed using a small vocabulary, all the words can be placed into the short-list, thus reducing the adaptive softmax to a standard softmax.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.">Experiments</head><p>Our work is over three datasets, two character-level datasets (Penn Treebank, enwik8) and a large-scale word-level (WikiText-103) dataset. A set of overview statistics for these datasets are presented in <ref type="table">Table 1</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.">Penn Treebank</head><p>In <ref type="bibr" target="#b22">Mikolov et al. (2010)</ref>, the Penn Treebank dataset <ref type="bibr" target="#b17">(Marcus et al., 1994)</ref> was processed to generate a character-level language modeling dataset. The dataset exists in both a word-and character-level form.</p><p>While the dataset was originally composed of Wall Street Journal articles, the preprocessed dataset removes many features considered important for capturing language modeling. Oddly, the vocabulary of the words in the character-level dataset is limited to 10,000 -the same vocabulary as used in the word level dataset. This vastly simplifies the task of character-level language modeling as character transitions will be limited to those found within the limited word level vocabulary.</p><p>In addition to the limited vocabulary, the character-level dataset is all lower case, has all punctuation removed (other than as part of certain words such as u.s. or mr.), and replaces all numbers with N. All of these would be considered important subtasks for a character-level language model to cover.</p><p>When rare words are encountered in both the character and word level datasets, they're replaced with the token &lt;unk&gt;. This makes little sense for the character-level dataset, which doesn't suffer from out of vocabulary issues as the word level dataset would. As the &lt;unk&gt; token is the only token to use the &lt; and &gt; characters, a sufficiently advanced model should always output unk&gt; upon seeing &lt; as this is the only time angle brackets are used.</p><p>We later explore these issues and their impact by comparing models trained on character-level Penn Treebank with a more realistic character-level dataset, enwik8.</p><p>We report our results, using the bits per character (BPC) metric, in <ref type="table" target="#tab_1">Table 2</ref>. The model uses a three-layered LSTM with a BPTT length of 150, embedding sizes of 200 and hidden layers of size 1000. We regularize the model using LSTM dropout, weight dropout ( <ref type="bibr" target="#b21">Merity et al., 2018)</ref>, and weight decay. These values are tuned coarsely. For full hyper-parameter values, refer to <ref type="table" target="#tab_8">Table 6</ref>. We train the model using the Adam <ref type="bibr" target="#b12">(Kingma &amp; Ba, 2014</ref>) optimizer with a learning rate of 2.7 × 10 −3 for 500 epochs and reduce the learning rate by 10 on epochs 300 and 400. While the model was not optimized for convergence speed, it takes only 8 hours to train on an NVIDIA Volta GPU. Both our LSTM and QRNN model beat the current state-of-the-art though using more parameters. Of note is that the QRNN model uses 6 layers to achieve the same result as the LSTM with only 3 layers, suggesting that the limited recurrent computation capacity of the QRNN may be an issue.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.">Hutter Wikipedia Prize (enwik8)</head><p>The Hutter Prize Wikipedia dataset <ref type="bibr" target="#b10">(Hutter, 2018)</ref>, also known as enwik8, is a byte-level dataset consisting of the first 100 million bytes of a Wikipedia XML dump. For simplicity we shall refer to it as a character-level dataset. Within these 100 million bytes are 205 unique tokens. The Hutter Prize was launched in 2006 and is focused around compressing the enwik8 dataset as efficiently as possible.</p><p>The XML dump contains a wide array of content, including English articles, XML data, hyperlinks, and special characters. As the data has not been processed, it features many of the intricacies of language modeling, both natural and artificial, that we would like our models to capture. For our experiments, we follow a standard setup where the train, validation and test sets consist of the first 90M, 5M, and 5M   characters, respectively.</p><p>We report our results in This dataset is far more challenging than character-level Penn Treebank for multiple reasons. The dataset has 18 times more training tokens and the data has not been processed at all, maintaining far more complex character to character transitions than that of the character-level Penn Treebank. Potentially as a result of this, the QRNN based model underperforms models with comparable numbers of parameters. The limited recurrent computation capacity of the QRNN appears to become a major issue when moving toward realistic character-level datasets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3.">WikiText</head><p>The WikiText-2 (WT2) and WikiText-103 (WT103) datasets introduced in Merity et al. (2017b) contain lightly preprocessed Wikipedia articles, retaining the majority of punctuation and numbers. The WT2 data set contains approximately 2 million words in the training set and 0.2 million in validation and test sets. The WT103 data set contains a larger training set of 103 million words and the same validation and testing set as WT2. As the Wikipedia articles are relatively long and are focused on a single topic, capturing and utilizing long term dependencies can be key to models obtaining strong performance.</p><p>The underlying model used in this paper achieved state-ofthe-art on language modeling for the word-level PTB and WikiText-2 datasets (Merity et al., 2018) We show that, in conjunction with the tied adaptive softmax, we achieve stateof-the-art perplexity on the WikiText-103 data set using the AWD-QRNN framework; see <ref type="table" target="#tab_5">Table 4</ref>. We opt to use the QRNN as the LSTM is 3 times slower, as reported in   In our work however, we have found QRNNs less successful at character-level tasks, even with substantial hyperparameter tuning.</p><p>To investigate this, <ref type="figure">Figure 1</ref> shows a comparison between both word-and character-level tasks as well as between the LSTM and the QRNN. In this experiment, we plot the probability assigned to the correct token as a function of the token position with the model conditioned on the ground-truth labels up to the token position. We attempt to find similar situations in the word-and character-level datasets to see how the LSTM and QRNN models respond differently. For character-level datasets, model confusion is highest at the beginning of a word, as at that stage there is little to no information about it. This confusion decreases as more characters from the word are seen. The closest analogy to this on word-level datasets may be just after the start of a sentence. As a proxy for finding sentences, we find the token The and record the model confusion after that point. Similarly to the character-level dataset, we assumed that confusion would be highest at this early stage before any information has been gathered, and decreased as more tokens are seen. Surprisingly, we can clearly see the behavior of the datasets is quite different. Word-level datasets do not gain the same clarity after seeing additional information compared to the character-level datasets. We also see the QRNN underperforming the LSTM on both the Penn Treebank and enwik8 character-level datasets. This is not the case for the word-level datasets.</p><p>Our hypothesis is that character-level language modeling requires a more complex hidden-to-hidden transition. As the LSTM has a full matrix multiplication between timesteps, it is able to more quickly adapt to changing situations. The QRNN on the other hand suffers from a simpler hidden-tohidden transition function that is only element-wise, preventing full communication between hidden units in the RNN. This might also explain why QRNNs need to be deeper than the LSTM to achieve comparable results, such as the 6 layer QRNN in <ref type="table" target="#tab_1">Table 2</ref>, as the QRNN can perform more complex interactions of the hidden state by sending it to the next QRNN layer. This may suggest why state-of-the-art architectures for character-and word-level language modeling can be quite different and not as readily transferable.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2.">Hyperparameter importance</head><p>Given the large number of hyperparameters in most neural language models, the process of tuning models for new datasets can be laborious and expensive. In this section, we attempt to determine the relative importance of the various hyperparameters. To do this, we train 200 models with random hyperparameters and then regress them against the validation perplexity using MSE-based Random Forests <ref type="bibr" target="#b1">(Breiman, 2001</ref>). We then use the Random Forest's feature importance as a proxy for the hyperparameter importance. While the hyperparameters are random, we place natural bounds on them to prevent unrealistic models given the AWD-QRNN framework and its recommended hyperparameters. For this purpose, all dropout values are bounded to <ref type="bibr">[0,</ref><ref type="bibr">1]</ref>, the truncated BPTT length is bounded between 30 and 300, number of layers are bounded between 1 and 10 and the embedding and hidden sizes are bounded between 100 and 500. We present the results for the word-level task on the WikiText-2 data set using the AWD-QRNN model in <ref type="figure" target="#fig_2">Figure 3</ref>. The models were trained for 300 epochs with    <ref type="figure">Figure 1</ref>. To understand how the models respond to uncertainty in different datasets, we visualize probability assigned to the correct token after a defined starting point. For character datasets (enwik8 and PTB character-level), token position refers to characters within space delimited words. For word level datasets, token position refers to words following the word The, approximating the start of a sentence. PTB (Character) <ref type="figure">Figure 2</ref>. To better understand the character level datasets, we analyze the average probability of getting a character at different positions correct within a word. Words are defined as two or more [A-Za-z] characters between spaces and different length words have different colors. We include the prediction of the final space as it allows for capturing the uncertainty of when to end a word (i.e. puzzle vs puzzles ). Due to the bounded vocabulary of PTBC, we can see the model is far more confident in a word's ending than for model for enwik8. Adam with an initial learning rate of 10 −3 which is reduced by 10 on epochs 150 and 225. The results show that weight dropout, hidden dropout and embedding dropout impact performance the most while the number of layers and the sizes of the embedding and hidden layers matter relatively less. Experiments on the Penn Treebank data set also yielded similar results. Given these results, it is evident that in the presence of limited tuning resources, educated choices can be made for the layer sizes and the dropout values can be finely tuned.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>An Analysis of Neural Language Modeling at Multiple Scales</head><p>In <ref type="figure" target="#fig_4">Figure 4</ref>, we plot the joint influence heatmaps of pairs of parameters to understand their couplings and bounds. For this experiment, we consider three pairs of hyperparameters: weight dropout -hidden dropout, weight dropoutembedding dropout and weight dropout -embedding size and plot the perplexity, obtained from the the WikiText-2 experiment above, in the form of a projected triangulated surface plot. The results suggest a strong coupling for the high-influence hyperparameters with narrower bounds for acceptable performance for hidden dropout as compared to weight dropout. The low influence of the embedding size hyperparameter is also evident from the heatmap; so long as the embeddings are not too small or too large, the influence of this hyperparameter on the performance is not as drastic.</p><p>Finally, the plots also suggest that an educated guess for the dropout values lies in the range of [0.1, 0.5] and tuning the weight dropout first (to say, 0.2) leaving the rest of the hyperparameters to estimates would be a good starting point for fine-tuning the model performance further.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.">Discussion</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1.">Penn Treebank is flawed for character-level work</head><p>While the Mikolov processed Penn Treebank data set has long been a central dataset for experimenting with language modeling, we poset that it is fundamentally flawed. As noted earlier, the character-level dataset does not feature punctuation, capitalization, or numbers -all important aspects we would wish for a language model to capture. The limited vocabulary and use of &lt;unk&gt; tokens also result in substantial problems.</p><p>In <ref type="figure">Figure 2</ref> we compare the level of average surprise between two models when producing words of a given length: one trained on Penn Treebank and the other trained on enwik8. enwik8 has a noticeable drop when predicting the final character (the space) compared to the Penn Treebank results. The only character transitions that exist within the Penn Treebank dataset are those contained within the 10,000 word vocabulary. Models trained on the enwik8 dataset can't have equivalent confidence as words can branch unpredictably due to an unrestricted vocabulary. In addition, the lack of capitalization, punctuation, or numerals removes many aspects of language that should be fundamental to the task of character-level language modeling. Potentially counter-intuitively, we do not recommend its use as a benchmark even though we achieve state-of-theart results on this dataset.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2.">Parameter count as a proxy for complexity</head><p>To measure the complexity and computational cost of training and evaluating models, the number of parameters in a model are often reported and compared. For certain use cases, such as when a given model is intended for embedded hardware, parameter counts may be an appropriate metric. Conversely, if the parameter count is unusually high and may require substantial resources <ref type="bibr" target="#b29">(Shazeer et al., 2017</ref>), the parameter count may still function as an actionable metric.</p><p>In general however a model's parameter count acts as a poor proxy for the complexity and hardware requirements of the given model. If a model with high parameter count runs quickly and on modest hardware, we would argue this is better than a model with a lower parameter count that runs slowly or requires more resources. More generally, parameter counts may be discouraging proper use of modern hardware, especially when the parameter counts were historically motivated by a now defunct hardware requirement.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.">Related work</head><p>Our work is not the first work to show that well tuned and fast baseline models can be highly competitive with stateof-the-art work.</p><p>(a) Joint influence of weight dropout and hidden-to-hidden dropout.</p><p>(b) Joint influence of weight dropout and embedding dropout.  Additional improvements in the model can be obtained through dynamic evaluation ( <ref type="bibr" target="#b15">Krause et al., 2018)</ref> and mixture-of-softmaxes ( <ref type="bibr" target="#b32">Yang et al., 2018</ref>) but since our goal is to evaluate the underlying model, we employ no such strategies in addition.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8.">Conclusion</head><p>Fast and well tuned baselines are an important part of our research community. Without such baselines, we lose our ability to accurately measure our progress over time. By extending an existing state-of-the-art word level language model based on LSTMs and QRNNs, we show that a well tuned baseline can achieve state-of-the-art results on both character-level (Penn Treebank, enwik8) and word-level (WikiText-103) datasets without relying on complex or specialized architectures. We additionally perform an empirical investigation of the learning and network dynamics of both LSTM and QRNN cells across different language modeling tasks, highlighting the differences between the learned character and word level models. Finally, we present results which shed light on the relative importance of the various hyperparameters in neural language models. On the WikiText-2 data set, the AWD-QRNN model exhibited higher sensitivity to the hidden-to-hidden weight dropout and input dropout terms and relative insensitivity to the embedding and hidden layer sizes. We hope that this insight would be useful for practitioners intending to tune similar models on new datasets.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 .</head><label>3</label><figDesc>Figure 3. We analyze the relative importance of the hyperparameters defining the model using a Random Forest approach for the word-level task on the smaller WikiText-2 data set for AWD-QRNN model. The results show that weight dropout, hidden dropout and embedding dropout impact performance the most while the number of layers and the embedding and hidden dimension sizes matters relatively less. Similar results are observed on the PTB word level data set.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>(</head><label></label><figDesc>c) Joint influence of weight dropout and embedding size.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 4 .</head><label>4</label><figDesc>Figure 4. Heatmaps plotting the joint influence of three sets of hyperparameters (weight dropout -hidden dropout, weight dropoutembedding dropout and weight dropout -embedding size) on the final perplexity of the AWD-QRNN language model trained on the WikiText-2 data set. Results show ranges of permissible values for both experiments and the strong coupling between them. For the hidden dropout experiment, results suggest a narrower band of acceptable values while the embedding dropout experiment suggests a more forgiving dependence so long as the embedding dropout is kept low. The joint plot between weight dropout (high influence) and embedding size (low influence) suggests relative insensitivity to the embedding size so long as the size is not too small or too large.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false"><head>Table 2 .</head><label>2</label><figDesc></figDesc><table>Bits Per Character (BPC) on character-level Penn Tree-
+bank. 
+
+Model 
+BPC 
+Params 
+
+LSTM, 2000 units (Mujika et al., 2017) 1.461 
+18M 
+Layer Norm LSTM, 1800 units 
+1.402 
+14M 
+HyperLSTM (Ha et al., 2016) 
+1.340 
+27M 
+HM-LSTM (Chung et al., 2016) 
+1.32 
+35M 
+SD Zoneout (Rocki et al., 2016) 
+1.31 
+64M 
+RHN -depth 5 (Zilly et al., 2016) 
+1.31 
+23M 
+RHN -depth 10 (Zilly et al., 2016) 
+1.30 
+21M 
+Large RHN (Zilly et al., 2016) 
+1.27 
+46M 
+FS-LSTM-2 (Mujika et al., 2017) 
+1.290 
+27M 
+FS-LSTM-4 (Mujika et al., 2017) 
+1.277 
+27M 
+Large FS-LSTM-4 (Mujika et al., 2017) 1.245 
+47M 
+
+4 layer QRNN (h = 1800) (ours) 
+1.336 
+26M 
+3 layer LSTM (h = 1840) (ours) 
+1.232 
+47M 
+
+cmix v13 (Knoll, 2018) 
+1.225 
+-
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2" validated="false"><head>Table 3 .</head><label>3</label><figDesc></figDesc><table>Bits Per Character (BPC) on enwik8. 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="false"><head>Table 3 .</head><label>3</label><figDesc></figDesc><table>The model uses a three-
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4" validated="false"><head>Table 5 , and a QRNN based model's performance on word-</head><label>5</label><figDesc></figDesc><table>Model 
+Val Test 
+
+Grave et al. (2016a) 
+-
+48.7 
+Dauphin et al. (2016), 1 GPU 
+-
+44.9 
+Dauphin et al. (2016), 4 GPUs 
+-
+37.2 
+
+4 layer QRNN (h = 2500), 1 GPU 32.0 33.0 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5" validated="false"><head>Table 4 .</head><label>4</label><figDesc></figDesc><table>Perplexity on the word-level WikiText-103 dataset. The 
+model was trained for 12 hours (14 epochs) on an NVIDIA Volta. 
+
+Model Time per batch 
+
+LSTM 
+726ms 
+QRNN 
+233ms 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6" validated="false"><head>Table 5 .</head><label>5</label><figDesc></figDesc><table>Mini-batch timings during training on WikiText-103. This 
+is a 3.1 times speed-up over the NVIDIA cuDNN LSTM baseline 
+which uses the same model hyperparameters. 
+
+level datasets has been found to equal that of an LSTM 
+based model Merity et al. (2018). 
+
+By utilizing the QRNN and tied adaptive softmax, we were 
+able to train to a state-of-the-art result with a NVIDIA Volta 
+GPU in 12 hours. The model used consisted of a 4-layered 
+QRNN model with an embedding size of 400 and 2500 
+nodes in each hidden layer. We trained the model using a 
+batch size of 60 and a BPTT length of 140 using the Adam 
+optimizer (Kingma &amp; Ba, 2014) for 14 epochs, reducing 
+the learning rate by 10 on epoch 12. To avoid over-fitting, 
+we employ the regularization strategies proposed in (Merity 
+et al., 2018) including variational dropout, random sequence 
+lengths, and L2-norm decay. The values for the model 
+hyperparameters were tuned only coarsely; for full hyper-
+parameter values, refer to Table 6. 
+
+5. Analysis 
+
+5.1. QRNN vs LSTM 
+
+QRNNs and LSTMs operate on sequential data in vastly 
+different ways. For word-level language modeling, QRNNs 
+have allowed for similar training and generalization out-
+comes at a fraction of the LSTM's cost (Merity et al., 2018). 
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8" validated="false"><head>Table 6 .</head><label>6</label><figDesc></figDesc><table>Hyper-parameters for word-and character-level language modeling experiments. Training time is for all noted epochs on an 
+NVIDIA Volta. Dropout refers to embedding, (RNN) hidden, input, and output. 
+
+</table></figure>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<title level="m">QuasiRecurrent Neural Networks. International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Random forests</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Breiman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Machine learning</title>
+		<imprint>
+			<biblScope unit="volume">45</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="5" to="32" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.01704</idno>
+		<title level="m">Hierarchical multiscale recurrent neural networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Dauphin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Fan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Auli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Grangier</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1612.08083</idno>
+		<title level="m">Language modeling with Gated Convolutional Networks</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Goyal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Dollár</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Girshick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Noordhuis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Wesolowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kyrola</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Tulloch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Jia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Accurate</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1706.02677</idno>
+		<title level="m">large minibatch SGD: training imagenet in 1 hour</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Improving Neural Language Models with a Continuous Cache</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Usunier</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1612.04426</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edouard</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Armand</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Cissé</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Moustapha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Grangier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hervé</forename><surname>Jégou</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.04309</idno>
+		<title level="m">Efficient softmax approximation for GPUs</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Noise-contrastive estimation: A new estimation principle for unnormalized statistical models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gutmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Hyvärinen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Thirteenth International Conference on Artificial Intelligence and Statistics</title>
+		<meeting>the Thirteenth International Conference on Artificial Intelligence and Statistics</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="297" to="304" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Ha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Dai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Le</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><forename type="middle">V</forename><surname>Hypernetworks</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.09106</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Long Short-Term Memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hochreiter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural Computation</title>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">The Human Knowledge Compression Contest</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hutter</surname></persName>
+		</author>
+		<ptr target="http://prize.hutter1.net/" />
+		<imprint>
+			<date type="published" when="2018" />
+			<biblScope unit="page" from="2018" to="2020" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Tying Word Vectors and Word Classifiers: A Loss Framework for Language Modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Inan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Khosravi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01462</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Adam</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6980</idno>
+		<title level="m">A method for stochastic optimization</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Knoll</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Cmix</surname></persName>
+		</author>
+		<ptr target="www.byronknoll.com/cmix.html" />
+		<imprint>
+			<date type="published" when="2018" />
+			<biblScope unit="page" from="2018" to="2020" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Statistical Machine Translation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Koehn</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2009" />
+			<publisher>Cambridge University Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Dynamic Evaluation of Neural Sequence Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Krause</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Kahembwe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Murray</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Renals</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename></persName>
+		</author>
+		<ptr target="https://arxiv.org/abs/1709.07432" />
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Krueger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Maharaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kramár</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pezeshki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Ballas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Ke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Goyal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Larochelle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Courville</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.01305</idno>
+		<title level="m">Regularizing RNNss by randomly preserving hidden activations</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">The Penn Treebank: annotating predicate argument structure</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Marcus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Marcinkiewicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Macintyre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bies</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ferguson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Katz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Schasberger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the workshop on Human Language Technology</title>
+		<meeting>the workshop on Human Language Technology</meeting>
+		<imprint>
+			<publisher>Association for Computational Linguistics</publisher>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="114" to="119" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">On the State of the Art of Evaluation in Neural Language Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Melis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Dyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Blunsom</surname></persName>
+		</author>
+		<ptr target="https://openreview.net/forum?id=ByJHuTgA-" />
+	</analytic>
+	<monogr>
+		<title level="m">ternational Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Revisiting activation regularization for language rnns</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Mccann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1708.01009</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Pointer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sentinel</surname></persName>
+		</author>
+		<title level="m">Mixture Models. International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Regularizing and Optimizing LSTM Language Models. International Conference on Learning Representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Merity</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Keskar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Socher</surname></persName>
+		</author>
+		<ptr target="https://openreview.net/forum?id=SyyGPP0TZ" />
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Recurrent neural network based language model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Karafiát</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Burget</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cernock´ycernock´y</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Khudanpur</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">INTERSPEECH</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Hierarchical Probabilistic Neural Network Language Model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Morin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Aistats</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="page" from="246" to="252" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Fast-Slow Recurrent Neural Networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mujika</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Meier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Steger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="5917" to="5926" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Matthew</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Neumann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Iyyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gardner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">K</forename><surname>Clark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Zettlemoyer</surname></persName>
+		</author>
+		<title level="m">Deep contextualized word representations. OpenReview</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Using the output embedding to improve language models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Press</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Wolf</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1608.05859</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Learning to generate reviews and discovering sentiment</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Radford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Jozefowicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1704.01444</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Rocki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Kornuta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Maharaj</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1610.07675</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">Surprisal-driven zoneout. arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+		<title level="m" type="main">Outrageously Large Neural Networks: The Sparsely-Gated Mixtureof-Experts Layer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shazeer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mirhoseini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Maziarz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><forename type="middle">V</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Dean</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename></persName>
+		</author>
+		<idno>abs/1701.06538</idno>
+		<imprint>
+			<date type="published" when="2017" />
+			<publisher>CoRR</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Backpropagation through time: what it does and how to do it</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">J</forename><surname>Werbos</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings of the IEEE</title>
+		<imprint>
+			<biblScope unit="volume">78</biblScope>
+			<biblScope unit="issue">10</biblScope>
+			<biblScope unit="page" from="1550" to="1560" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">An efficient gradient-based algorithm for on-line training of recurrent network trajectories</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">J</forename><surname>Williams</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Peng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Neural computation</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="490" to="501" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Dai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Cohen</surname></persName>
+		</author>
+		<ptr target="https://arxiv.org/abs/1711.03953" />
+		<title level="m">Breaking the Softmax Bottleneck: A High-Rank RNN Language Model. International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">Automatic speech recognition: A deep learning approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Deng</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+			<publisher>Springer</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">G</forename><surname>Zilly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">K</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Koutník</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidhuber</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.03474</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+	<note>Recurrent highway networks</note>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+				<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Zoph</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><forename type="middle">V</forename><surname>Le</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1611.01578</idno>
+		<title level="m">Neural architecture search with reinforcement learning</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>
