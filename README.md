@@ -4,7 +4,7 @@
 
 This repository contains code and two datasets to extract TDMS (Task, Dataset, Metric, Score) tuples from scientific papers in the NLP domain. Please refer to the following paper for the full details:
 
-Yufang Hou, Charles Jochim, Martin Gleize, Francesca Bonin and Debasis Ganguly. Identification of Tasks, Datasets, Evaluation Metrics, and Numeric Scores for Scientific Leaderboards Construct. (ACL19)
+Yufang Hou, Charles Jochim, Martin Gleize, Francesca Bonin, Debasis Ganguly. Identification of Tasks, Datasets, Evaluation Metrics, and Numeric Scores for Scientific Leaderboards Construction. In Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics (ACL 2019), Florence, Italy, 27 July - 2 August 2019
 
 ## Extract table content from PDF files
 
