@@ -54,3 +54,16 @@ We release the training/testing datasets for all experiments described in the pa
 4) TEModelEvalOnNLPTDMS in the te package provides methods to evaluate TDMS tuples extraction.
 
 5) GenerateTestDataOnPDFPapers in the te package provides methods to generate testing dataset for any pdf papers.
+
+
+## Citing science-result-extractor
+Please cite the following paper when using science-result-extractor:
+
+```
+@inproceedings{houyufang2019acl,
+  title={Identification of Tasks, Datasets, Evaluation Metrics, and Numeric Scores for Scientific Leaderboards Construction},
+  author={Hou, Yufang and Jochim, Charles and Gleize, Martin and Bonin, Francesca and Ganguly, Debasis},
+  booktitle = {Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics, {\em Florence, Italy, 27 July -- 2 August 2019}},
+  year      = {2019}
+}
+```
