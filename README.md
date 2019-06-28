@@ -9,40 +9,42 @@ Yufang Hou, Charles Jochim, Martin Gleize, Francesca Bonin, Debasis Ganguly. Ide
 
 ## Extract table content from PDF files
 
-We developed a derterministic PDF table parser based on Grobid. To use our parser, following the steps below:
+We developed a deterministic PDF table parser based on [GROBID](https://github.com/kermitt2/grobid). To use our parser, follow the steps below:
 
-1) clone the repository
-2) following the instructions in https://grobid.readthedocs.io/en/latest/Install-Grobid/#getting-grobid to install grobid 0.5.3, the following steps works for me (please refer to the link for installation problems):
+1) Clone this repository, e.g., 
+```
+> git clone https://github.com/IBM/science-result-extractor.git
+```
 
+2) Download and install GROBID 0.5.3, following the [installation instructions](https://grobid.readthedocs.io/en/latest/Install-Grobid/#getting-grobid), e.g., 
+```
 > wget https://github.com/kermitt2/grobid/archive/0.5.3.zip
-
 > unzip 0.5.3.zip
-
 > ./gradlew clean install
+```
+(note that gradlew must be installed beforehand)
 
-3) config pGrobidHome and pGrobidProperties in the config.properties file. For example, mine looks like the following:
+3) Configure `pGrobidHome` and `pGrobidProperties` in [config.properties](nlpLeaderboard/config.properties). The default configuration assumes that GROBID directory `grobid-0.5.3` is a sister of this directory.
+```
+pGrobidHome=../../grobid-0.5.3/grobid-home
+pGrobidProperties=../../grobid-0.5.3/grobid-home/config/grobid.properties 
+```
 
-pGrobidHome=/Users/yhou/git/grobid-0.5.3/grobid-home
-
-pGrobidProperties=/Users/yhou/git/grobid-0.5.3/grobid-home/config/grobid.properties 
-
-4) PdfInfoExtractor in the pdfparser package provides methods to extract section content and table content from a given PDF file.
+4) [PdfInforExtractor](nlpLeaderboard/src/main/java/com/ibm/sre/pdfparser/PdfInforExtractor.java) provides methods to extract section content and table content from a given PDF file.
 
 
 ## Read NLP-TDMS and ARC-PDN corpora 
 
-1) clone the repository 
+1) Follow the instructions in the [README](data/NLP-TDMS/downloader/README.md) in [data/NLP-TDMS/downloader/](data/NLP-TDMS/downloader/) to download the entire collection of raw PDFs of the NLP-TDMS dataset.  The downloaded PDFs should be in [data/NLP-TDMS/pdfFile](./data/NLP-TDMS/pdfFile).
 
-2) following the readme file in the data/NLP-TDMS/downloader/ to download the entire collection of raw PDFs of the NLP-TDMS dataset, put them in the /data/NLP-TDMS/pdfFile directory.
+2) For the ARC-PDN corpus, the original pdf files can be downloaded from the [ACL Anthology Reference Corpus (Version 20160301)](https://acl-arc.comp.nus.edu.sg/). We use papers from ACL(P)/EMNLP(D)/NAACL(N) between 2010 and 2015. After uncompressing the downloaded PDF files, put the PDF files into the corresponding directories under the /data/ARC-PDN/ folder, e.g., copy D10 to /data/ARC-PDN/D/D10.
 
-3) for the ARC-PDN corpus, the original pdf files can be downloaded from ACL Anthology Reference Corpus (Version 20160301) (https://acl-arc.comp.nus.edu.sg/). We use papers from ACL(P)/EMNLP(D)/NAACL(N) between 2010 and 2015. After uncompressed the downloaded PDF files, put the PDF files into the corresponding directories under the /data/ARC-PDN/ folder, e.g., copy D10 to /data/ARC-PDN/D/D10
-
-4) We release the pre-parsed NLP-TDMS and ARC-PDN corpora. NlpTDMSReader and ArcPDNReader in the corpus package illustrates how to read section and table contents from pdf files in these two corpora. 
+3) We release the pre-parsed NLP-TDMS and ARC-PDN corpora. [NlpTDMSReader](nlpLeaderboard/src/main/java/com/ibm/sre/data/corpus/NlpTDMSReader.java) and [ArcPDNReader](nlpLeaderboard/src/main/java/com/ibm/sre/data/corpus/ArcPDNReader.java) in the corpus package illustrate how to read section and table contents from PDF files in these two corpora. 
 
 
-## Run exepriments based on textual entailment system
+## Run experiments based on textual entailment system
 
-We release the training/testing datasets for all experiments described in the paper. You can find them under the data/exp directory. The results reported in the paper is based on the datasets under the data/exp/few-shot-setup/NLP-TDMS/paperVersion directory. We later further clean the datasets (e.g., remove five pdf files from the testing datasets which appear in the training datasets with a different name) and the clean version is under the data/exp/few-shot-setup/NLP-TDMS folder. Below we illustrates how to run experiments on the NLP-TDSM dataset in the few-shot setup to extract TDM pairs. 
+We release the training/testing datasets for all experiments described in the paper. You can find them under the data/exp directory. The results reported in the paper are based on the datasets under the [data/exp/few-shot-setup/NLP-TDMS/paperVersion](data/exp/few-shot-setup/NLP-TDMS/paperVersion) directory. We later further clean the datasets (e.g., remove five pdf files from the testing datasets which appear in the training datasets with a different name) and the clean version is under the [data/exp/few-shot-setup/NLP-TDMS](data/exp/few-shot-setup/NLP-TDMS) folder. Below we illustrate how to run experiments on the NLP-TDSM dataset in the few-shot setup to extract TDM pairs. 
 
 
 1) clone the repository
