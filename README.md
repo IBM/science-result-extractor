@@ -20,11 +20,12 @@ We developed a deterministic PDF table parser based on [GROBID](https://github.c
 ```
 > wget https://github.com/kermitt2/grobid/archive/0.5.3.zip
 > unzip 0.5.3.zip
+> cd grobid-0.5.3/
 > ./gradlew clean install
 ```
 (note that gradlew must be installed beforehand)
 
-3) Configure `pGrobidHome` and `pGrobidProperties` in [config.properties](nlpLeaderboard/config.properties). The default configuration assumes that GROBID directory `grobid-0.5.3` is a sister of this directory.
+3) Configure `pGrobidHome` and `pGrobidProperties` in [config.properties](nlpLeaderboard/config.properties). The default configuration assumes that GROBID directory `grobid-0.5.3` is a sister of the science-result-extractor directory.
 ```
 pGrobidHome=../../grobid-0.5.3/grobid-home
 pGrobidProperties=../../grobid-0.5.3/grobid-home/config/grobid.properties 
@@ -35,11 +36,11 @@ pGrobidProperties=../../grobid-0.5.3/grobid-home/config/grobid.properties
 
 ## Read NLP-TDMS and ARC-PDN corpora 
 
-1) Follow the instructions in the [README](data/NLP-TDMS/downloader/README.md) in [data/NLP-TDMS/downloader/](data/NLP-TDMS/downloader/) to download the entire collection of raw PDFs of the NLP-TDMS dataset.  The downloaded PDFs should be in [data/NLP-TDMS/pdfFile](./data/NLP-TDMS/pdfFile).
+1) Follow the instructions in the [README](data/NLP-TDMS/downloader/README.md) in [data/NLP-TDMS/downloader/](data/NLP-TDMS/downloader/) to download the entire collection of raw PDFs of the NLP-TDMS dataset.  The downloaded PDFs can be moved to [data/NLP-TDMS/pdfFile](./data/NLP-TDMS/pdfFile) (i.e., `mv *.pdf ../pdfFile/.`).
 
 2) For the ARC-PDN corpus, the original pdf files can be downloaded from the [ACL Anthology Reference Corpus (Version 20160301)](https://acl-arc.comp.nus.edu.sg/). We use papers from ACL(P)/EMNLP(D)/NAACL(N) between 2010 and 2015. After uncompressing the downloaded PDF files, put the PDF files into the corresponding directories under the /data/ARC-PDN/ folder, e.g., copy D10 to /data/ARC-PDN/D/D10.
 
-3) We release the pre-parsed NLP-TDMS and ARC-PDN corpora. [NlpTDMSReader](nlpLeaderboard/src/main/java/com/ibm/sre/data/corpus/NlpTDMSReader.java) and [ArcPDNReader](nlpLeaderboard/src/main/java/com/ibm/sre/data/corpus/ArcPDNReader.java) in the corpus package illustrate how to read section and table contents from PDF files in these two corpora. 
+3) We release the parsed NLP-TDMS and ARC-PDN corpora. [NlpTDMSReader](nlpLeaderboard/src/main/java/com/ibm/sre/data/corpus/NlpTDMSReader.java) and [ArcPDNReader](nlpLeaderboard/src/main/java/com/ibm/sre/data/corpus/ArcPDNReader.java) in the corpus package illustrate how to read section and table contents from PDF files in these two corpora. 
 
 
 ## Run experiments based on textual entailment system
