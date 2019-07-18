@@ -3,13 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package com.ibm.sre.ml.te;
-
-import com.ibm.sre.DocTAET;
-import com.ibm.sre.NLPResult;
-import com.ibm.sre.evaluation.MultiLabelEvaluationMetrics;
-import static com.ibm.sre.ml.te.TEModelEvalOnNLPTDMS.logger;
-import com.ibm.sre.pdfparser.GrobidPDFProcessor;
+package com.ibm.sre.tdmsie;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -23,6 +17,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+
+import com.ibm.sre.DocTAET;
+import com.ibm.sre.NLPResult;
+import com.ibm.sre.evaluation.MultiLabelEvaluationMetrics;
 
 /**
  * prepare testing data for TDM and TDMS extraction for the given PDF files
