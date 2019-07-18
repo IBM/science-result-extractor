@@ -8,8 +8,8 @@ This script adds a new `DataProcessor`, "SciProcessor", for training and testing
 Example usage:
 
 ```
-> DATA_DIR = ../data/exp/few-shot-setup/NLP-TDMS/
-> BERT_DIR = ./model/uncased_L-12_H-768_A-12/
+> DATA_DIR=../data/exp/few-shot-setup/NLP-TDMS/
+> BERT_DIR=./model/uncased_L-12_H-768_A-12/
 > python3 run_classifier_sci.py --do_train=true --do_eval=false --do_predict=true --data_dir=${DATA_DIR} --task_name=sci --vocab_file=${BERT_DIR}/vocab.txt --bert_config_file=${BERT_DIR}/bert_config.json --init_checkpoint=${BERT_DIR}/bert_model.ckpt --output_dir=/tmp/ --max_seq_length=512 --train_batch_size=6 --predict_batch_size=6
 ```
 
