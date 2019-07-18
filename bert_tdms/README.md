@@ -2,7 +2,7 @@
 
 We fine-tune BERT for our natural language inference (NLI) task, predicting task-dataset-metric (TDM) triples.
 
-To run the code we suggest getting a copy of [BERT](https://github.com/google-research/bert) and copying the [run\_classifier\_sci.py](./run_classifier_sci.py) script into the BERT directory.
+To run the code, download or clone a copy of [BERT](https://github.com/google-research/bert) and copy the [run\_classifier\_sci.py](./run_classifier_sci.py) script into the BERT directory.
 This script adds a new `DataProcessor`, "SciProcessor", for training and testing on our TDM data.
 
 Example usage:
