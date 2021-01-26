@@ -1,23 +1,25 @@
 # Science-result-extractor
 
-## Introduction 
+## Introduction
 
-This repository contains code and two datasets to extract TDMS (Task, Dataset, Metric, Score) tuples from scientific papers in the NLP domain.
-We envision two primary uses for this repository: (1) to [extract table content from PDF files](#extract-table-content-from-pdf-files), and (2) to [replicate the paper's results or run experiments based on a textual entailment system](#run-experiments-based-on-textual-entailment-system).
+This repository contains code and a few datasets to extract TDMS (Task, Dataset, Metric, Score) tuples from scientific papers in the NLP domain.
+We envision three primary uses for this repository: (1) to [extract table content from PDF files](#extract-table-content-from-pdf-files),  (2) to [replicate the paper's results or run experiments based on a textual entailment system](#run-experiments-based-on-textual-entailment-system), and (3) to [train a model to extract TDM mentions]
 Please refer to the following paper for the full details:
 
 Yufang Hou, Charles Jochim, Martin Gleize, Francesca Bonin, Debasis Ganguly. Identification of Tasks, Datasets, Evaluation Metrics, and Numeric Scores for Scientific Leaderboards Construction. In Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics (ACL 2019), Florence, Italy, 27 July - 2 August 2019
+
+Yufang Hou, Charles Jochim, Martin Gleize, Francesca Bonin, Debasis Ganguly. TDMSci: A Specialized Corpus for Scientific Literature Entity Tagging of Tasks Datasets and Metrics. In Proceedings of the 16th conference of the European Chapter of the Association for Computational Linguistics (EACL 2021), Online, 19-23 April 2021
 
 ## Extract table content from PDF files
 
 We developed a deterministic PDF table parser based on [GROBID](https://github.com/kermitt2/grobid). To use our parser, follow the steps below:
 
-1) Fork and clone this repository, e.g., 
+1) Fork and clone this repository, e.g.,
 ```
 > git clone https://github.com/IBM/science-result-extractor.git
 ```
 
-2) Download and install GROBID 0.5.3, following the [installation instructions](https://grobid.readthedocs.io/en/latest/Install-Grobid/#getting-grobid), e.g., 
+2) Download and install GROBID 0.5.3, following the [installation instructions](https://grobid.readthedocs.io/en/latest/Install-Grobid/#getting-grobid), e.g.,
 ```
 > wget https://github.com/kermitt2/grobid/archive/0.5.3.zip
 > unzip 0.5.3.zip
@@ -29,7 +31,7 @@ We developed a deterministic PDF table parser based on [GROBID](https://github.c
 3) Configure `pGrobidHome` and `pGrobidProperties` in [config.properties](nlpLeaderboard/config.properties). The default configuration assumes that GROBID directory `grobid-0.5.3` is a sister of the science-result-extractor directory.
 ```
 pGrobidHome=../../grobid-0.5.3/grobid-home
-pGrobidProperties=../../grobid-0.5.3/grobid-home/config/grobid.properties 
+pGrobidProperties=../../grobid-0.5.3/grobid-home/config/grobid.properties
 ```
 
 4) [PdfInforExtractor](nlpLeaderboard/src/main/java/com/ibm/sre/pdfparser/PdfInforExtractor.java) provides methods to extract section content and table content from a given PDF file.
@@ -37,7 +39,7 @@ pGrobidProperties=../../grobid-0.5.3/grobid-home/config/grobid.properties
 
 ## Run experiments based on textual entailment system
 
-We release the training/testing datasets for all experiments described in the paper. You can find them under the data/exp directory. The results reported in the paper are based on the datasets under the [data/exp/few-shot-setup/NLP-TDMS/paperVersion](data/exp/few-shot-setup/NLP-TDMS/paperVersion) directory. We later further clean the datasets (e.g., remove five pdf files from the testing datasets which appear in the training datasets with a different name) and the clean version is under the [data/exp/few-shot-setup/NLP-TDMS](data/exp/few-shot-setup/NLP-TDMS) folder. Below we illustrate how to run experiments on the NLP-TDSM dataset in the few-shot setup to extract TDM pairs. 
+We release the training/testing datasets for all experiments described in the paper. You can find them under the data/exp directory. The results reported in the paper are based on the datasets under the [data/exp/few-shot-setup/NLP-TDMS/paperVersion](data/exp/few-shot-setup/NLP-TDMS/paperVersion) directory. We later further clean the datasets (e.g., remove five pdf files from the testing datasets which appear in the training datasets with a different name) and the clean version is under the [data/exp/few-shot-setup/NLP-TDMS](data/exp/few-shot-setup/NLP-TDMS) folder. Below we illustrate how to run experiments on the NLP-TDSM dataset in the few-shot setup to extract TDM pairs.
 
 
 1) Fork and clone this repository.
@@ -67,8 +69,11 @@ We release the training/testing datasets for all experiments described in the pa
 
 2) For the ARC-PDN corpus, the original pdf files can be downloaded from the [ACL Anthology Reference Corpus (Version 20160301)](https://acl-arc.comp.nus.edu.sg/). We use papers from ACL(P)/EMNLP(D)/NAACL(N) between 2010 and 2015. After uncompressing the downloaded PDF files, put the PDF files into the corresponding directories under the /data/ARC-PDN/ folder, e.g., copy D10 to /data/ARC-PDN/D/D10.
 
-3) We release the parsed NLP-TDMS and ARC-PDN corpora. [NlpTDMSReader](nlpLeaderboard/src/main/java/com/ibm/sre/data/corpus/NlpTDMSReader.java) and [ArcPDNReader](nlpLeaderboard/src/main/java/com/ibm/sre/data/corpus/ArcPDNReader.java) in the corpus package illustrate how to read section and table contents from PDF files in these two corpora. 
+3) We release the parsed NLP-TDMS and ARC-PDN corpora. [NlpTDMSReader](nlpLeaderboard/src/main/java/com/ibm/sre/data/corpus/NlpTDMSReader.java) and [ArcPDNReader](nlpLeaderboard/src/main/java/com/ibm/sre/data/corpus/ArcPDNReader.java) in the corpus package illustrate how to read section and table contents from PDF files in these two corpora.
 
+
+## train a model to extract TDM mentions
+We release the TDMSci corpus (under the data folder). The dataset is in the standard CoNLL format.
 
 ## Citing science-result-extractor
 Please cite the following paper when using science-result-extractor:
@@ -79,5 +84,12 @@ Please cite the following paper when using science-result-extractor:
   author={Hou, Yufang and Jochim, Charles and Gleize, Martin and Bonin, Francesca and Ganguly, Debasis},
   booktitle = {Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics, {\em Florence, Italy, 27 July -- 2 August 2019}},
   year      = {2019}
+}
+
+@inproceedings{houyufang2021eacl,
+  title={TDMSci: A Specialized Corpus for Scientific Literature Entity Tagging of Tasks Datasets and Metrics},
+  author={Hou, Yufang and Jochim, Charles and Gleize, Martin and Bonin, Francesca and Ganguly, Debasis},
+  booktitle = {Proceedings of the  the 16th conference of the European Chapter of the Association for Computational Linguistics, {\em Online, 19--23 April 2021}},
+  year      = {2021}
 }
 ```
